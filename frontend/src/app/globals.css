@@ -1,0 +1,568 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════
+   betty Design System v4 — AURORA
+   亮色消费级 · 紫色品牌 #6C5CE7 · 干净精致 · border-first · 克制留白
+   对标 yapper / Linear / Stripe / Canva 的顶级气质
+   （保留 v3 全部类名/变量名/动画名 → 组件零改动自动继承新主题）
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════════
+   1. DESIGN TOKENS — CSS Custom Properties
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer base {
+  :root {
+    /* ─── SURFACE HIERARCHY (亮色层次, 变量名沿用 cosmic-*) ─── */
+    --cosmic-void: 240 20% 100%;          /* #FFFFFF — 纯白, 最高层 */
+    --cosmic-deep: 240 30% 99%;           /* #FCFCFE — 页面默认底 */
+    --cosmic-surface: 0 0% 100%;          /* #FFFFFF — 卡片/容器 */
+    --cosmic-elevated: 240 33% 98%;       /* #F8F8FC — 浮层/弹层 */
+    --cosmic-subtle: 240 24% 97%;         /* #F4F4F8 — hover 底/分组底 */
+    --cosmic-border: 240 18% 91%;         /* #E6E6EE — 默认边框 */
+    --cosmic-border-hover: 252 30% 82%;   /* #CFCAE6 — 悬停边框(微紫) */
+
+    /* ─── BRAND PURPLE SPECTRUM (#6C5CE7 主导) ─── */
+    --accent-cyan: 252 78% 63%;           /* #6C5CE7 — 品牌主紫(沿用cyan变量名) */
+    --accent-blue: 250 84% 68%;           /* #7B6CF0 — 浅紫蓝 */
+    --accent-violet: 262 83% 66%;         /* #8B5CF6 — 紫罗兰 */
+    --accent-purple: 271 81% 66%;         /* #A855F7 — 亮紫 */
+    --accent-fuchsia: 292 84% 64%;        /* #D946EF — 品红点缀 */
+    --brand: 252 78% 63%;                 /* #6C5CE7 — 语义品牌色 */
+    --brand-strong: 252 70% 56%;          /* #5847D6 — 按下/深色态 */
+    --brand-soft: 252 100% 97%;           /* #F1EFFE — 品牌浅底 */
+
+    /* ─── TEXT (深色文字, 亮底) ─── */
+    --text-primary: 240 24% 9%;           /* #12121C — 主文字 */
+    --text-secondary: 240 9% 42%;         /* #62626E — 次文字 */
+    --text-tertiary: 240 8% 58%;          /* #8E8E9C — 弱文字 */
+    --text-disabled: 240 12% 78%;         /* #C2C2CE — 禁用 */
+
+    /* ─── SEMANTIC ─── */
+    --success: 150 68% 42%;               /* #22A06B */
+    --warning: 36 92% 50%;                /* #F59E0B */
+    --destructive: 0 74% 58%;             /* #E14444 */
+    --info: 252 78% 63%;                  /* 用品牌紫 */
+
+    /* ─── RADII (精致, 收敛到 12px 主) ─── */
+    --radius-xs: 0.25rem;                 /* 4px */
+    --radius-sm: 0.375rem;                /* 6px */
+    --radius-md: 0.5rem;                  /* 8px */
+    --radius-lg: 0.75rem;                 /* 12px — 主圆角 */
+    --radius-xl: 1rem;                    /* 16px */
+    --radius-2xl: 1.25rem;                /* 20px */
+
+    /* ─── ELEVATION (克制的中性/紫调阴影, 消费级轻盈) ─── */
+    --shadow-xs: 0 1px 2px 0 rgb(18 18 28 / 0.04);
+    --shadow-sm: 0 1px 3px 0 rgb(18 18 28 / 0.06), 0 1px 2px -1px rgb(18 18 28 / 0.05);
+    --shadow-md: 0 4px 12px -2px rgb(18 18 28 / 0.08), 0 2px 6px -2px rgb(18 18 28 / 0.05);
+    --shadow-lg: 0 12px 28px -6px rgb(18 18 28 / 0.10), 0 6px 12px -6px rgb(18 18 28 / 0.06);
+    --shadow-brand: 0 8px 24px -6px hsl(var(--brand) / 0.35);
+
+    /* ─── EASING ─── */
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --ease-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   2. BASE STYLES
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer base {
+  * {
+    border-color: hsl(var(--cosmic-border));
+  }
+
+  html {
+    background: hsl(var(--cosmic-deep));
+  }
+
+  body {
+    background: hsl(var(--cosmic-deep));
+    color: hsl(var(--text-primary));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "calt" 1, "ss01" 1;
+    letter-spacing: -0.011em;            /* 顶级平台默认微紧排版 */
+  }
+
+  /* ─── Headings: 精致紧排版层次 (h1 字重降到 600, 不再 700 死板) ─── */
+  h1 { letter-spacing: -0.03em; font-weight: 600; }
+  h2 { letter-spacing: -0.022em; font-weight: 650; }
+  h3 { letter-spacing: -0.016em; font-weight: 600; }
+
+  /* ─── Focus Ring (品牌紫细环, 无暴力 glow) ─── */
+  :focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px hsl(var(--cosmic-deep)),
+                0 0 0 4px hsl(var(--brand) / 0.45);
+    border-radius: var(--radius-md);
+  }
+
+  ::selection {
+    background: hsl(var(--brand) / 0.16);
+    color: hsl(var(--text-primary));
+  }
+
+  /* ─── Scrollbar (亮色细腻) ─── */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--text-tertiary) / 0.35);
+    border-radius: 6px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--text-tertiary) / 0.55);
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-corner { background: transparent; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   3. COMPONENT LAYER — Professional Utilities
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* ─── GLASS VARIANTS (亮色玻璃: 顶部导航/浮层用, 高级感) ─── */
+  .glass {
+    background: hsl(var(--cosmic-surface) / 0.72);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid hsl(var(--cosmic-border) / 0.8);
+  }
+  .glass-elevated {
+    background: hsl(var(--cosmic-surface) / 0.85);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+    border: 1px solid hsl(var(--cosmic-border));
+    box-shadow: var(--shadow-md);
+  }
+  .glass-card {
+    background: hsl(var(--cosmic-surface));
+    border: 1px solid hsl(var(--cosmic-border));
+    border-radius: var(--radius-lg);
+  }
+  .glass-card-hover {
+    @apply glass-card cursor-pointer;
+    transition: all 240ms var(--ease-out-expo);
+  }
+  .glass-card-hover:hover {
+    border-color: hsl(var(--brand) / 0.45);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  /* ─── SURFACE CARDS (border-first, 消费级干净) ─── */
+  .surface-raised {
+    background: hsl(var(--cosmic-surface));
+    border: 1px solid hsl(var(--cosmic-border));
+    border-radius: var(--radius-lg);
+  }
+  .surface-interactive {
+    @apply surface-raised cursor-pointer;
+    transition: all 200ms var(--ease-out-expo);
+  }
+  .surface-interactive:hover {
+    border-color: hsl(var(--cosmic-border-hover));
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+  }
+
+  /* ─── GRADIENT BORDER CARDS (克制紫色渐变描边) ─── */
+  .gradient-card {
+    position: relative;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(
+      135deg,
+      hsl(var(--brand) / 0.5),
+      hsl(var(--accent-violet) / 0.35),
+      hsl(var(--accent-fuchsia) / 0.4)
+    );
+    padding: 1px;
+    transition: all 300ms var(--ease-out-expo);
+  }
+  .gradient-card > * {
+    background: hsl(var(--cosmic-surface));
+    border-radius: calc(var(--radius-lg) - 1px);
+    height: 100%;
+  }
+  .gradient-card:hover {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--brand)),
+      hsl(var(--accent-violet)),
+      hsl(var(--accent-fuchsia))
+    );
+    box-shadow: var(--shadow-brand);
+  }
+  .gradient-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: var(--radius-lg);
+    background: radial-gradient(
+      600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      hsl(var(--brand) / 0.10),
+      transparent 50%
+    );
+    opacity: 0;
+    transition: opacity 300ms var(--ease-out-expo);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .gradient-card:hover::before { opacity: 1; }
+
+  /* ─── BUTTON VARIANTS ─── */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.5rem;
+    padding: 0 1.25rem;
+    border-radius: var(--radius-lg);
+    background: hsl(var(--brand));
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.875rem;
+    letter-spacing: -0.01em;
+    box-shadow: var(--shadow-brand);
+    transition: all 180ms var(--ease-out-expo);
+  }
+  .btn-primary:hover {
+    background: hsl(var(--brand-strong));
+    box-shadow: 0 10px 28px -6px hsl(var(--brand) / 0.45);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active { transform: translateY(0) scale(0.98); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; transform: none; }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.5rem;
+    padding: 0 1.25rem;
+    border-radius: var(--radius-lg);
+    background: hsl(var(--cosmic-surface));
+    border: 1px solid hsl(var(--cosmic-border));
+    color: hsl(var(--text-primary));
+    font-weight: 550;
+    font-size: 0.875rem;
+    transition: all 180ms var(--ease-out-expo);
+  }
+  .btn-secondary:hover {
+    background: hsl(var(--cosmic-subtle));
+    border-color: hsl(var(--cosmic-border-hover));
+  }
+  .btn-secondary:active { transform: scale(0.98); }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.25rem;
+    padding: 0 0.75rem;
+    border-radius: var(--radius-md);
+    color: hsl(var(--text-secondary));
+    font-weight: 550;
+    font-size: 0.875rem;
+    transition: all 180ms var(--ease-out-expo);
+  }
+  .btn-ghost:hover {
+    color: hsl(var(--text-primary));
+    background: hsl(var(--cosmic-subtle));
+  }
+
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-md);
+    color: hsl(var(--text-secondary));
+    transition: all 180ms var(--ease-out-expo);
+  }
+  .btn-icon:hover {
+    color: hsl(var(--text-primary));
+    background: hsl(var(--cosmic-subtle));
+  }
+
+  /* ─── INPUT VARIANTS ─── */
+  .input-cosmic {
+    width: 100%;
+    height: 2.5rem;
+    padding: 0 1rem;
+    border-radius: var(--radius-lg);
+    background: hsl(var(--cosmic-surface));
+    border: 1px solid hsl(var(--cosmic-border));
+    color: hsl(var(--text-primary));
+    font-size: 0.875rem;
+    transition: all 180ms var(--ease-out-expo);
+  }
+  .input-cosmic::placeholder { color: hsl(var(--text-tertiary)); }
+  .input-cosmic:focus {
+    background: hsl(var(--cosmic-surface));
+    border-color: hsl(var(--brand) / 0.6);
+    box-shadow: 0 0 0 3px hsl(var(--brand) / 0.12);
+    outline: none;
+  }
+  .input-cosmic:disabled { opacity: 0.5; cursor: not-allowed; }
+  .input-cosmic-lg {
+    height: 3.5rem;
+    padding: 0 1.25rem;
+    border-radius: var(--radius-xl);
+    font-size: 1rem;
+  }
+
+  /* ─── BADGE VARIANTS (亮底柔和) ─── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  .badge-cyan {
+    @apply badge;
+    background: hsl(var(--brand) / 0.10);
+    color: hsl(var(--brand-strong));
+    border: 1px solid hsl(var(--brand) / 0.20);
+  }
+  .badge-blue {
+    @apply badge;
+    background: hsl(var(--accent-blue) / 0.10);
+    color: hsl(var(--accent-blue));
+    border: 1px solid hsl(var(--accent-blue) / 0.20);
+  }
+  .badge-violet {
+    @apply badge;
+    background: hsl(var(--accent-violet) / 0.10);
+    color: hsl(var(--accent-violet));
+    border: 1px solid hsl(var(--accent-violet) / 0.20);
+  }
+  .badge-success {
+    @apply badge;
+    background: hsl(var(--success) / 0.10);
+    color: hsl(var(--success));
+    border: 1px solid hsl(var(--success) / 0.20);
+  }
+  .badge-warning {
+    @apply badge;
+    background: hsl(var(--warning) / 0.12);
+    color: hsl(var(--warning));
+    border: 1px solid hsl(var(--warning) / 0.22);
+  }
+  .badge-destructive {
+    @apply badge;
+    background: hsl(var(--destructive) / 0.10);
+    color: hsl(var(--destructive));
+    border: 1px solid hsl(var(--destructive) / 0.20);
+  }
+
+  /* ─── DIVIDERS ─── */
+  .divider { border-top: 1px solid hsl(var(--cosmic-border)); }
+  .divider-soft { border-top: 1px solid hsl(var(--cosmic-border) / 0.6); }
+  .divider-gradient {
+    border: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--brand) / 0.35),
+      hsl(var(--accent-violet) / 0.35),
+      transparent
+    );
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   4. UTILITY LAYER
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  /* ─── GRADIENT TEXT (品牌紫渐变, 用于 Hero 关键词) ─── */
+  .text-gradient {
+    background: linear-gradient(
+      120deg,
+      hsl(var(--brand)),
+      hsl(var(--accent-violet)),
+      hsl(var(--accent-fuchsia))
+    );
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradient-flow 8s ease infinite;
+  }
+  .text-gradient-static {
+    background: linear-gradient(
+      120deg,
+      hsl(var(--brand)),
+      hsl(var(--accent-violet))
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* ─── GLOW / AURORA BACKGROUNDS (亮色柔光) ─── */
+  .bg-glow-cyan {
+    background: radial-gradient(
+      ellipse at center,
+      hsl(var(--brand) / 0.12),
+      transparent 70%
+    );
+  }
+  .bg-glow-violet {
+    background: radial-gradient(
+      ellipse at center,
+      hsl(var(--accent-violet) / 0.10),
+      transparent 70%
+    );
+  }
+  .bg-aurora {
+    background:
+      radial-gradient(60% 50% at 15% 0%, hsl(var(--brand) / 0.10), transparent 60%),
+      radial-gradient(50% 45% at 85% 10%, hsl(var(--accent-fuchsia) / 0.08), transparent 60%),
+      hsl(var(--cosmic-deep));
+  }
+
+  /* ─── NOISE TEXTURE (极淡, 亮底几乎不可见, 保留) ─── */
+  .noise-overlay::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.015;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   5. ANIMATIONS
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes gradient-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50%      { background-position: 100% 50%; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(var(--brand) / 0.0); }
+  50%      { box-shadow: 0 8px 24px -6px hsl(var(--brand) / 0.30); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    hsl(var(--cosmic-subtle)) 0%,
+    hsl(var(--cosmic-elevated)) 20%,
+    hsl(var(--cosmic-subtle)) 40%,
+    hsl(var(--cosmic-subtle)) 60%,
+    hsl(var(--cosmic-elevated)) 80%,
+    hsl(var(--cosmic-subtle)) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s ease-in-out infinite;
+}
+.skeleton-text { @apply skeleton rounded-md h-4; }
+.skeleton-card { @apply skeleton rounded-xl; }
+
+@keyframes progress-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in-scale {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in-up { animation: fade-in-up 0.5s var(--ease-out-expo) both; }
+.animate-fade-in-scale { animation: fade-in-scale 0.4s var(--ease-out-expo) both; }
+.animate-slide-in-left { animation: slide-in-left 0.4s var(--ease-out-expo) both; }
+.animate-slide-in-right { animation: slide-in-right 0.4s var(--ease-out-expo) both; }
+.animate-glow-pulse { animation: glow-pulse 2.5s ease-in-out infinite; }
+
+
+/* ─── STAGGER CHILDREN ─── */
+.stagger-children > * {
+  opacity: 0;
+  animation: fade-in-up 0.5s var(--ease-out-expo) forwards;
+}
+.stagger-children > *:nth-child(1)  { animation-delay: 0.05s; }
+.stagger-children > *:nth-child(2)  { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(3)  { animation-delay: 0.15s; }
+.stagger-children > *:nth-child(4)  { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(5)  { animation-delay: 0.25s; }
+.stagger-children > *:nth-child(6)  { animation-delay: 0.3s; }
+.stagger-children > *:nth-child(7)  { animation-delay: 0.35s; }
+.stagger-children > *:nth-child(8)  { animation-delay: 0.4s; }
+.stagger-children > *:nth-child(9)  { animation-delay: 0.45s; }
+.stagger-children > *:nth-child(10) { animation-delay: 0.5s; }
+
+
+/* ─── NAV LINK UNDERLINE (品牌紫) ─── */
+.nav-link { position: relative; }
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, hsl(var(--brand)), hsl(var(--accent-violet)));
+  border-radius: 1px;
+  transition: width 0.25s var(--ease-out-expo), left 0.25s var(--ease-out-expo);
+}
+.nav-link:hover::after,
+.nav-link.active::after { width: 100%; left: 0; }
+
+
+/* ─── REDUCED MOTION ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

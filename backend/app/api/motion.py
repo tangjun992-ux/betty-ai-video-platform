@@ -1,0 +1,207 @@
+"""
+Motion Control API — 动作迁移/驱动: 图片 + 参考视频 → 动态视频
+
+对标 Runway Act-One / Vidu 动作驱动功能。
+"""
+import uuid
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db import get_db
+from app.models.task import Task
+from app.models.billing import UserBalance, Transaction, TransactionType
+from app.tasks.motion_tasks import process_motion_task
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+# ─── Models ────────────────────────────────────────────
+
+class MotionRequest(BaseModel):
+    """动作迁移请求"""
+    image_url: str = Field(..., description="需要驱动的静态图片URL")
+    video_url: str = Field(..., description="参考动作视频URL")
+    prompt: Optional[str] = Field(default=None, max_length=2000, description="可选提示词，描述期望效果")
+    style: Optional[str] = Field(default=None, description="风格偏好: realistic | anime | cartoon")
+
+
+class MotionResponse(BaseModel):
+    task_id: str
+    status: str = "queued"
+    estimated_time_seconds: int = 90
+    estimated_cost_credits: int = 6
+    poll_url: str = ""
+
+
+# ─── Helpers ───────────────────────────────────────────
+
+MOTION_COST = 6  # credits
+MOTION_ESTIMATED_TIME = 90  # seconds
+
+
+async def _check_and_deduct_credits(
+    db: AsyncSession, user_id: int, cost: int, task_id: str, model: str
+) -> bool:
+    """Check and deduct credits from user balance. Returns True if successful."""
+    from sqlalchemy import select
+
+    if cost <= 0:
+        return True
+
+    result = await db.execute(select(UserBalance).where(UserBalance.user_id == user_id))
+    balance = result.scalar_one_or_none()
+
+    total_available = 0
+    if balance:
+        total_available = balance.credits + balance.daily_credits
+
+    # Allow first-time users (no balance record) — they start with free trial
+    if balance is None:
+        balance = UserBalance(user_id=user_id, credits=50, daily_credits=10)
+        db.add(balance)
+        await db.flush()
+        total_available = 60
+
+    if total_available < cost:
+        return False
+
+    # Deduct from daily credits first, then purchased
+    remaining = cost
+    credits_before = balance.credits + balance.daily_credits
+
+    if balance.daily_credits > 0:
+        deduct_daily = min(balance.daily_credits, remaining)
+        balance.daily_credits -= deduct_daily
+        remaining -= deduct_daily
+
+    if remaining > 0:
+        balance.credits -= remaining
+
+    balance.total_spent += cost
+    balance.total_tasks += 1
+    credits_after = balance.credits + balance.daily_credits
+
+    # Create transaction record
+    txn = Transaction(
+        user_id=user_id,
+        task_id=task_id,
+        type=TransactionType.CONSUMPTION.value,
+        amount=-cost,
+        balance_before=credits_before,
+        balance_after=credits_after,
+        model_used=model,
+        description=f"Motion control task {task_id[:8]}...",
+    )
+    db.add(txn)
+    await db.flush()
+
+    logger.info(
+        f"Credits deducted (motion): user={user_id} cost={cost} "
+        f"balance={credits_before}→{credits_after}"
+    )
+    return True
+
+
+# ─── Endpoints ─────────────────────────────────────────
+
+@router.post(
+    "/motion",
+    response_model=MotionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="提交动作迁移任务",
+    description="上传一张静态图片和一段参考动作视频，AI 将参考视频中的动作迁移到静态图片上，生成动态视频。",
+)
+async def submit_motion(
+    req: MotionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    动作迁移 (Motion Control):
+    
+    - **image_url**: 静态图片URL（人物/角色照片）
+    - **video_url**: 参考动作视频URL（驱动动作来源）
+    - **prompt**: 可选提示词，描述期望的效果
+    - **style**: 风格偏好 (realistic / anime / cartoon)
+    
+    返回 task_id，可通过 `/api/v1/tasks/{task_id}` 查询进度。
+    """
+    task_id = str(uuid.uuid4())
+
+    # Validate URLs
+    if not req.image_url.strip():
+        raise HTTPException(status_code=400, detail="请提供静态图片URL (image_url)")
+    if not req.video_url.strip():
+        raise HTTPException(status_code=400, detail="请提供参考动作视频URL (video_url)")
+
+    model = "motion-control"
+
+    # Build parameters
+    params = {
+        "image_url": req.image_url,
+        "video_url": req.video_url,
+        "style": req.style,
+    }
+
+    # Create Task record
+    task = Task(
+        task_id=task_id,
+        user_id=0,
+        prompt=req.prompt or "",
+        media_type="video",
+        quality="balanced",
+        requested_model=model,
+        selected_model=model,
+        parameters=params,
+        estimated_cost=MOTION_COST,
+        status="queued",
+    )
+    db.add(task)
+    await db.flush()
+
+    # Check and deduct credits
+    credits_ok = await _check_and_deduct_credits(
+        db=db, user_id=0, cost=MOTION_COST,
+        task_id=task_id, model=model,
+    )
+    if not credits_ok:
+        task.status = "failed"
+        task.error_message = "积分不足，请充值后重试"
+        await db.flush()
+        return MotionResponse(
+            task_id=task_id,
+            status="failed",
+            estimated_time_seconds=0,
+            estimated_cost_credits=MOTION_COST,
+            poll_url=f"/api/v1/tasks/{task_id}",
+        )
+
+    task.status = "queued"
+
+    # Dispatch Celery task
+    celery_task = process_motion_task.delay(
+        db_task_id=task_id,
+        model=model,
+        prompt=req.prompt or "",
+        params=params,
+    )
+
+    task.celery_task_id = celery_task.id
+    task.status = "queued"
+    task.estimated_completion = datetime.now(timezone.utc) + timedelta(seconds=MOTION_ESTIMATED_TIME)
+    await db.flush()
+
+    logger.info(f"Motion task dispatched: {task_id}, celery_id={celery_task.id}")
+
+    return MotionResponse(
+        task_id=task_id,
+        status="queued",
+        estimated_time_seconds=MOTION_ESTIMATED_TIME,
+        estimated_cost_credits=MOTION_COST,
+        poll_url=f"/api/v1/tasks/{task_id}",
+    )

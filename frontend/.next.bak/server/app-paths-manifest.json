@@ -1,0 +1,14 @@
+{
+  "/page": "app/page.js",
+  "/create/video/page": "app/create/video/page.js",
+  "/create/image/page": "app/create/image/page.js",
+  "/gallery/page": "app/gallery/page.js",
+  "/agent/page": "app/agent/page.js",
+  "/pricing/page": "app/pricing/page.js",
+  "/models/page": "app/models/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/tools/page": "app/tools/page.js",
+  "/library/page": "app/library/page.js",
+  "/settings/page": "app/settings/page.js",
+  "/tasks/page": "app/tasks/page.js"
+}

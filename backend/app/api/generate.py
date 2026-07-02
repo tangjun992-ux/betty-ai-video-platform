@@ -1,0 +1,366 @@
+""""
+Generation API — submit generation requests with smart routing.
+"""
+import uuid
+import json
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.db import get_db
+from app.models.task import Task
+from app.models.user import User
+from app.models.billing import UserBalance, Transaction, TransactionType
+from app.tasks.image_tasks import generate_image_task
+from app.tasks.video_tasks import generate_video_task
+from app.tasks.pipeline_tasks import run_pipeline
+from app.router import router as prompt_router
+from app.prompt_enhancer import enhancer as prompt_enhancer
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+async def _check_and_deduct_credits(
+    db: AsyncSession, user_id: int, cost: int, task_id: str, model: str
+) -> bool:
+    """Check and deduct credits from user balance. Returns True if successful."""
+    if cost <= 0:
+        return True
+
+    result = await db.execute(select(UserBalance).where(UserBalance.user_id == user_id))
+    balance = result.scalar_one_or_none()
+
+    total_available = 0
+    if balance:
+        total_available = balance.credits + balance.daily_credits
+
+    # Allow first-time users (no balance record) — they start with free trial
+    if balance is None:
+        balance = UserBalance(user_id=user_id, credits=50, daily_credits=10)  # trial credits
+        db.add(balance)
+        await db.flush()
+        total_available = 60
+
+    if total_available < cost:
+        return False
+
+    # Deduct from daily credits first, then purchased
+    remaining = cost
+    credits_before = balance.credits + balance.daily_credits
+
+    if balance.daily_credits > 0:
+        deduct_daily = min(balance.daily_credits, remaining)
+        balance.daily_credits -= deduct_daily
+        remaining -= deduct_daily
+
+    if remaining > 0:
+        balance.credits -= remaining
+
+    balance.total_spent += cost
+    balance.total_tasks += 1
+    credits_after = balance.credits + balance.daily_credits
+
+    # Create transaction record
+    txn = Transaction(
+        user_id=user_id,
+        task_id=task_id,
+        type=TransactionType.CONSUMPTION.value,
+        amount=-cost,
+        balance_before=credits_before,
+        balance_after=credits_after,
+        model_used=model,
+        description=f"Generation task {task_id[:8]}...",
+    )
+    db.add(txn)
+    await db.flush()
+
+    logger.info(
+        f"Credits deducted: user={user_id} cost={cost} "
+        f"balance={credits_before}→{credits_after}"
+    )
+    return True
+
+
+class GenerateRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=5000, description="描述你想要的画面的提示词")
+    media_type: str = Field(default="auto", description="生成类型: image | video | auto")
+    model: str = Field(default="auto", description="指定模型或 'auto' 自动选择")
+    quality: str = Field(default="balanced", description="质量偏好: fast | balanced | high")
+    resolution: str = Field(default="1080x1080", description="输出分辨率")
+    duration: Optional[int] = Field(default=5, ge=1, le=60, description="视频时长(秒)")
+    count: int = Field(default=1, ge=1, le=4, description="生成数量")
+    style: Optional[str] = Field(default=None, description="风格偏好")
+    template: Optional[str] = Field(default=None, description="可选模板名称")
+    webhook_url: Optional[str] = Field(default=None, description="回调地址")
+    enhance_prompt: Optional[bool] = Field(default=True, description="是否自动增强提示词")
+    image_url: Optional[str] = Field(default=None, description="参考图片URL（用于图转视频）")
+
+
+class GenerateResponse(BaseModel):
+    task_id: str
+    status: str
+    estimated_model: str
+    fallback_model: Optional[str] = None
+    enhanced_prompt: Optional[str] = None
+    estimated_time_seconds: int
+    estimated_cost_credits: int
+    poll_url: str
+    routing_info: Optional[dict] = None
+    model_scores: Optional[list[dict]] = None
+
+
+class RouterAnalysisResponse(BaseModel):
+    """Endpoint to analyze a prompt without submitting a task."""
+    analysis: dict
+    recommended_model: dict
+    all_scores: list[dict]
+
+
+@router.post(
+    "/",
+    response_model=GenerateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="提交生成请求",
+    description="根据提示词智能选择模型并生成图像或视频",
+)
+async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get_db)):
+    task_id = str(uuid.uuid4())
+
+    # Stage 1: Smart prompt analysis
+    analysis = prompt_router.analyze(
+        prompt=req.prompt,
+        media_type_hint=req.media_type,
+        quality_hint=req.quality,
+    )
+
+    # Stage 1b: Prompt enhancement (optional)
+    enhanced_prompt = req.prompt
+    if req.enhance_prompt:
+        enhancement = prompt_enhancer.enhance(
+            prompt=req.prompt,
+            media_type=analysis.media_type.value,
+            style=req.style or "auto",
+            quality=req.quality,
+        )
+        enhanced_prompt = enhancement.enhanced
+
+    # Stage 1c: Content safety pre-check (fast keyword filter)
+    safety_issue = _check_content_safety(enhanced_prompt)
+    if safety_issue:
+        raise HTTPException(status_code=400, detail=safety_issue)
+
+    # Stage 2: Smart model selection via router
+    model_selection = prompt_router.select_model(
+        analysis=analysis,
+        user_model=req.model,
+    )
+    estimated_model = model_selection.model_id
+    fallback_model = getattr(model_selection, "is_fallback_model", None)
+
+    # Get all model scores for UI display
+    all_scores = prompt_router.get_all_model_scores(analysis)
+
+    # Determine effective media type
+    effective_media = analysis.media_type.value
+    if effective_media == "auto":
+        effective_media = "image" if "video" not in estimated_model else "video"
+
+    estimated_time, estimated_cost = _estimate_time_and_cost(
+        effective_media, estimated_model, req.duration or 5
+    )
+
+    # Build routing info for response
+    routing_info = {
+        "detected_media_type": analysis.media_type.value,
+        "detected_quality": analysis.quality.value,
+        "detected_styles": analysis.styles,
+        "complexity": analysis.complexity,
+        "mood": analysis.mood,
+        "model_selection_score": model_selection.score,
+        "selection_reasons": model_selection.reasons,
+        "prompt_was_enhanced": enhanced_prompt != req.prompt,
+    }
+
+    # Create Task record
+    task = Task(
+        task_id=task_id,
+        user_id=0,
+        prompt=enhanced_prompt,  # use enhanced prompt
+        media_type=effective_media,
+        quality=req.quality,
+        requested_model=req.model,
+        selected_model=estimated_model,
+        fallback_model=fallback_model,
+        parameters={
+            "resolution": req.resolution,
+            "duration": req.duration,
+            "count": req.count,
+            "style": req.style,
+            "original_prompt": req.prompt if enhanced_prompt != req.prompt else None,
+            "routing_info": json.dumps(routing_info),
+        },
+        estimated_cost=estimated_cost,
+        status="queued",
+        webhook_url=req.webhook_url,
+    )
+    db.add(task)
+    await db.flush()
+
+    # Check and deduct credits
+    credits_ok = await _check_and_deduct_credits(
+        db=db, user_id=0, cost=estimated_cost,
+        task_id=task_id, model=estimated_model,
+    )
+    if not credits_ok:
+        task.status = "failed"
+        task.error_message = "积分不足，请充值后重试"
+        await db.flush()
+        return GenerateResponse(
+            task_id=task_id,
+            status="failed",
+            estimated_model=estimated_model,
+            estimated_time_seconds=0,
+            estimated_cost_credits=estimated_cost,
+            poll_url=f"/api/v1/tasks/{task_id}",
+            routing_info=routing_info,
+        )
+    task.status = "queued"
+
+    # Prepare Celery task params
+    celery_params = {
+        "resolution": req.resolution,
+        "duration": req.duration or 5,
+        "count": req.count,
+        "style": req.style,
+    }
+    if req.image_url:
+        celery_params["image_url"] = req.image_url
+
+    # Dispatch appropriate Celery task
+    if req.template:
+        celery_task = run_pipeline.delay(db_task_id=task_id, pipeline_config=[])
+    elif effective_media == "image" or req.media_type == "image":
+        celery_task = generate_image_task.delay(
+            db_task_id=task_id, model=estimated_model,
+            prompt=enhanced_prompt, params=celery_params,
+        )
+    else:
+        celery_task = generate_video_task.delay(
+            db_task_id=task_id, model=estimated_model,
+            prompt=enhanced_prompt, params=celery_params,
+        )
+
+    task.celery_task_id = celery_task.id
+    task.status = "queued"
+    task.estimated_completion = datetime.now(timezone.utc) + timedelta(seconds=estimated_time)
+    await db.flush()
+
+    return GenerateResponse(
+        task_id=task_id,
+        status="queued",
+        estimated_model=estimated_model,
+        fallback_model=fallback_model,
+        enhanced_prompt=enhanced_prompt if enhanced_prompt != req.prompt else None,
+        estimated_time_seconds=estimated_time,
+        estimated_cost_credits=estimated_cost,
+        poll_url=f"/api/v1/tasks/{task_id}",
+        routing_info=routing_info,
+        model_scores=[{"model": s.model_id, "score": s.score, "reasons": s.reasons}
+                      for s in all_scores],
+    )
+
+
+@router.post("/analyze", response_model=RouterAnalysisResponse, summary="分析提示词的模型推荐")
+async def analyze_prompt(req: GenerateRequest):
+    """Analyze a prompt without submitting a task — returns model recommendations."""
+    analysis = prompt_router.analyze(req.prompt, req.media_type, req.quality)
+    selection = prompt_router.select_model(analysis, req.model)
+    all_scores = prompt_router.get_all_model_scores(analysis)
+
+    return RouterAnalysisResponse(
+        analysis={
+            "media_type": analysis.media_type.value,
+            "quality": analysis.quality.value,
+            "styles": analysis.styles,
+            "complexity": analysis.complexity,
+            "mood": analysis.mood,
+            "key_subjects": analysis.key_subjects,
+            "language": analysis.language,
+        },
+        recommended_model={
+            "model_id": selection.model_id,
+            "score": selection.score,
+            "reasons": selection.reasons,
+        },
+        all_scores=[{"model": s.model_id, "score": s.score, "reasons": s.reasons} for s in all_scores],
+    )
+
+
+def _check_content_safety(prompt: str) -> str | None:
+    """Fast keyword-based content safety check. Returns error message or None."""
+    prompt_lower = prompt.lower()
+    blocked = [
+        "nude", "naked", "nsfw", "porn", "xxx", "sex",
+        "erotic", "explicit", "hentai", "doujin",
+    ]
+    for word in blocked:
+        if word in prompt_lower:
+            return "内容不合规：提示词包含敏感词汇，请修改后重试。"
+    return None
+
+
+def _estimate_time_and_cost(media_type: str, model: str, duration: int) -> tuple[int, int]:
+    CREDIT_MAP = {
+        # Image models
+        "gpt-image-2": 5,
+        "seedream-v4": 3,
+        "flux-pro": 4,
+        "nano-banana": 2,
+        # Video models
+        "kling-v2.5-pro": 6,
+        "kling-v2.1-standard": 4,
+        "seedance-2.0-fast": 3,
+        "seedance-2.0": 4,
+        "wan-2.6": 3,
+        "veo-3": 8,
+        # Legacy mappings
+        "openai/gpt-5.4-image": 5,
+        "openai/dall-e-3": 5,
+        "bytedance/seedart": 3,
+        "bytedance/seedance-2-fast": 3,
+        "kling/video-v3-pro": 6,
+        "kling/video-v2": 4,
+    }
+    TIME_MAP = {
+        # Image models
+        "gpt-image-2": 15,
+        "seedream-v4": 10,
+        "flux-pro": 12,
+        "nano-banana": 8,
+        # Video models
+        "kling-v2.5-pro": 120,
+        "kling-v2.1-standard": 90,
+        "seedance-2.0-fast": 30,
+        "seedance-2.0": 60,
+        "wan-2.6": 60,
+        "veo-3": 180,
+        # Legacy mappings
+        "openai/gpt-5.4-image": 15,
+        "openai/dall-e-3": 15,
+        "bytedance/seedart": 10,
+        "bytedance/seedance-2-fast": 30,
+        "kling/video-v3-pro": 120,
+        "kling/video-v2": 60,
+    }
+
+    credits = CREDIT_MAP.get(model, 5)
+    base_time = TIME_MAP.get(model, 30)
+
+    if media_type == "video":
+        multiplier = max(1, duration // 5)
+        return base_time * multiplier, credits * multiplier
+    return base_time, credits

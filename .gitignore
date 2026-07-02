@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Environment
+.env
+media/
+*.log
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.qcow2
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Next.js
+.next/
+
+# Database
+*.db
+
+# Uploads
+backend/uploads/
+backend/outputs/
+
+# Temp
+/tmp/

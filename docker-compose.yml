@@ -1,0 +1,147 @@
+services:
+  # ─── Database ───
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: aivideo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis (queues + cache + streams) ───
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── API Server ───
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/aivideo
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - TIKTOK_APIFY_TOKEN=${TIKTOK_APIFY_TOKEN:-}
+      - VIS_COLLECTION_ENABLED=true
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -u -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info
+
+  # ─── Celery Worker (main: image/video/pipeline) ───
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/aivideo
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A celery_app worker -Q video_q,image_q,pipeline_q,celery --concurrency=4 --loglevel=info
+
+  # ─── Collector Worker (VIS: Reddit/YouTube collection + analysis) ───
+  celery-collector:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/aivideo
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
+      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - TIKTOK_APIFY_TOKEN=${TIKTOK_APIFY_TOKEN:-}
+      - VIS_COLLECTION_ENABLED=true
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A celery_app worker -Q collector_q --concurrency=2 --loglevel=info -n collector@%h
+
+  # ─── Celery Beat (Scheduler) ───
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - ENV=development
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/aivideo
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A celery_app beat --loglevel=info
+    stdin_open: true
+    tty: true
+
+  # ─── Flower (Celery monitoring dashboard) ───
+  flower:
+    image: mher/flower:2.0
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    depends_on:
+      - redis
+
+  # ─── Frontend (Next.js) ───
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev"
+    stdin_open: true
+    tty: true
+
+volumes:
+  pgdata:
+  redisdata:
+  frontend_node_modules:

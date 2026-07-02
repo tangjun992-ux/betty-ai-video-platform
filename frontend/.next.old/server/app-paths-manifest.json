@@ -1,0 +1,10 @@
+{
+  "/page": "app/page.js",
+  "/create/video/page": "app/create/video/page.js",
+  "/pricing/page": "app/pricing/page.js",
+  "/tools/page": "app/tools/page.js",
+  "/create/lipsync/page": "app/create/lipsync/page.js",
+  "/create/image/page": "app/create/image/page.js",
+  "/gallery/page": "app/gallery/page.js",
+  "/settings/page": "app/settings/page.js"
+}
