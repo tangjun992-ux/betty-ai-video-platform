@@ -1,6 +1,8 @@
 """
 Gallery/Explore API — community showcase from real completed tasks.
 """
+import json
+import zlib
 from fastapi import APIRouter, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
@@ -10,6 +12,32 @@ from app.models.task import Task
 from app.models.billing import Transaction, TransactionType
 
 router = APIRouter()
+
+
+def _safe_dict(value) -> dict:
+    """Coerce a JSON column value to a dict (legacy rows may store strings)."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _safe_list(value) -> list:
+    """Coerce a JSON column value to a list (legacy rows may store strings)."""
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    return []
 
 # ─── Content Safety Filter ────────────────────────────
 NSFW_KEYWORDS = [
@@ -89,59 +117,66 @@ async def explore_gallery(
     items = []
     filtered_count = 0
     for t in tasks:
-        if not t.results:
+        results = _safe_list(t.results)
+        if not results:
             continue
+        params = _safe_dict(t.parameters)
 
-        for r in t.results:
-            if not isinstance(r, dict):
+        for r in results:
+            try:
+                if not isinstance(r, dict):
+                    continue
+                url = r.get("url") or r.get("media_url") or ""
+                if not url:
+                    continue
+
+                item_media = r.get("type", t.media_type)
+                model = r.get("model", t.selected_model or "unknown")
+                resolution = params.get("resolution", "")
+
+                # Extract style from routing info
+                routing_str = params.get("routing_info", "")
+                styles_list = []
+                if routing_str:
+                    try:
+                        routing = json.loads(routing_str) if isinstance(routing_str, str) else routing_str
+                        styles_list = routing.get("detected_styles", [])
+                    except Exception:
+                        pass
+
+                # Filter by style if specified
+                if style != "all" and style not in styles_list:
+                    continue
+
+                # Content safety filter
+                if not _is_safe(t.prompt or ""):
+                    filtered_count += 1
+                    continue
+
+                ts = t.completed_at or t.created_at
+                items.append({
+                    "id": f"{t.task_id}_{len(items)}",
+                    "task_id": t.task_id,
+                    "prompt": t.prompt,
+                    "media_type": item_media,
+                    "model_used": model.split("/")[-1] if "/" in model else model,
+                    "style": styles_list[0] if styles_list else "general",
+                    "styles": styles_list,
+                    "resolution": resolution,
+                    "duration": params.get("duration"),
+                    "url": url,
+                    "thumbnail": r.get("thumbnail") or url,
+                    "credits_cost": int(t.estimated_cost or 0),
+                    "created_at": ts.isoformat() if ts else "",
+                    "username": "AI 创作者",
+                    "avatar": "🤖",
+                    # crc32 is deterministic across restarts (unlike salted hash())
+                    "likes": zlib.crc32(t.task_id.encode()) % 100,
+                    "views": zlib.crc32((t.task_id + "v").encode()) % 1000,
+                })
+            except Exception:
+                # One malformed legacy row must never break the whole gallery
                 continue
-            url = r.get("url") or r.get("media_url") or ""
-            if not url:
-                continue
-
-            item_media = r.get("type", t.media_type)
-            model = r.get("model", t.selected_model or "unknown")
-            resolution = t.parameters.get("resolution", "") if t.parameters else ""
-
-            # Extract style from routing info
-            routing_str = (t.parameters or {}).get("routing_info", "")
-            styles_list = []
-            if routing_str:
-                import json
-                try:
-                    routing = json.loads(routing_str) if isinstance(routing_str, str) else routing_str
-                    styles_list = routing.get("detected_styles", [])
-                except Exception:
-                    pass
-
-            # Filter by style if specified
-            if style != "all" and style not in styles_list:
-                continue
-
-            # Content safety filter
-            if not _is_safe(t.prompt or ""):
-                filtered_count += 1
-                continue
-
-            items.append({
-                "id": f"{t.task_id}_{len(items)}",
-                "task_id": t.task_id,
-                "prompt": t.prompt,
-                "media_type": item_media,
-                "model_used": model.split("/")[-1] if "/" in model else model,
-                "style": styles_list[0] if styles_list else "general",
-                "styles": styles_list,
-                "resolution": resolution,
-                "duration": t.parameters.get("duration") if t.parameters else None,
-                "url": url,
-                "thumbnail": r.get("thumbnail") or url,
-                "credits_cost": int(t.estimated_cost or 0),
-                "created_at": (t.completed_at.isoformat() if t.completed_at else t.created_at.isoformat()),
-                "username": "AI 创作者",
-                "avatar": "🤖",
-                "likes": hash(t.task_id) % 100,
-                "views": hash(t.task_id + "v") % 1000,
-            })
 
     # Sort
     if sort == "popular":

@@ -59,7 +59,7 @@ export default function GalleryPage() {
       const resp = await fetch(
         `${API_BASE}/gallery/?style=${style}&media_type=${mediaFilter}&sort=${sort}&limit=36`
       );
-      if (!resp.ok) throw new Error("加载失败");
+      if (!resp.ok) throw new Error(`加载失败 (HTTP ${resp.status})`);
       const data = await resp.json();
       setItems(data.items || []);
       if (data.styles) setStyleOptions(data.styles);
