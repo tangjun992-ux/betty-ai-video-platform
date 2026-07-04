@@ -63,31 +63,22 @@ async def submit_lipsync(
     if not audio_url and not text and not audio_file:
         raise HTTPException(status_code=400, detail="请提供音频 (audio_url/audio_file) 或文字 (text)")
 
-    # Handle file upload
+    # Handle file upload — stored via the unified media store so the files
+    # are served by /api/v1/media and appear in the library
+    from app.services.media_store import store_upload
+
     uploaded_image_url = image_url
     if image_file:
-        import aiofiles
-        upload_dir = os.path.join("uploads", "lipsync")
-        os.makedirs(upload_dir, exist_ok=True)
-        ext = os.path.splitext(image_file.filename or "image.png")[1] or ".png"
-        filename = f"{uuid.uuid4()}{ext}"
-        filepath = os.path.join(upload_dir, filename)
         content = await image_file.read()
-        async with aiofiles.open(filepath, "wb") as f:
-            await f.write(content)
-        uploaded_image_url = f"/uploads/lipsync/{filename}"
+        asset = await store_upload(db, image_file.filename or "image.png", content, image_file.content_type)
+        uploaded_image_url = asset.url
 
     # Handle audio file upload
     uploaded_audio_url = audio_url
     if audio_file:
-        import aiofiles
-        ext = os.path.splitext(audio_file.filename or "audio.mp3")[1] or ".mp3"
-        audio_filename = f"{uuid.uuid4()}{ext}"
-        audio_filepath = os.path.join(upload_dir, audio_filename)
         content = await audio_file.read()
-        async with aiofiles.open(audio_filepath, "wb") as f:
-            await f.write(content)
-        uploaded_audio_url = f"/uploads/lipsync/{audio_filename}"
+        audio_asset = await store_upload(db, audio_file.filename or "audio.mp3", content, audio_file.content_type)
+        uploaded_audio_url = audio_asset.url
 
     # Create task
     task_id = str(uuid.uuid4())

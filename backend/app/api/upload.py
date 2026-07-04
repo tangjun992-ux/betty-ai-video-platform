@@ -1,11 +1,13 @@
 """
 Image upload API — upload reference images for image-to-video.
+Every upload is registered as an Asset so it also appears in the library.
 """
 import os
-import uuid
-from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, HTTPException
-from app.config import settings
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db import get_db
+from app.services.media_store import store_upload
 
 router = APIRouter()
 
@@ -13,8 +15,9 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
-@router.post("/upload", summary="上传图片")
-async def upload_image(file: UploadFile = File(...)):
+@router.post("", summary="上传图片")
+@router.post("/", include_in_schema=False)
+async def upload_image(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     """Upload an image for use as reference in image-to-video generation."""
     # Validate extension
     ext = os.path.splitext(file.filename or "")[1].lower()
@@ -32,18 +35,12 @@ async def upload_image(file: UploadFile = File(...)):
             detail=f"File too large: {len(content)} bytes. Max: {MAX_FILE_SIZE}",
         )
 
-    # Save to storage
-    upload_dir = Path(settings.STORAGE_LOCAL_PATH) / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    file_id = str(uuid.uuid4())[:8]
-    safe_name = f"{file_id}{ext}"
-    file_path = upload_dir / safe_name
-    file_path.write_bytes(content)
+    asset = await store_upload(db, file.filename or "", content, file.content_type)
 
     return {
-        "url": f"/api/v1/media/uploads/{safe_name}",
-        "filename": safe_name,
-        "size": len(content),
+        "url": asset.url,
+        "filename": asset.filename,
+        "size": asset.size_bytes,
         "type": file.content_type or "image/png",
+        "asset_id": asset.asset_id,
     }

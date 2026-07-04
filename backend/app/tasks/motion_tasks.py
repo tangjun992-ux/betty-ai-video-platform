@@ -13,6 +13,8 @@ from celery_app import app
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from app.services.media_store import persist_results
+
 logger = logging.getLogger(__name__)
 
 
@@ -149,11 +151,12 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
                 "cost": rd.get("cost", 6),
             }]
 
+            output = persist_results(output)
             _update_task(
                 db_task_id, status="completed", progress=100, current_stage="completed",
                 completed_at=datetime.now(timezone.utc),
                 results=json.dumps(output),
-                result_url=rd.get("media_url", ""),
+                result_url=output[0].get("url", "") if output else "",
                 actual_cost=rd.get("cost", 6),
             )
             _broadcast_progress(db_task_id, 100, "completed", "运动控制生成完成！")

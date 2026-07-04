@@ -7,7 +7,6 @@ Item id scheme:
 """
 import json
 import os
-import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -193,24 +192,8 @@ async def upload_to_library(
             detail=f"文件过大（{len(content) // 1024 // 1024}MB），上限 {max_size // 1024 // 1024}MB",
         )
 
-    upload_dir = Path(settings.STORAGE_LOCAL_PATH) / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
-
-    asset_id = str(uuid.uuid4())
-    safe_name = f"{asset_id[:8]}{ext}"
-    (upload_dir / safe_name).write_bytes(content)
-
-    asset = Asset(
-        asset_id=asset_id,
-        media_type=media_type,
-        url=f"/api/v1/media/uploads/{safe_name}",
-        filename=file.filename or safe_name,
-        size_bytes=len(content),
-        content_type=file.content_type,
-    )
-    db.add(asset)
-    await db.commit()
-    await db.refresh(asset)
+    from app.services.media_store import store_upload
+    asset = await store_upload(db, file.filename or "", content, file.content_type)
     return _asset_item(asset)
 
 

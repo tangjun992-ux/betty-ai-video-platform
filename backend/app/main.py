@@ -21,7 +21,13 @@ async def lifespan(app: FastAPI):
         print(f"[LIFESPAN] Error initializing database: {e}")
         raise
 
+    # Localize expired-prone external result URLs in the background
+    import asyncio
+    from app.services.media_store import backfill_generated_media
+    backfill_task = asyncio.create_task(backfill_generated_media())
+
     yield
+    backfill_task.cancel()
     print("[LIFESPAN] Shutting down...")
 
 app = FastAPI(

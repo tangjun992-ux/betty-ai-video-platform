@@ -75,11 +75,31 @@ function TypeBadge({ type }: { type: LibraryItem["media_type"] }) {
 }
 
 function Preview({ item, className, controls = false }: { item: LibraryItem; className?: string; controls?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const src = resolveUrl(item.url);
+
+  if (failed) {
+    const Icon = item.media_type === "video" ? Video : item.media_type === "audio" ? Music : ImageIcon;
+    return (
+      <div className={cn(
+        "flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br from-cosmic-subtle/80 to-cosmic-surface/60",
+        className
+      )}>
+        <Icon className="w-7 h-7 text-text-secondary/30" />
+        <span className="text-[10px] text-text-secondary/60">预览已失效</span>
+        {controls && item.prompt && (
+          <span className="text-[10px] text-text-secondary/40 px-6 text-center line-clamp-2">原始链接已过期，可点击"做同款"重新生成</span>
+        )}
+      </div>
+    );
+  }
   if (item.media_type === "video") {
     return (
       <video
         src={src} className={className} muted={!controls} loop playsInline controls={controls}
+        preload="metadata"
+        onError={() => setFailed(true)}
         onMouseEnter={(e) => !controls && e.currentTarget.play().catch(() => {})}
         onMouseLeave={(e) => { if (!controls) { e.currentTarget.pause(); e.currentTarget.currentTime = 0; } }}
       />
@@ -89,11 +109,18 @@ function Preview({ item, className, controls = false }: { item: LibraryItem; cla
     return (
       <div className={cn("flex flex-col items-center justify-center gap-2 bg-cosmic-subtle", className)}>
         <Music className="w-8 h-8 text-text-secondary/60" />
-        {controls && <audio src={src} controls className="w-full max-w-xs px-4" />}
+        {controls && <audio src={src} controls className="w-full max-w-xs px-4" onError={() => setFailed(true)} />}
       </div>
     );
   }
-  return <img src={resolveUrl(item.thumbnail || item.url)} alt={item.title} className={className} loading="lazy" />;
+  return (
+    <img
+      src={resolveUrl(item.thumbnail || item.url)} alt="" loading="lazy"
+      className={cn(className, "transition-opacity duration-300", loaded ? "opacity-100" : "opacity-0")}
+      onLoad={() => setLoaded(true)}
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 export default function LibraryPage() {
@@ -167,6 +194,19 @@ export default function LibraryPage() {
       fetchLibrary();
     }
   }, [fetchLibrary, toast]);
+
+  // Paste-to-upload (Ctrl/Cmd+V with image in clipboard)
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const files = e.clipboardData?.files;
+      if (files?.length) {
+        e.preventDefault();
+        uploadFiles(files);
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [uploadFiles]);
 
   // ─── Delete ───────────────────────────────────────────
   const deleteItems = useCallback(async (ids: string[]) => {
@@ -255,7 +295,7 @@ export default function LibraryPage() {
         <div>
           <h1 className="text-2xl font-bold">内容库</h1>
           <p className="text-sm text-text-secondary mt-0.5">
-            上传素材与 AI 生成内容统一管理 · 共 {tabCount("all")} 项
+            上传素材与 AI 生成内容统一管理 · 共 {tabCount("all")} 项 · 支持拖拽 / Ctrl+V 粘贴上传
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -388,36 +428,42 @@ export default function LibraryPage() {
               )}
               onClick={() => (selectionMode ? toggleSelect(item.id) : setDetail(item))}
             >
-              <Preview item={item} className="w-full aspect-square object-cover" />
+              {/* Media area */}
+              <div className="relative aspect-square bg-cosmic-subtle/50 overflow-hidden">
+                <Preview item={item} className="absolute inset-0 w-full h-full object-cover" />
 
-              <div className="absolute top-2 left-2 flex items-center gap-1">
-                <TypeBadge type={item.media_type} />
-                <span className={cn(
-                  "px-1.5 py-0.5 rounded text-[10px] backdrop-blur-sm",
-                  item.source === "generated" ? "bg-accent-cyan/25 text-accent-cyan" : "bg-black/55 text-white/85"
-                )}>
-                  {item.source === "generated" ? "AI 生成" : "上传"}
-                </span>
+                <div className="absolute top-2 left-2 flex items-center gap-1">
+                  {item.media_type !== "image" && <TypeBadge type={item.media_type} />}
+                  <span className={cn(
+                    "px-1.5 py-0.5 rounded text-[10px] backdrop-blur-sm",
+                    item.source === "generated" ? "bg-accent-cyan/20 text-accent-cyan" : "bg-black/50 text-white/80"
+                  )}>
+                    {item.source === "generated" ? "AI 生成" : "上传"}
+                  </span>
+                </div>
+
+                {/* Select checkbox */}
+                <button
+                  aria-label="选择"
+                  onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }}
+                  className={cn(
+                    "absolute top-2 right-2 w-5 h-5 rounded-full border flex items-center justify-center transition-all",
+                    selected.has(item.id)
+                      ? "bg-accent-cyan border-accent-cyan opacity-100"
+                      : "bg-black/40 border-white/40 opacity-0 group-hover:opacity-100"
+                  )}
+                >
+                  {selected.has(item.id) && <CheckCircle2 className="w-3.5 h-3.5 text-cosmic-void" />}
+                </button>
               </div>
 
-              {/* Select checkbox */}
-              <button
-                aria-label="选择"
-                onClick={(e) => { e.stopPropagation(); toggleSelect(item.id); }}
-                className={cn(
-                  "absolute top-2 right-2 w-5 h-5 rounded-full border flex items-center justify-center transition-all",
-                  selected.has(item.id)
-                    ? "bg-accent-cyan border-accent-cyan opacity-100"
-                    : "bg-black/40 border-white/40 opacity-0 group-hover:opacity-100"
-                )}
-              >
-                {selected.has(item.id) && <CheckCircle2 className="w-3.5 h-3.5 text-cosmic-void" />}
-              </button>
-
-              {/* Hover footer */}
-              <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/75 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                <p className="text-[11px] text-white/90 truncate">{item.title}</p>
-                <p className="text-[10px] text-white/60">{item.model || formatBytes(item.size_bytes)}</p>
+              {/* Caption */}
+              <div className="px-2.5 py-2 border-t border-cosmic-border/30">
+                <p className="text-xs text-text-primary truncate leading-snug">{item.title || "未命名"}</p>
+                <p className="text-[10px] text-text-secondary/80 truncate mt-0.5">
+                  {item.source === "generated" ? (item.model || "AI 生成") : formatBytes(item.size_bytes)}
+                  {" · "}{formatDate(item.created_at)}
+                </p>
               </div>
             </motion.div>
           ))}

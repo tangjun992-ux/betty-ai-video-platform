@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 
 from celery_app import app
 
+from app.services.media_store import persist_results
+
 logger = logging.getLogger(__name__)
 
 
@@ -120,6 +122,7 @@ def run_pipeline(
         results.extend(step_result.get("results", []))
         total_cost += step_result.get("cost", 0)
 
+    results = persist_results(results)
     _update_task(
         db_task_id,
         status="completed",

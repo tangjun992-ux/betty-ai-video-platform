@@ -12,6 +12,8 @@ from celery_app import app
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from app.services.media_store import persist_results
+
 logger = logging.getLogger(__name__)
 
 
@@ -112,19 +114,20 @@ def process_lipsync(
         # For now, return a mock result with the original image as a placeholder
         output_url = image_url  # Placeholder — would be actual video URL
 
+        output = persist_results([{
+            "type": "video",
+            "url": output_url,
+            "thumbnail": image_url,
+            "model": model or "lipsync-v1",
+            "duration": 5,
+        }])
         _update_task(
             db_task_id,
             status="completed",
             progress=100,
             current_stage="completed",
             completed_at=datetime.now(timezone.utc),
-            results=json.dumps([{
-                "type": "video",
-                "url": output_url,
-                "thumbnail": image_url,
-                "model": model or "lipsync-v1",
-                "duration": 5,
-            }]),
+            results=json.dumps(output),
         )
         _broadcast_progress(db_task_id, 100, "completed", "唇形同步完成！")
 

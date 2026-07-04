@@ -58,7 +58,7 @@ export default function MotionControlPage() {
   const uploadFile = async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append("file", file);
-    const res = await fetch(`${API_BASE}/upload/`, { method: "POST", body: formData });
+    const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: formData });
     if (!res.ok) throw new Error("上传失败");
     const data = await res.json();
     return data.url || data.file_url;

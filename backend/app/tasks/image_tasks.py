@@ -11,6 +11,8 @@ from celery_app import app
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from app.services.media_store import persist_results
+
 logger = logging.getLogger(__name__)
 
 
@@ -167,6 +169,7 @@ def generate_image_task(
         if has_error:
             return _mark_failed(db_task_id, error_msg or "Generation returned error")
 
+        output = persist_results(output)
         _update_task(
             db_task_id, status="completed", progress=100, current_stage="completed",
             completed_at=datetime.now(timezone.utc),
@@ -230,6 +233,7 @@ def _handle_retryable(self, db_task_id, model, error, media_type, *args):
             if rd.get("error"):
                 return _mark_failed(db_task_id, rd["error"])
 
+        output = persist_results(output)
         _update_task(
             db_task_id, status="completed", progress=100, current_stage="completed_fallback",
             completed_at=datetime.now(timezone.utc),

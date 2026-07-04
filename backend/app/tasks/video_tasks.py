@@ -11,6 +11,8 @@ from celery_app import app
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
+from app.services.media_store import persist_results
+
 logger = logging.getLogger(__name__)
 
 
@@ -160,6 +162,7 @@ def generate_video_task(
         }]
         cost = rd.get("cost", 0)
 
+        output = persist_results(output)
         _update_task(
             db_task_id, status="completed", progress=100, current_stage="completed",
             completed_at=datetime.now(timezone.utc),
@@ -212,6 +215,7 @@ def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duratio
             "cost": rd.get("cost", 0),
         }]
         cost = rd.get("cost", 0)
+        output = persist_results(output)
         _update_task(
             db_task_id, status="completed", progress=100, current_stage="completed_fallback",
             completed_at=datetime.now(timezone.utc),

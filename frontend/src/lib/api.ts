@@ -170,7 +170,7 @@ export async function getTaskStatus(taskId: string, timeoutMs = 15000): Promise<
 export async function uploadImage(file: File): Promise<{ url: string }> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_BASE}/upload/`, {
+  const res = await fetch(`${API_BASE}/upload`, {
     method: "POST",
     body: form,
   });
