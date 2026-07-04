@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -29,9 +29,47 @@ import {
   Lightbulb,
   Brain,
   Film,
+  CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
+
+// ─── Hero 演示轮播：真实创作示例（对应各模型可产出的画面）──
+const IMG = (id: string) =>
+  `https://images.unsplash.com/photo-${id}?w=900&q=75&auto=format&fit=crop`;
+
+const DEMO_CARDS = [
+  {
+    prompt: "赛博朋克城市夜景，霓虹灯光，雨后街道",
+    model: "GPT Image 2",
+    type: "图片",
+    image: IMG("1493514789931-586cb221d7a7"),
+  },
+  {
+    prompt: "日式庭院，樱花飘落，柔光晨雾",
+    model: "Nano Banana 2",
+    type: "图片",
+    image: IMG("1522383225653-ed111181a951"),
+  },
+  {
+    prompt: "电影级科幻星云，宇宙深空运镜",
+    model: "Sora 2",
+    type: "视频",
+    image: IMG("1502134249126-9f3755a50d78"),
+  },
+  {
+    prompt: "产品摄影，极简白背景，柔和布光",
+    model: "Seedance 2.0",
+    type: "图片",
+    image: IMG("1523275335684-37898b6baf30"),
+  },
+  {
+    prompt: "专业商务写真，自然光影，浅景深",
+    model: "Kling 3.0",
+    type: "图片",
+    image: IMG("1507003211169-0a1dd7228f2d"),
+  },
+];
 
 // ─── Stagger animation preset ──────────────────────────
 
@@ -685,19 +723,16 @@ export default function HomePage() {
     router.push(heroInput.trim() ? `${path}?${key}=${encodeURIComponent(heroInput)}` : path);
   };
 
-  // Auto-advance demo cards
+  // Auto-advance demo carousel
   useEffect(() => {
-    const timer = setInterval(() => setDemoVideoIdx((i) => (i + 1) % 4), 3500);
+    const timer = setInterval(
+      () => setDemoVideoIdx((i) => (i + 1) % DEMO_CARDS.length),
+      4000
+    );
     return () => clearInterval(timer);
   }, []);
 
-  // Rotating demo cards with auto-advance
-  const demoCards = [
-    { prompt: "赛博朋克城市夜景", color: "from-accent-cyan to-accent-blue" },
-    { prompt: "日式庭院·樱花飘落", color: "from-pink-500 to-rose-500" },
-    { prompt: "电影级科幻飞船", color: "from-accent-violet to-accent-purple" },
-    { prompt: "产品摄影·极简白", color: "from-amber-400 to-orange-500" },
-  ];
+  const demoCards = DEMO_CARDS;
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
@@ -866,79 +901,90 @@ export default function HomePage() {
                   </span>
                 </div>
 
-                {/* Demo content — rotating cards */}
-                <div className="p-4 space-y-3 min-h-[320px] relative overflow-hidden">
-                  {/* Generating indicator */}
+                {/* Demo content — real-work carousel */}
+                <div className="p-4 space-y-3">
+                  {/* Prompt bar (the active prompt being generated) */}
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-cyan/[0.06] border border-accent-cyan/10">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-glow-pulse" />
-                    <span className="text-caption text-accent-cyan font-medium">
-                      AI 生成中...
-                    </span>
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-glow-pulse flex-shrink-0" />
+                    <AnimatePresence mode="wait">
+                      <motion.span
+                        key={demoCards[demoVideoIdx].prompt}
+                        initial={{ opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={{ duration: 0.3 }}
+                        className="text-caption text-accent-cyan font-medium truncate"
+                      >
+                        {demoCards[demoVideoIdx].prompt}
+                      </motion.span>
+                    </AnimatePresence>
                   </div>
 
-                  {/* Floating demo cards */}
-                  {demoCards.map((card, i) => (
-                    <motion.div
-                      key={card.prompt}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{
-                        opacity: demoVideoIdx === i ? 1 : 0.4,
-                        y: 0,
-                        scale: demoVideoIdx === i ? 1 : 0.97,
-                      }}
-                      transition={{ duration: 0.5 }}
-                      onClick={() => setDemoVideoIdx(i)}
-                      className={cn(
-                        "relative rounded-xl overflow-hidden cursor-pointer transition-all duration-300",
-                        "border",
-                        demoVideoIdx === i
-                          ? "border-accent-cyan/30 shadow-glow-subtle"
-                          : "border-cosmic-border/40 hover:border-cosmic-border-hover"
+                  {/* Main preview — cross-fading real image */}
+                  <div className="relative aspect-[16/10] rounded-xl overflow-hidden bg-cosmic-subtle/50 border border-cosmic-border/40">
+                    <AnimatePresence mode="popLayout">
+                      <motion.img
+                        key={demoCards[demoVideoIdx].image}
+                        src={demoCards[demoVideoIdx].image}
+                        alt={demoCards[demoVideoIdx].prompt}
+                        loading="eager"
+                        initial={{ opacity: 0, scale: 1.06 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 1.02 }}
+                        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    </AnimatePresence>
+
+                    {/* Bottom scrim + meta */}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/25 to-transparent p-3 flex items-end justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                        <span className="text-[11px] font-medium text-white/90 truncate">
+                          生成完成
+                        </span>
+                      </div>
+                      <span className="flex-shrink-0 text-[10px] font-semibold text-white/95 px-2 py-0.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20">
+                        {demoCards[demoVideoIdx].model}
+                      </span>
+                    </div>
+
+                    {/* Type badge */}
+                    <div className="absolute top-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/45 backdrop-blur-sm border border-white/10">
+                      {demoCards[demoVideoIdx].type === "视频" ? (
+                        <Video className="w-3 h-3 text-white/90" />
+                      ) : (
+                        <ImageIcon className="w-3 h-3 text-white/90" />
                       )}
-                    >
-                      {/* Gradient placeholder image */}
-                      <div
+                      <span className="text-[10px] font-medium text-white/90">
+                        {demoCards[demoVideoIdx].type}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Thumbnail strip */}
+                  <div className="flex items-center gap-2">
+                    {demoCards.map((card, i) => (
+                      <button
+                        key={card.image}
+                        onClick={() => setDemoVideoIdx(i)}
+                        aria-label={card.prompt}
                         className={cn(
-                          "h-20 bg-gradient-to-br flex items-end p-3",
-                          card.color
+                          "relative flex-1 aspect-[4/3] rounded-lg overflow-hidden transition-all duration-300",
+                          demoVideoIdx === i
+                            ? "ring-2 ring-accent-cyan ring-offset-1 ring-offset-cosmic-surface"
+                            : "opacity-50 hover:opacity-90"
                         )}
                       >
-                        <div className="flex items-center gap-2">
-                          {demoVideoIdx === i && (
-                            <div className="flex items-center gap-1">
-                              <div className="w-1 h-1 rounded-full bg-white animate-pulse" />
-                              <div className="w-1 h-1 rounded-full bg-white animate-pulse" style={{ animationDelay: "0.2s" }} />
-                              <div className="w-1 h-1 rounded-full bg-white animate-pulse" style={{ animationDelay: "0.4s" }} />
-                            </div>
-                          )}
-                          <span className="text-caption font-medium text-white/90">
-                            {card.prompt}
-                          </span>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-
-                  {/* Auto-rotate */}
-                  <motion.div
-                    className="absolute bottom-4 right-4 flex gap-1"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 2 }}
-                  >
-                    {demoCards.map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setDemoVideoIdx(i)}
-                        className={cn(
-                          "w-1.5 h-1.5 rounded-full transition-all duration-300",
-                          demoVideoIdx === i
-                            ? "bg-accent-cyan w-4"
-                            : "bg-text-tertiary/30 hover:bg-text-tertiary/50"
-                        )}
-                      />
+                        <img
+                          src={card.image}
+                          alt=""
+                          loading="lazy"
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      </button>
                     ))}
-                  </motion.div>
+                  </div>
                 </div>
               </div>
 

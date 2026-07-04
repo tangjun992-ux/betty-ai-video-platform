@@ -429,8 +429,8 @@ export default function LibraryPage() {
               onClick={() => (selectionMode ? toggleSelect(item.id) : setDetail(item))}
             >
               {/* Media area */}
-              <div className="relative aspect-square bg-cosmic-subtle/50 overflow-hidden">
-                <Preview item={item} className="absolute inset-0 w-full h-full object-cover" />
+              <div className="relative aspect-square bg-cosmic-subtle/50 overflow-hidden flex items-center justify-center">
+                <Preview item={item} className="w-full h-full object-contain" />
 
                 <div className="absolute top-2 left-2 flex items-center gap-1">
                   {item.media_type !== "image" && <TypeBadge type={item.media_type} />}
