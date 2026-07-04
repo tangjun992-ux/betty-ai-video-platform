@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Sparkles,
   ImageIcon,
@@ -16,7 +17,6 @@ import {
   TrendingUp,
   Users,
   ChevronRight,
-  ExternalLink,
   Wand2,
   Scissors,
   Maximize2,
@@ -26,7 +26,9 @@ import {
   RefreshCw,
   User,
   Mic,
-  Palette,
+  Lightbulb,
+  Brain,
+  Film,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
@@ -107,7 +109,7 @@ const FEATURED_TOOLS = [
     href: "/create/image",
   },
   {
-    icon: Bot,
+    icon: Mic,
     label: "唇形同步",
     desc: "图片+音频生成说话视频，虚拟主播",
     iconColor: "text-amber-600",
@@ -188,15 +190,6 @@ const FEATURES = [
   },
 ];
 
-const TRUSTED_BRANDS = [
-  "OpenAI",
-  "Stability AI",
-  "Meta",
-  "ByteDance",
-  "Runway",
-  "Midjourney",
-];
-
 const FOOTER_SECTIONS = [
   {
     title: "产品",
@@ -213,17 +206,15 @@ const FOOTER_SECTIONS = [
     title: "资源",
     links: [
       { label: "灵感画廊", href: "/gallery" },
-      { label: "使用案例", href: "/tools" },
-      { label: "帮助中心", href: "/tools" },
-      { label: "API 文档", href: "/models" },
+      { label: "探索作品", href: "/explore" },
+      { label: "模型库", href: "/models" },
+      { label: "任务中心", href: "/tasks" },
     ],
   },
   {
     title: "公司",
     links: [
-      { label: "关于我们", href: "/" },
       { label: "定价", href: "/pricing" },
-      { label: "博客", href: "/gallery" },
       { label: "联系我们", href: "mailto:hello@betty.ai" },
     ],
   },
@@ -240,9 +231,9 @@ const FOOTER_SECTIONS = [
 // ─── Badge style map ───────────────────────────────────
 
 const badgeStyles: Record<string, string> = {
-  New: "bg-blue-500/15 text-blue-400 border border-blue-500/20",
-  Hot: "bg-red-500/15 text-red-400 border border-red-500/20",
-  Pro: "bg-violet-500/15 text-violet-400 border border-violet-500/20",
+  New: "bg-blue-500/10 text-blue-600 border border-blue-500/20",
+  Hot: "bg-red-500/10 text-red-600 border border-red-500/20",
+  Pro: "bg-violet-500/10 text-violet-600 border border-violet-500/20",
 };
 
 // ─── Animated Grid Background ──────────────────────────
@@ -266,38 +257,6 @@ function GridBg() {
       <div className="absolute top-1/3 right-0 w-[500px] h-[500px] bg-violet-500/[0.05] rounded-full blur-[120px]" />
       <div className="absolute bottom-0 left-1/3 w-[400px] h-[400px] bg-accent-cyan/[0.04] rounded-full blur-[100px]" />
     </div>
-  );
-}
-
-// ─── Brand Trust Bar ───────────────────────────────────
-
-function BrandTrustBar() {
-  return (
-    <section className="relative px-4 py-12 border-y border-cosmic-border">
-      <GridBg />
-      <div className="relative max-w-6xl mx-auto text-center">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-secondary/40 mb-8">
-          受全球创新者信赖
-        </p>
-        <motion.div
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true }}
-          className="flex flex-wrap items-center justify-center gap-x-10 gap-y-5"
-        >
-          {TRUSTED_BRANDS.map((brand) => (
-            <motion.span
-              key={brand}
-              variants={fadeScaleItem}
-              className="text-xl md:text-2xl font-bold text-text-tertiary/40 hover:text-text-tertiary/70 transition-colors duration-500 select-none"
-            >
-              {brand}
-            </motion.span>
-          ))}
-        </motion.div>
-      </div>
-    </section>
   );
 }
 
@@ -483,7 +442,7 @@ function ModelsSection() {
           viewport={{ once: true }}
           className="mb-10"
         >
-          <p className="text-overline text-text-tertiary/50 uppercase tracking-[0.2em] mb-3">
+          <p className="text-overline text-text-tertiary uppercase tracking-[0.2em] mb-3">
             Powered by
           </p>
           <h2 className="text-2xl font-bold text-text-primary mb-2">
@@ -716,6 +675,7 @@ function Footer() {
 // ═══════════════════════════════════════════════════════
 
 export default function HomePage() {
+  const router = useRouter();
   const [heroInput, setHeroInput] = useState("");
   const [heroMode, setHeroMode] = useState<"agent" | "image" | "video">("agent");
   const [demoVideoIdx, setDemoVideoIdx] = useState(0);
@@ -723,8 +683,14 @@ export default function HomePage() {
     const m = override || heroMode;
     const path = m === "agent" ? "/agent" : m === "video" ? "/create/video" : "/create/image";
     const key = m === "agent" ? "brief" : "prompt";
-    window.location.href = heroInput.trim() ? `${path}?${key}=${encodeURIComponent(heroInput)}` : path;
+    router.push(heroInput.trim() ? `${path}?${key}=${encodeURIComponent(heroInput)}` : path);
   };
+
+  // Auto-advance demo cards
+  useEffect(() => {
+    const timer = setInterval(() => setDemoVideoIdx((i) => (i + 1) % 4), 3500);
+    return () => clearInterval(timer);
+  }, []);
 
   // Rotating demo cards with auto-advance
   const demoCards = [
@@ -738,7 +704,7 @@ export default function HomePage() {
     <div className="min-h-[calc(100vh-4rem)]">
       {/* ─── Announcement Banner ─── */}
       <div className="relative bg-gradient-to-r from-accent-cyan/15 via-accent-blue/10 to-accent-violet/15 py-2.5 border-b border-accent-cyan/10 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_hsl(189_94%_48%/0.08),transparent_70%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_hsl(var(--accent-cyan)/0.08),transparent_70%)]" />
         <div className="relative max-w-7xl mx-auto px-4 flex items-center justify-center">
           <Link
             href="/create/video"
@@ -776,10 +742,10 @@ export default function HomePage() {
               </div>
 
               {/* Title */}
-              <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-semibold tracking-[-0.035em] leading-[1.04] mb-5">
-                Make something{" "}
+              <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-semibold tracking-[-0.035em] leading-[1.08] mb-5">
+                让每个创意
                 <br className="hidden sm:block" />
-                <span className="text-gradient">special</span>
+                <span className="text-gradient">一键成片</span>
               </h1>
 
               {/* Subtitle */}
@@ -977,32 +943,6 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Floating stat badges */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.8 }}
-                className="absolute -bottom-3 -left-3 px-3 py-1.5 rounded-xl bg-cosmic-elevated/90 backdrop-blur-xl border border-cosmic-border/60 shadow-elevation-md flex items-center gap-2"
-              >
-                <div className="w-6 h-6 rounded-lg bg-accent-cyan/15 flex items-center justify-center">
-                  <Sparkles className="w-3 h-3 text-accent-cyan" />
-                </div>
-                <div>
-                  <div className="text-body-sm font-semibold text-text-primary">2.4M+</div>
-                  <div className="text-[10px] text-text-tertiary">素材已生成</div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 1.0 }}
-                className="absolute -top-3 -right-3 px-3 py-1.5 rounded-xl bg-cosmic-elevated/90 backdrop-blur-xl border border-cosmic-border/60 shadow-elevation-md flex items-center gap-2"
-              >
-                <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                <span className="text-body-sm font-semibold text-text-primary">4.9</span>
-                <span className="text-[10px] text-text-tertiary">用户评分</span>
-              </motion.div>
             </motion.div>
           </div>
         </div>
@@ -1084,9 +1024,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ═══ Brand Trust Bar ═══ */}
-      <BrandTrustBar />
-
       {/* ═══ Feature Highlights ═══ */}
       <FeatureHighlights />
 
@@ -1123,9 +1060,17 @@ export default function HomePage() {
               </div>
               {/* Visual flow — 6-step mini cards */}
               <div className="flex-shrink-0 grid grid-cols-3 gap-2">
-                {["💡 描述", "🧠 规划", "🖼️ 生成", "🎥 动画", "🎵 配乐", "🎬 合成"].map((s) => (
-                  <div key={s} className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-cosmic-surface border border-cosmic-border text-xs text-text-secondary">
-                    {s}
+                {[
+                  { icon: Lightbulb, label: "描述" },
+                  { icon: Brain, label: "规划" },
+                  { icon: ImageIcon, label: "生成" },
+                  { icon: Video, label: "动画" },
+                  { icon: Music, label: "配乐" },
+                  { icon: Film, label: "合成" },
+                ].map((s) => (
+                  <div key={s.label} className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-cosmic-surface border border-cosmic-border text-xs text-text-secondary">
+                    <s.icon className="w-3.5 h-3.5 text-brand" />
+                    {s.label}
                   </div>
                 ))}
               </div>
