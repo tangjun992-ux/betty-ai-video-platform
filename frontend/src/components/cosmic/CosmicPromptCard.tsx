@@ -23,6 +23,7 @@ interface CosmicPromptCardProps {
   className?: string;
   loading?: boolean;
   mode?: string;
+  initialValue?: string; // pre-fill (e.g. remix from explore/library)
 
   // Reference image support
   referenceFiles?: ReferenceFile[];
@@ -37,11 +38,17 @@ export function CosmicPromptCard({
   className,
   loading = false,
   mode,
+  initialValue,
   referenceFiles = [],
   onAddReference,
   onRemoveReference,
 }: CosmicPromptCardProps) {
   const [prompt, setPrompt] = useState("");
+
+  // Sync external pre-fill into the internal textarea state
+  useEffect(() => {
+    if (initialValue) setPrompt(initialValue);
+  }, [initialValue]);
   const [isFocused, setIsFocused] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);

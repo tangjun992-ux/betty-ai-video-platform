@@ -70,7 +70,7 @@ export default function FeedPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["feed-tasks"],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/tasks?limit=50`);
+      const res = await fetch(`${API_BASE}/tasks/?limit=50`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json();
     },

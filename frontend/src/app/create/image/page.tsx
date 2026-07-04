@@ -63,6 +63,7 @@ export default function CreateImagePage() {
 
   // ── Local State ──────────────────────────────────────
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [prefillPrompt, setPrefillPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,13 +100,17 @@ export default function CreateImagePage() {
       setActiveTool(preset.tool);
       if (preset.prompt && !prompt) setPrompt(preset.prompt);
     }
-    // Remix pre-fill (?prompt=&model=) from explore page
+    // Remix pre-fill (?prompt=&model=) from explore/library page
     const remixPrompt = params.get("prompt");
     const remixModel = params.get("model");
-    if (remixPrompt) setPrompt(remixPrompt);
+    if (remixPrompt) {
+      setPrompt(remixPrompt);
+      setPrefillPrompt(remixPrompt);
+    }
     if (remixModel) {
+      const short = remixModel.split("/").pop() || remixModel;
       const matched = IMAGE_MODELS.find(
-        (m) => m.id === remixModel || m.id.endsWith(`/${remixModel}`)
+        (m) => m.id === remixModel || m.id.endsWith(`/${short}`) || m.id.startsWith(short)
       );
       if (matched) setSelectedModel(matched.id);
     }
@@ -419,6 +424,7 @@ export default function CreateImagePage() {
               suggestions={SUGGESTIONS}
               loading={submitting}
               mode="图片创作"
+              initialValue={prefillPrompt}
               referenceFiles={referenceFiles}
               onAddReference={handleAddReference}
               onRemoveReference={removeReference}

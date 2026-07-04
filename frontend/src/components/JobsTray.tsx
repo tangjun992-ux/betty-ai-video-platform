@@ -122,7 +122,7 @@ async function fetchTasks(token: string | null): Promise<TasksResponse> {
   const params = new URLSearchParams({ limit: "20" });
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}/tasks?${params}`, { headers });
+  const res = await fetch(`${API_BASE}/tasks/?${params}`, { headers });
   if (!res.ok) throw new Error(`获取任务列表失败: ${res.status}`);
   return res.json();
 }
