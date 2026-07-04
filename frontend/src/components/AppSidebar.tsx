@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { useUIStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/BrandLogo";
 import {
   Tooltip,
   TooltipContent,
@@ -150,11 +151,7 @@ export function AppSidebar() {
           transition={{ duration: 0.15 }}
           className="flex items-center gap-2.5 h-12 px-4 border-b border-cosmic-border shrink-0"
         >
-          <img
-            src="/brand/logo-icon.png"
-            alt="betty"
-            className="w-7 h-7 rounded-lg object-cover shrink-0"
-          />
+          <BrandMark className="w-7 h-7" />
           <span className="font-semibold text-base tracking-[-0.02em] text-text-primary truncate">
             betty
           </span>
@@ -165,11 +162,7 @@ export function AppSidebar() {
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
               <Link href="/" className="p-1 rounded-lg">
-                <img
-                  src="/brand/logo-icon.png"
-                  alt="betty"
-                  className="w-7 h-7 rounded-lg object-cover"
-                />
+                <BrandMark className="w-7 h-7" />
               </Link>
             </TooltipTrigger>
             <TooltipContent side="right" sideOffset={12}>

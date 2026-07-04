@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useAuthStore } from "@/lib/stores";
 import { cn, formatDate, formatCredits } from "@/lib/utils";
+import { BrandMark } from "@/components/BrandLogo";
 import type {
   SettingsResponse, UserPreferences, NotificationSettings,
   ApiKeyInfo, BillingInfo, SettingsProfile, SaveSettingsRequest,
@@ -617,9 +618,7 @@ function AboutSection() {
     <SectionCard title="关于 betty">
       <div className="space-y-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl overflow-hidden">
-            <img src="/brand/logo-icon.png" alt="betty" className="w-full h-full object-cover" />
-          </div>
+          <BrandMark className="w-12 h-12" />
           <div>
             <h4 className="font-semibold text-lg">betty</h4>
             <p className="text-sm text-text-secondary">AI 内容创作平台</p>

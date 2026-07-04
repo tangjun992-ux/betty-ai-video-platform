@@ -16,7 +16,6 @@ import {
   TrendingUp,
   Users,
   ChevronRight,
-  ChevronDown,
   ExternalLink,
   Wand2,
   Scissors,
@@ -30,6 +29,7 @@ import {
   Palette,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/BrandLogo";
 
 // ─── Stagger animation preset ──────────────────────────
 
@@ -150,14 +150,14 @@ const FEATURED_TOOLS = [
 ];
 
 const MODELS = [
-  { name: "Kling 3.0", logo: "🎞️", type: "视频", provider: "Kuaishou", badge: "Hot" },
-  { name: "Seedance 2.0", logo: "🎬", type: "视频", provider: "ByteDance", badge: "Pro" },
-  { name: "GPT Image 2", logo: "🖼️", type: "图片", provider: "OpenAI", badge: "New" },
-  { name: "Runway Gen-3", logo: "🎥", type: "视频", provider: "Runway" },
-  { name: "Flux 1.1 Pro", logo: "⚡", type: "图片", provider: "Black Forest" },
-  { name: "Pixverse V6", logo: "📽️", type: "视频", provider: "Pixverse" },
-  { name: "Nano Banana", logo: "🍌", type: "图片", provider: "ByteDance" },
-  { name: "Veo 3", logo: "🌐", type: "视频", provider: "Google" },
+  { name: "Kling 3.0", mono: "K", type: "视频", provider: "Kuaishou", badge: "Hot" },
+  { name: "Seedance 2.0", mono: "S", type: "视频", provider: "ByteDance", badge: "Pro" },
+  { name: "GPT Image 2", mono: "G", type: "图片", provider: "OpenAI", badge: "New" },
+  { name: "Runway Gen-3", mono: "R", type: "视频", provider: "Runway" },
+  { name: "Flux 1.1 Pro", mono: "F", type: "图片", provider: "Black Forest" },
+  { name: "Pixverse V6", mono: "P", type: "视频", provider: "Pixverse" },
+  { name: "Nano Banana", mono: "N", type: "图片", provider: "ByteDance" },
+  { name: "Veo 3", mono: "V", type: "视频", provider: "Google" },
 ];
 
 const STATS = [
@@ -273,7 +273,7 @@ function GridBg() {
 
 function BrandTrustBar() {
   return (
-    <section className="relative px-4 py-12 border-y border-white/[0.04]">
+    <section className="relative px-4 py-12 border-y border-cosmic-border">
       <GridBg />
       <div className="relative max-w-6xl mx-auto text-center">
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-text-secondary/40 mb-8">
@@ -290,7 +290,7 @@ function BrandTrustBar() {
             <motion.span
               key={brand}
               variants={fadeScaleItem}
-              className="text-xl md:text-2xl font-bold text-text-accent-cyan/15 hover:text-text-accent-cyan/30 transition-colors duration-500 select-none"
+              className="text-xl md:text-2xl font-bold text-text-tertiary/40 hover:text-text-tertiary/70 transition-colors duration-500 select-none"
             >
               {brand}
             </motion.span>
@@ -313,7 +313,7 @@ function FeatureHighlights() {
           viewport={{ once: true }}
           className="text-center mb-14"
         >
-          <h2 className="text-3xl md:text-4xl font-bold text-text-accent-cyan mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-text-primary mb-4">
             为什么选择我们
           </h2>
           <p className="text-text-secondary max-w-xl mx-auto text-lg">
@@ -338,10 +338,10 @@ function FeatureHighlights() {
                     feature.color
                   )}
                 >
-                  <feature.icon className="w-6 h-6 text-text-accent-cyan" />
+                  <feature.icon className="w-6 h-6 text-white" />
                 </div>
                 {/* Content */}
-                <h3 className="text-lg font-semibold text-text-accent-cyan">
+                <h3 className="text-lg font-semibold text-text-primary">
                   {feature.title}
                 </h3>
                 <p className="text-sm text-text-secondary leading-relaxed">
@@ -375,7 +375,7 @@ function StatsSection() {
             className="surface-interactive text-center p-6"
           >
             <stat.icon className="w-5 h-5 text-accent-cyan mx-auto mb-3" />
-            <div className="text-3xl font-bold text-text-accent-cyan tracking-tight">
+            <div className="text-3xl font-bold text-text-primary tracking-tight">
               {stat.value}
             </div>
             <div className="text-xs text-text-secondary mt-2">
@@ -486,7 +486,7 @@ function ModelsSection() {
           <p className="text-overline text-text-tertiary/50 uppercase tracking-[0.2em] mb-3">
             Powered by
           </p>
-          <h2 className="text-2xl font-bold text-text-accent-cyan mb-2">
+          <h2 className="text-2xl font-bold text-text-primary mb-2">
             全球顶级 AI 模型矩阵
           </h2>
           <p className="text-body-sm text-text-tertiary">
@@ -518,9 +518,9 @@ function ModelsSection() {
                   {m.badge}
                 </span>
               )}
-              {/* Icon */}
-              <div className="w-11 h-11 rounded-xl bg-brand/[0.06] border border-brand/10 flex items-center justify-center text-xl">
-                {m.logo}
+              {/* Monogram */}
+              <div className="w-11 h-11 rounded-xl bg-brand/[0.06] border border-brand/10 flex items-center justify-center text-base font-bold text-brand">
+                {m.mono}
               </div>
               {/* Name + provider */}
               <div>
@@ -554,7 +554,7 @@ function ModelsSection() {
               variants={fadeScaleItem}
               className="relative group flex flex-col items-center gap-1.5 p-3 rounded-xl border border-cosmic-border/40 bg-cosmic-subtle/50 hover:bg-cosmic-surface hover:border-cosmic-border-hover transition-all duration-200 cursor-default"
             >
-              <span className="text-lg">{m.logo}</span>
+              <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-brand/[0.06] border border-brand/10 text-xs font-bold text-brand">{m.mono}</span>
               <span className="text-[11px] font-medium text-text-secondary">{m.name}</span>
             </motion.div>
           ))}
@@ -580,7 +580,7 @@ function TestimonialsSection() {
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <p className="text-overline text-text-tertiary uppercase tracking-[0.2em] mb-3">CREDIBILITY</p>
-          <h2 className="text-2xl font-bold text-text-accent-cyan mb-2">创作者信赖</h2>
+          <h2 className="text-2xl font-bold text-text-primary mb-2">创作者信赖</h2>
           <p className="text-text-secondary">全球数万创作者正在用 betty 做出爆款内容</p>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
@@ -646,7 +646,7 @@ function CtaSection() {
 
         <div className="relative z-10">
           <Zap className="w-12 h-12 text-accent-cyan mx-auto mb-5" />
-          <h2 className="text-3xl md:text-4xl font-bold mb-3 text-text-accent-cyan">
+          <h2 className="text-3xl md:text-4xl font-bold mb-3 text-text-primary">
             准备好开始创作了吗？
           </h2>
           <p className="text-text-secondary mb-8 text-lg">
@@ -670,12 +670,12 @@ function CtaSection() {
 
 function Footer() {
   return (
-    <footer className="border-t border-white/[0.06] px-4 py-14">
+    <footer className="border-t border-cosmic-border px-4 py-14">
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
           {FOOTER_SECTIONS.map((section) => (
             <div key={section.title}>
-              <h3 className="text-sm font-semibold text-text-accent-cyan mb-4">
+              <h3 className="text-sm font-semibold text-text-primary mb-4">
                 {section.title}
               </h3>
               <ul className="space-y-2.5">
@@ -683,7 +683,7 @@ function Footer() {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-sm text-text-secondary hover:text-text-accent-cyan transition-colors duration-200"
+                      className="text-sm text-text-secondary hover:text-text-primary transition-colors duration-200"
                     >
                       {link.label}
                     </Link>
@@ -694,16 +694,10 @@ function Footer() {
           ))}
         </div>
 
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-8 border-t border-white/[0.06]">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-8 border-t border-cosmic-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg overflow-hidden bg-white/[0.06] flex items-center justify-center">
-              <img
-                src="/brand/logo-icon.png"
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <span className="font-semibold text-sm text-text-accent-cyan">betty</span>
+            <BrandMark className="w-7 h-7" />
+            <span className="font-semibold text-sm text-text-primary">betty</span>
             <span className="text-xs text-text-secondary/60 ml-1">
               AI 内容创作平台
             </span>
@@ -748,7 +742,7 @@ export default function HomePage() {
         <div className="relative max-w-7xl mx-auto px-4 flex items-center justify-center">
           <Link
             href="/create/video"
-            className="flex items-center gap-2 text-body-sm text-text-secondary hover:text-text-accent-cyan transition-colors group"
+            className="flex items-center gap-2 text-body-sm text-text-secondary hover:text-text-primary transition-colors group"
           >
             <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent-cyan/15 border border-accent-cyan/20 text-caption font-semibold text-accent-cyan">
               <Sparkles className="w-3 h-3" /> NEW
@@ -778,7 +772,7 @@ export default function HomePage() {
               {/* Badge */}
               <div className="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full bg-accent-cyan/[0.06] border border-accent-cyan/15 text-caption text-accent-cyan mb-6">
                 <Sparkles className="w-3 h-3" />
-                <span className="font-medium tracking-wide">全球 15+ 顶级模型 · 数百万资产已生成 · 数万创作者信赖</span>
+                <span className="font-medium tracking-wide">全球 15+ 顶级 AI 模型 · 一站式专业创作平台</span>
               </div>
 
               {/* Title */}
@@ -833,7 +827,7 @@ export default function HomePage() {
                     className="w-full h-14 pl-5 pr-28 bg-transparent text-body text-text-primary placeholder:text-text-tertiary focus:outline-none rounded-2xl"
                   />
                   <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    <Link href="/create/image" className="p-2 rounded-lg text-text-tertiary hover:text-accent-cyan hover:bg-white/[0.04] transition-colors" title="添加参考媒体">
+                    <Link href="/create/image" className="p-2 rounded-lg text-text-tertiary hover:text-accent-cyan hover:bg-cosmic-subtle transition-colors" title="添加参考媒体">
                       <ImageIcon className="w-5 h-5" />
                     </Link>
                     <button
@@ -875,7 +869,7 @@ export default function HomePage() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-caption text-text-tertiary hover:text-text-secondary hover:bg-white/[0.04] transition-all duration-200"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-caption text-text-tertiary hover:text-text-secondary hover:bg-cosmic-subtle transition-all duration-200"
                   >
                     <item.icon className="w-3.5 h-3.5" />
                     <span>{item.label}</span>
@@ -994,7 +988,7 @@ export default function HomePage() {
                   <Sparkles className="w-3 h-3 text-accent-cyan" />
                 </div>
                 <div>
-                  <div className="text-body-sm font-semibold text-text-accent-cyan">2.4M+</div>
+                  <div className="text-body-sm font-semibold text-text-primary">2.4M+</div>
                   <div className="text-[10px] text-text-tertiary">素材已生成</div>
                 </div>
               </motion.div>
@@ -1006,30 +1000,13 @@ export default function HomePage() {
                 className="absolute -top-3 -right-3 px-3 py-1.5 rounded-xl bg-cosmic-elevated/90 backdrop-blur-xl border border-cosmic-border/60 shadow-elevation-md flex items-center gap-2"
               >
                 <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                <span className="text-body-sm font-semibold text-text-accent-cyan">4.9</span>
+                <span className="text-body-sm font-semibold text-text-primary">4.9</span>
                 <span className="text-[10px] text-text-tertiary">用户评分</span>
               </motion.div>
             </motion.div>
           </div>
         </div>
 
-        {/* Scroll indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.5, duration: 0.6 }}
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1"
-        >
-          <span className="text-[10px] text-text-tertiary/40 uppercase tracking-widest">
-            向下探索
-          </span>
-          <motion.div
-            animate={{ y: [0, 6, 0] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-          >
-            <ChevronDown className="w-4 h-4 text-text-tertiary/30" />
-          </motion.div>
-        </motion.div>
       </section>
 
       {/* ═══ HOT TEMPLATES: Horizontal Scroll Cards ═══ */}
@@ -1042,7 +1019,7 @@ export default function HomePage() {
             className="flex items-center justify-between mb-6"
           >
             <div>
-              <h2 className="text-2xl font-bold text-text-accent-cyan mb-1">
+              <h2 className="text-2xl font-bold text-text-primary mb-1">
                 热门创作模板
               </h2>
               <p className="text-body-sm text-text-tertiary">
@@ -1089,7 +1066,7 @@ export default function HomePage() {
                   {/* Info */}
                   <div className="p-3">
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-body-sm font-semibold text-text-accent-cyan">
+                      <span className="text-body-sm font-semibold text-text-primary">
                         {tpl.label}
                       </span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-cyan/10 text-accent-cyan font-medium">

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useUIStore, useCreationStore, useAuthStore, useCmdKStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/BrandLogo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -102,7 +103,7 @@ function MobileSidebar() {
           >
             <div className="flex items-center justify-between h-16 px-4 border-b border-cosmic-border">
               <Link href="/" className="flex items-center gap-2" onClick={() => setSidebarOpen(false)}>
-                <img src="/brand/logo-icon.png" alt="betty" className="w-8 h-8 rounded-lg object-cover" />
+                <BrandMark className="w-8 h-8" />
                 <span className="font-semibold text-lg tracking-tight">betty</span>
               </Link>
               <button onClick={() => setSidebarOpen(false)} className="p-1.5 rounded-lg text-text-secondary hover:bg-cosmic-subtle">
@@ -178,7 +179,7 @@ function Navbar() {
 
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <img src="/brand/logo-icon.png" alt="betty" className="w-8 h-8 rounded-lg object-cover" />
+          <BrandMark className="w-8 h-8" />
           <span className="font-semibold text-lg tracking-[-0.02em] text-text-primary">betty</span>
         </Link>
 

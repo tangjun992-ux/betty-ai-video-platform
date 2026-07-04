@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useUIStore, useAuthStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
+import { BrandMark } from "@/components/BrandLogo";
 import { JobsTray } from "@/components/JobsTray";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -79,11 +80,7 @@ export function TopBar() {
 
         {/* Logo + brand */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <img
-            src="/brand/logo-icon.png"
-            alt="betty"
-            className="w-7 h-7 rounded-lg object-cover"
-          />
+          <BrandMark className="w-7 h-7" />
           <span className="font-semibold text-base tracking-[-0.02em] text-text-primary hidden sm:inline">
             betty
           </span>
