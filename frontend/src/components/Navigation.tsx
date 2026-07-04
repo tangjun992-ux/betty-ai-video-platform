@@ -44,7 +44,7 @@ const mainNav = [
   { href: "/create/image", icon: ImageIcon, label: "图片创作" },
   { href: "/create/video", icon: Video, label: "视频创作" },
   { href: "/agent", icon: Bot, label: "AI Agent" },
-  { href: "/gallery", icon: FolderOpen, label: "内容库" },
+  { href: "/explore", icon: FolderOpen, label: "探索" },
 ];
 
 // 工具下拉(顶部导航的 Tools 菜单)

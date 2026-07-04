@@ -205,7 +205,6 @@ const FOOTER_SECTIONS = [
   {
     title: "资源",
     links: [
-      { label: "灵感画廊", href: "/gallery" },
       { label: "探索作品", href: "/explore" },
       { label: "模型库", href: "/models" },
       { label: "任务中心", href: "/tasks" },
@@ -828,7 +827,7 @@ export default function HomePage() {
               <div className="flex flex-wrap gap-3">
                 {[
                   { href: "/agent", icon: Bot, label: "AI Agent" },
-                  { href: "/gallery", icon: Sparkles, label: "灵感画廊" },
+                  { href: "/explore", icon: Sparkles, label: "探索" },
                   { href: "/tools", icon: Wand2, label: "所有工具" },
                   { href: "/pricing", icon: Zap, label: "定价" },
                 ].map((item) => (

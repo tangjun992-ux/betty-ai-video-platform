@@ -13,7 +13,7 @@ export default function SubPageLayout({ children, title }: { children: React.Rea
           </Link>
           <nav className="flex items-center gap-4 text-xs text-text-secondary">
             <Link href="/" className="hover:text-text-primary transition">创作</Link>
-            <Link href="/gallery" className="hover:text-text-primary transition">画廊</Link>
+            <Link href="/explore" className="hover:text-text-primary transition">探索</Link>
             <Link href="/pricing" className="hover:text-text-primary transition">定价</Link>
             <CreditsBadge />
           </nav>

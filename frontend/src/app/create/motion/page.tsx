@@ -310,8 +310,8 @@ export default function MotionControlPage() {
               <video src={result.result_url} controls className="w-full" poster={imagePreview || undefined} />
               <div className="p-3 flex items-center justify-between bg-cosmic-subtle">
                 <span className="text-xs text-text-secondary">运动控制结果</span>
-                <button onClick={() => router.push("/gallery")} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                  查看画廊 <ArrowRight className="w-3 h-3" />
+                <button onClick={() => router.push("/explore")} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                  前往探索 <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
             </motion.div>

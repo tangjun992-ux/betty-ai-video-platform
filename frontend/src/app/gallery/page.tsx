@@ -59,7 +59,13 @@ export default function GalleryPage() {
       const resp = await fetch(
         `${API_BASE}/gallery/?style=${style}&media_type=${mediaFilter}&sort=${sort}&limit=36`
       );
-      if (!resp.ok) throw new Error(`加载失败 (HTTP ${resp.status})`);
+      if (!resp.ok) {
+        throw new Error(
+          resp.status === 404
+            ? "接口不存在 (HTTP 404)——后端版本过旧，请重启后端服务"
+            : `加载失败 (HTTP ${resp.status})`
+        );
+      }
       const data = await resp.json();
       setItems(data.items || []);
       if (data.styles) setStyleOptions(data.styles);
@@ -111,8 +117,8 @@ export default function GalleryPage() {
         animate={{ opacity: 1, y: 0 }}
         className="text-center mb-8"
       >
-        <h1 className="text-3xl font-bold mb-2 gradient-text-static">灵感画廊</h1>
-        <p className="text-text-secondary">探索社区优质创作，获取灵感</p>
+        <h1 className="text-3xl font-bold mb-2 gradient-text-static">探索</h1>
+        <p className="text-text-secondary">发现社区优质创作，一键做同款</p>
         {stats && (
           <div className="flex justify-center gap-6 mt-4 text-sm text-text-secondary">
             <span className="inline-flex items-center gap-1.5">
@@ -354,7 +360,7 @@ export default function GalleryPage() {
                       })()}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand/[0.08] text-brand text-xs font-medium border border-brand/20 hover:bg-brand/[0.15] transition-colors"
                     >
-                      🔄 复用创作
+                      🔄 做同款
                     </a>
                   </div>
                 </div>

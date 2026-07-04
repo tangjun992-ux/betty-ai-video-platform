@@ -99,6 +99,16 @@ export default function CreateImagePage() {
       setActiveTool(preset.tool);
       if (preset.prompt && !prompt) setPrompt(preset.prompt);
     }
+    // Remix pre-fill (?prompt=&model=) from explore page
+    const remixPrompt = params.get("prompt");
+    const remixModel = params.get("model");
+    if (remixPrompt) setPrompt(remixPrompt);
+    if (remixModel) {
+      const matched = IMAGE_MODELS.find(
+        (m) => m.id === remixModel || m.id.endsWith(`/${remixModel}`)
+      );
+      if (matched) setSelectedModel(matched.id);
+    }
   }, []); // Only on mount
 
   // ── Elapsed timer during generation ──────────────────

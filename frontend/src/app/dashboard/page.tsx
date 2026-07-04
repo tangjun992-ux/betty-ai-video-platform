@@ -306,7 +306,7 @@ export default function DashboardPage() {
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-text-primary">Recent</h2>
-            <Link href="/gallery" className="text-xs text-brand hover:text-brand-strong flex items-center gap-1 transition-colors">
+            <Link href="/explore" className="text-xs text-brand hover:text-brand-strong flex items-center gap-1 transition-colors">
               View all <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>

@@ -119,6 +119,20 @@ export default function CreateVideoPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
 
+  // ── Remix pre-fill from URL (?prompt=&model=) ──
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get("prompt");
+    const m = params.get("model");
+    if (p) setPrompt(p);
+    if (m) {
+      const matched = VIDEO_MODELS.find(
+        (v) => v.id === m || v.id.endsWith(`/${m}`)
+      );
+      if (matched) setSelectedModel(matched.id);
+    }
+  }, []); // Only on mount
+
   // ── Elapsed timer ──
   useEffect(() => {
     if (!submitting) { setElapsed(0); return; }
