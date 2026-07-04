@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useUIStore } from "@/lib/stores";
 import { ToastContainer } from "@/components/Toast";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -39,29 +40,31 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <SidebarWidthHandler>
-          {isDashboard ? (
-            <>
-              <ScrollProgress />
-              {children}
-              <ToastContainer />
-            </>
-          ) : isAuth ? (
-            <>
-              {children}
-              <ToastContainer />
-            </>
-          ) : (
-            <AppShell>
-              <ScrollProgress />
-              <PageTransition>{children}</PageTransition>
-              <ToastContainer />
-            </AppShell>
-          )}
+        <TooltipProvider delayDuration={200}>
+          <SidebarWidthHandler>
+            {isDashboard ? (
+              <>
+                <ScrollProgress />
+                {children}
+                <ToastContainer />
+              </>
+            ) : isAuth ? (
+              <>
+                {children}
+                <ToastContainer />
+              </>
+            ) : (
+              <AppShell>
+                <ScrollProgress />
+                <PageTransition>{children}</PageTransition>
+                <ToastContainer />
+              </AppShell>
+            )}
 
-          {/* ⌘K Command Palette — global */}
-          <CommandPalette />
-        </SidebarWidthHandler>
+            {/* ⌘K Command Palette — global */}
+            <CommandPalette />
+          </SidebarWidthHandler>
+        </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -8,39 +8,39 @@ import { cn } from "@/lib/utils";
 
 const API = "http://localhost:8000/api/v1";
 
-const PLATFORM_ICONS = {
+const PLATFORM_ICONS: Record<string, string> = {
   reddit: "🟠", youtube: "🔴", tiktok: "⚫", x: "🐦",
 };
 
-const TIER_COLORS = {
+const TIER_COLORS: Record<string, string> = {
   tier_1_breakout: "text-red-500 bg-red-500/10 border-red-500/20",
   tier_2_trending: "text-orange-500 bg-orange-500/10 border-orange-500/20",
   tier_3_emerging: "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
   noise: "text-slate-400 bg-slate-500/5 border-slate-500/10",
 };
 
-const TIER_LABELS = {
+const TIER_LABELS: Record<string, string> = {
   tier_1_breakout: "Breakout",
   tier_2_trending: "Trending",
   tier_3_emerging: "Emerging",
   noise: "Noise",
 };
 
-function formatCount(n) {
+function formatCount(n: number) {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
   if (n >= 1000) return (n / 1000).toFixed(1) + "K";
   return String(n);
 }
 
-function formatVelocity(v) {
+function formatVelocity(v: number) {
   if (v === null || v === undefined) return "\u2014";
   return (v >= 0 ? "+" : "") + v.toFixed(0) + "/h";
 }
 
 export default function VisDashboardPage() {
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -51,7 +51,7 @@ export default function VisDashboardPage() {
       const data = await res.json();
       setStats(data);
     } catch (e) {
-      setError(e.message);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -122,7 +122,7 @@ export default function VisDashboardPage() {
             <Globe className="w-4 h-4 text-purple-500" /> By Platform
           </h3>
           <div className="space-y-3">
-            {Object.entries(stats.platform_breakdown || {}).map(([platform, count]) => (
+            {Object.entries(stats.platform_breakdown || {}).map(([platform, count]: [string, any]) => (
               <div key={platform} className="flex items-center justify-between">
                 <span className="text-sm text-slate-600 capitalize flex items-center gap-2">
                   <span>{PLATFORM_ICONS[platform] || "📊"}</span> {platform}
@@ -130,7 +130,7 @@ export default function VisDashboardPage() {
                 <div className="flex items-center gap-2">
                   <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div className="h-full bg-purple-500 rounded-full"
-                      style={{ width: `${Math.min((count / Math.max(...Object.values(stats.platform_breakdown))) * 100, 100)}%` }} />
+                      style={{ width: `${Math.min((count / Math.max(...(Object.values(stats.platform_breakdown) as number[]))) * 100, 100)}%` }} />
                   </div>
                   <span className="text-sm font-mono text-slate-500">{count}</span>
                 </div>
@@ -144,7 +144,7 @@ export default function VisDashboardPage() {
             <Zap className="w-4 h-4 text-purple-500" /> By Viral Tier
           </h3>
           <div className="space-y-3">
-            {Object.entries(stats.viral_score_distribution || {}).map(([tier, count]) => (
+            {Object.entries(stats.viral_score_distribution || {}).map(([tier, count]: [string, any]) => (
               <div key={tier} className="flex items-center justify-between">
                 <span className={cn("text-sm px-2 py-0.5 rounded border", TIER_COLORS[tier] || "")}>
                   {TIER_LABELS[tier] || tier}
@@ -162,7 +162,7 @@ export default function VisDashboardPage() {
             <Flame className="w-4 h-4 text-red-500" /> Recent Breakouts
           </h3>
           <div className="grid grid-cols-1 gap-3">
-            {stats.recent_breakouts.map((topic) => (
+            {stats.recent_breakouts.map((topic: any) => (
               <div key={topic.topic_id} className="bg-white rounded-xl border border-red-200/50 p-4 hover:border-red-300/50 transition-colors">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
@@ -185,7 +185,7 @@ export default function VisDashboardPage() {
                     </div>
                     {topic.hooks && topic.hooks.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-2">
-                        {topic.hooks.slice(0, 3).map((hook, i) => (
+                        {topic.hooks.slice(0, 3).map((hook: any, i: number) => (
                           <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 border border-purple-100">
                             {hook.pattern}
                           </span>
@@ -210,7 +210,13 @@ export default function VisDashboardPage() {
   );
 }
 
-function StatCard({ icon, label, value, color, bgColor }) {
+function StatCard({ icon, label, value, color, bgColor }: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  color: string;
+  bgColor: string;
+}) {
   return (
     <div className={cn("rounded-xl border border-slate-200 p-5", bgColor)}>
       <div className="flex items-center gap-2 mb-2">

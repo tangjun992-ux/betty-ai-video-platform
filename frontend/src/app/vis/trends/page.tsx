@@ -8,22 +8,22 @@ import { cn } from "@/lib/utils";
 
 const API = "http://localhost:8000/api/v1";
 
-const PLATFORM_ICONS = {
+const PLATFORM_ICONS: Record<string, string> = {
   reddit: "🟠", youtube: "🔴", tiktok: "⚫", x: "🐦",
 };
 
-const CONTENT_TYPE_ICONS = {
+const CONTENT_TYPE_ICONS: Record<string, string> = {
   news_break: "📰", reaction: "🎭", tutorial: "📖", explainer: "🎬",
   commentary: "💬", entertainment: "🎪", challenge: "🏆",
 };
 
-const PLATFORM_COLORS = {
+const PLATFORM_COLORS: Record<string, string> = {
   tiktok: "text-pink-600 bg-pink-50",
   youtube_shorts: "text-red-600 bg-red-50",
   instagram_reels: "text-purple-600 bg-purple-50",
 };
 
-function formatCount(n) {
+function formatCount(n: number) {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
   if (n >= 1000) return (n / 1000).toFixed(1) + "K";
   return String(n);
@@ -48,12 +48,12 @@ const SOURCE_OPTIONS = [
 ];
 
 export default function VisTrendsPage() {
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState("");
   const [contentType, setContentType] = useState("");
-  const [expanded, setExpanded] = useState(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const fetchTrends = useCallback(async () => {
     try {
@@ -67,7 +67,7 @@ export default function VisTrendsPage() {
       const data = await res.json();
       setItems(data.items || []);
     } catch (e) {
-      setError(e.message);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
@@ -140,7 +140,7 @@ export default function VisTrendsPage() {
 
       {!loading && !error && items.length > 0 && (
         <div className="space-y-3">
-          {items.map(({ topic, curation }) => (
+          {items.map(({ topic, curation }: any) => (
             <motion.div
               key={topic.topic_id}
               initial={{ opacity: 0, y: 8 }}
@@ -217,7 +217,7 @@ export default function VisTrendsPage() {
                   <div className="flex items-center gap-2">
                     <Smartphone className="w-3 h-3 text-slate-400" />
                     <span className="text-xs text-slate-500">Best for:</span>
-                    {curation.target_platforms.map(p => (
+                    {curation.target_platforms.map((p: string) => (
                       <span key={p} className={cn("text-xs px-2 py-0.5 rounded font-medium", PLATFORM_COLORS[p] || "")}>
                         {p.replace(/_/g, " ")}
                       </span>
@@ -246,7 +246,7 @@ export default function VisTrendsPage() {
                     <div>
                       <p className="text-xs text-slate-500 mb-2">Viral Hooks</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {topic.hooks.map((hook, i) => (
+                        {topic.hooks.map((hook: any, i: number) => (
                           <span key={i} className="text-[11px] px-2 py-1 rounded-md bg-purple-50 text-purple-600 border border-purple-100">
                             {hook.pattern} ({(hook.strength * 100).toFixed(0)}%)
                           </span>
