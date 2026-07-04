@@ -8,7 +8,7 @@ import { ErrorState, Empty } from "@/components/StatusStates";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { API_BASE } from "@/lib/api";
 
 const SAMPLE_VOICES = [
   { id: "zh-CN-XiaoxiaoNeural", name: "晓晓", gender: "女", desc: "温柔自然" },

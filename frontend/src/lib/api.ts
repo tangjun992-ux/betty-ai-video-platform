@@ -1,6 +1,8 @@
 // API client for the AI Video Platform backend
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+// Normalize: tolerate NEXT_PUBLIC_API_URL set with or without the /api/v1 suffix
+const _raw = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/+$/, "");
+export const API_BASE = _raw.endsWith("/api/v1") ? _raw : `${_raw}/api/v1`;
 
 const FETCH_TIMEOUT_MS = 15000; // 15s per request
 

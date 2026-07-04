@@ -5,9 +5,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Upload, Video, Image, Play, ArrowRight, RefreshCw, CheckCircle } from "lucide-react";
 import { useCreationStore } from "@/lib/stores";
-import { type TaskResult } from "@/lib/api";
+import { API_BASE, type TaskResult } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
 
 const STYLES = [
   { id: "realistic", label: "写实", desc: "自然真实的动作迁移" },

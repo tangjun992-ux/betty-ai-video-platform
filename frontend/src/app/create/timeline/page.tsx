@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Play, Save, Layers, GripVertical, Film, CheckCircle, RefreshCw } from "lucide-react";
 import { useCreationStore } from "@/lib/stores";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+import { API_BASE } from "@/lib/api";
 
 interface Clip {
   url: string;

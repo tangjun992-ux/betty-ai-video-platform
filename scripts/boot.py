@@ -72,7 +72,7 @@ spawn([PY,"-m","celery","-A","celery_app","worker","-Q","collector_q","--concurr
       BACKEND, "/tmp/betty_collector.log"); log("spawned collector worker")
 if not port_open(3200):
     spawn([f"{FE}/node_modules/.bin/next","dev","-p","3200"], FE, "/tmp/betty_fe.log",
-          {"NEXT_PUBLIC_API_URL":"http://localhost:8000","PORT":"3200"}); log("spawned next dev :3200")
+          {"NEXT_PUBLIC_API_URL":"http://localhost:8000/api/v1","PORT":"3200"}); log("spawned next dev :3200")
 else:
     log("frontend 3200 already up")
 
