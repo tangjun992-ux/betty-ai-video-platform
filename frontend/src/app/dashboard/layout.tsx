@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore, useCmdKStore } from "@/lib/stores";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { API_BASE } from "@/lib/api";
 
 /* ═══════════════════════════════════════════════════════
    Dashboard Sidebar — AURORA 亮色
@@ -19,8 +20,8 @@ import { useState } from "react";
 
 const mainNav = [
   { href: "/dashboard", icon: Home, label: "Home", exact: true },
-  { href: "/dashboard/explore", icon: Sparkles, label: "Explore" },
-  { href: "/dashboard/library", icon: FolderOpen, label: "My Library" },
+  { href: "/explore", icon: Sparkles, label: "Explore" },
+  { href: "/library", icon: FolderOpen, label: "My Library" },
   { href: "/agent", icon: Bot, label: "Agent", highlight: true },
   { href: "/create/image", icon: Image, label: "Create Image" },
   { href: "/create/video", icon: Video, label: "Create Video" },
@@ -34,17 +35,26 @@ const moreTools = [
   { href: "/create/image?tool=product", icon: Image, label: "Product Shots" },
 ];
 
-const sessions = [
-  "Cinematic Coffee Ad",
-  "Tutorial Intro",
-  "Product Hero Shot",
-  "Anime Style Scene",
-];
+interface SessionItem { id: string; title: string; }
 
 function DashboardSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const pathname = usePathname();
   const { user, logout } = useAuthStore();
   const [showMore, setShowMore] = useState(false);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE}/director/sessions?user_id=0`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (active && d?.sessions) {
+          setSessions(d.sessions.map((s: any) => ({ id: s.session_uid, title: s.title || "导演会话" })));
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
@@ -138,17 +148,18 @@ function DashboardSidebar({ collapsed, onToggle }: { collapsed: boolean; onToggl
       </nav>
 
       {/* Sessions */}
-      {!collapsed && (
+      {!collapsed && sessions.length > 0 && (
         <div className="border-t border-cosmic-border p-3">
           <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider mb-2 px-2">Recent Sessions</div>
           <div className="space-y-0.5">
-            {sessions.map((s) => (
-              <button
-                key={s}
-                className="w-full text-left px-3 py-2 rounded-xl text-xs text-text-secondary hover:text-text-primary hover:bg-cosmic-subtle transition-colors truncate"
+            {sessions.slice(0, 5).map((s) => (
+              <Link
+                key={s.id}
+                href="/agent"
+                className="block w-full text-left px-3 py-2 rounded-xl text-xs text-text-secondary hover:text-text-primary hover:bg-cosmic-subtle transition-colors truncate"
               >
-                {s}
-              </button>
+                {s.title}
+              </Link>
             ))}
           </div>
         </div>

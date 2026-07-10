@@ -10,7 +10,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, enhancePrompt } from "@/lib/api";
+
+const MEDIA_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
+const resolveMedia = (u: string | null | undefined) =>
+  !u ? "" : u.startsWith("/") ? `${MEDIA_ORIGIN}${u}` : u;
 
 /* ═══════════════════════════════════════════════════════
    Types
@@ -131,6 +135,7 @@ export default function DashboardPage() {
   const [selectedModel, setSelectedModel] = useState("");
   const [prompt, setPrompt] = useState("");
   const [activeTool, setActiveTool] = useState<"video" | "image" | "agent">("video");
+  const [enhancing, setEnhancing] = useState(false);
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -152,7 +157,24 @@ export default function DashboardPage() {
 
   const handleGenerate = () => {
     const path = activeTool === "agent" ? "/agent" : activeTool === "video" ? "/create/video" : "/create/image";
-    window.location.href = prompt.trim() ? `${path}?prompt=${encodeURIComponent(prompt)}` : path;
+    const params = new URLSearchParams();
+    if (prompt.trim()) params.set("prompt", prompt.trim());
+    if (selectedModel && activeTool !== "agent") params.set("model", selectedModel);
+    const qs = params.toString();
+    window.location.href = qs ? `${path}?${qs}` : path;
+  };
+
+  const handleEnhance = async () => {
+    if (!prompt.trim() || enhancing) return;
+    setEnhancing(true);
+    try {
+      const r = await enhancePrompt(prompt.trim(), activeTool === "image" ? "image" : "video");
+      if (r.enhanced) setPrompt(r.enhanced);
+    } catch {
+      /* keep original prompt on failure */
+    } finally {
+      setEnhancing(false);
+    }
   };
 
   /* ── Derived ── */
@@ -203,7 +225,7 @@ export default function DashboardPage() {
       {/* ═══ Welcome + Stats ═══ */}
       <div>
         <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-semibold text-text-primary mb-1">
-          Good morning, Creator 👋
+          {(() => { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening"; })()}, Creator 👋
         </motion.h1>
         <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="text-text-secondary text-sm">
           What will you create today?
@@ -283,11 +305,16 @@ export default function DashboardPage() {
           />
           <div className="flex items-center justify-between mt-3">
             <div className="flex items-center gap-2">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-text-tertiary hover:text-text-secondary hover:bg-cosmic-subtle transition-colors border border-cosmic-border">
-                📎 Attach
-              </button>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-brand/60 hover:text-brand transition-colors">
-                <Sparkles className="w-3.5 h-3.5" /> Ask AI to improve
+              <Link href="/library" className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-text-tertiary hover:text-text-secondary hover:bg-cosmic-subtle transition-colors border border-cosmic-border">
+                📎 素材库
+              </Link>
+              <button
+                onClick={handleEnhance}
+                disabled={!prompt.trim() || enhancing}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-brand/70 hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {enhancing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                {enhancing ? "优化中…" : "AI 优化提示词"}
               </button>
             </div>
             <button
@@ -313,46 +340,59 @@ export default function DashboardPage() {
 
           {hasRecentItems ? (
             <div className="grid grid-cols-2 gap-3">
-              {recentItems.slice(0, 4).map((item, i) => (
+              {recentItems.slice(0, 4).map((item, i) => {
+                const media = resolveMedia(item.media_url);
+                const thumb = resolveMedia(item.thumbnail_url);
+                const isVideo = item.media_type === "video";
+                return (
                 <motion.div
                   key={item.task_id || i}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 + i * 0.05 }}
                 >
+                  <Link href="/library">
                   <Card className="overflow-hidden">
                     <div className="aspect-video bg-cosmic-subtle flex items-center justify-center text-3xl relative group">
-                      {item.thumbnail_url ? (
-                        <img src={item.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                      {isVideo && media ? (
+                        <video
+                          src={media} muted loop playsInline preload="metadata"
+                          className="w-full h-full object-cover"
+                          onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
+                          onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                        />
+                      ) : thumb ? (
+                        <img src={thumb} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <span>{item.media_type === "video" ? "🎬" : "🖼️"}</span>
+                        <span>{isVideo ? "🎬" : "🖼️"}</span>
                       )}
-                      {item.media_type === "video" && (
-                        <div className="absolute inset-0 bg-text-primary/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Play className="w-10 h-10 text-text-primary/60" />
+                      {isVideo && (
+                        <div className="absolute inset-0 bg-text-primary/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                          <Play className="w-10 h-10 text-white/80" />
                         </div>
                       )}
-                      <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-cosmic-surface/80 backdrop-blur text-[10px] text-text-secondary">
-                        {formatDuration(item.duration)}
-                      </span>
+                      {isVideo && item.duration != null && (
+                        <span className="absolute bottom-2 right-2 px-1.5 py-0.5 rounded-md bg-cosmic-surface/80 backdrop-blur text-[10px] text-text-secondary">
+                          {formatDuration(item.duration)}
+                        </span>
+                      )}
                     </div>
                     <div className="p-3">
                       <div className="text-sm font-medium text-text-primary truncate">{truncatePrompt(item.prompt || "Untitled")}</div>
                       <div className="flex items-center gap-2 mt-1">
                         {item.model && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-brand/8 text-brand">{item.model}</span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-brand/8 text-brand truncate max-w-[120px]">{item.model}</span>
                         )}
                         {item.created_at && (
                           <span className="text-[10px] text-text-tertiary">{formatDate(item.created_at)}</span>
                         )}
-                        <button className="ml-auto p-1 rounded hover:bg-cosmic-subtle">
-                          <MoreHorizontal className="w-3.5 h-3.5 text-text-tertiary" />
-                        </button>
                       </div>
                     </div>
                   </Card>
+                  </Link>
                 </motion.div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface p-12 text-center">
@@ -436,37 +476,6 @@ export default function DashboardPage() {
         </div>
       </Card>
 
-      {/* ═══ Creator Results (horizontal scroll) ═══ */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-text-primary">Creator Results</h2>
-        </div>
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
-          {[
-            { name: "@captainn", role: "Creator", stat: "92M", label: "views", avatar: "C", color: "from-brand to-accent-violet" },
-            { name: "@royalty", role: "Creator", stat: "100M", label: "views", avatar: "R", color: "from-cyan-500 to-blue-600" },
-            { name: "@funnyfromai", role: "Creator", stat: "$1K+", label: "income", avatar: "F", color: "from-amber-500 to-orange-600" },
-            { name: "@deep.seavisitor", role: "Creator", stat: "190M", label: "views", avatar: "D", color: "from-emerald-500 to-teal-600" },
-          ].map((t) => (
-            <motion.div
-              key={t.name}
-              whileHover={{ scale: 1.03, y: -4 }}
-              className="flex-shrink-0 w-56 p-4 rounded-2xl border border-cosmic-border bg-cosmic-surface hover:border-brand/15 hover:shadow-card-hover transition-all"
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div className={cn("w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center text-white text-sm font-bold", t.color)}>{t.avatar}</div>
-                <div>
-                  <div className="text-sm font-medium text-text-primary">{t.name}</div>
-                  <div className="text-[11px] text-text-tertiary">{t.role}</div>
-                </div>
-              </div>
-              <div className="text-xl font-semibold text-text-primary">{t.stat}</div>
-              <div className="text-xs text-text-tertiary">{t.label}</div>
-              <div className="flex gap-0.5 mt-2 text-brand text-xs">★★★★★</div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

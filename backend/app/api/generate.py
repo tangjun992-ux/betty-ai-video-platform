@@ -274,6 +274,36 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
     )
 
 
+class EnhanceRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=5000)
+    media_type: str = Field(default="auto")
+    style: Optional[str] = Field(default=None)
+
+
+class EnhanceResponse(BaseModel):
+    original: str
+    enhanced: str
+    additions: list[str] = []
+    changed: bool = False
+
+
+@router.post("/enhance", response_model=EnhanceResponse, summary="AI 优化提示词")
+async def enhance_prompt_endpoint(req: EnhanceRequest):
+    """Expand a casual prompt into a richer, professional one (for 'Ask AI to improve')."""
+    result = prompt_enhancer.enhance(
+        prompt=req.prompt,
+        media_type=req.media_type or "auto",
+        style=req.style or "auto",
+        quality="high",  # always enhance regardless of speed preference
+    )
+    return EnhanceResponse(
+        original=result.original,
+        enhanced=result.enhanced,
+        additions=getattr(result, "additions", []) or [],
+        changed=result.enhanced.strip() != result.original.strip(),
+    )
+
+
 @router.post("/analyze", response_model=RouterAnalysisResponse, summary="分析提示词的模型推荐")
 async def analyze_prompt(req: GenerateRequest):
     """Analyze a prompt without submitting a task — returns model recommendations."""

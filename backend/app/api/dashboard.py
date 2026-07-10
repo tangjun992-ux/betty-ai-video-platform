@@ -66,43 +66,18 @@ AVAILABLE_MODELS = [
 ]
 
 
-async def _get_local_user_id(db: AsyncSession) -> int:
-    """In LOCAL_MODE, find or create the dev user."""
-    result = await db.execute(select(User).where(User.username == "local").limit(1))
-    user = result.scalar_one_or_none()
-    if user:
-        return user.id
-    # Create local dev user
-    user = User(
-        username="local",
-        email="local@betty.ai",
-        hashed_password="local_mode_no_auth",
-        display_name="Creator",
-        role="pro",
-    )
-    db.add(user)
-    await db.flush()
-    # Create balance
-    balance = UserBalance(user_id=user.id, credits=8450, daily_credits=0, daily_credits_max=100,
-                          total_spent=1550, total_tasks=1247, total_purchased=10000)
-    db.add(balance)
-    await db.flush()
-    return user.id
-
-
 @router.get("/dashboard", response_model=DashboardResponse)
 async def get_dashboard(
     limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
 ):
-    """Aggregated dashboard data: stats, recent items, available models."""
-    user_id = 1  # LOCAL_MODE default
+    """Aggregated dashboard data: stats, recent items, available models.
 
-    # Try explicit user lookup
-    try:
-        user_id = await _get_local_user_id(db)
-    except Exception:
-        pass
+    Uses user_id=0 — the single anonymous/local user that the whole app
+    (generate, gallery, library, pricing) writes to and reads from — so the
+    dashboard reflects the same real generations shown elsewhere.
+    """
+    user_id = 0
 
     # ─── Stats ──────────────────────────────────────────
     # Credit balance
@@ -152,7 +127,7 @@ async def get_dashboard(
         success_rate = round(completed / (completed + failed) * 100, 1)
 
     stats = DashboardStats(
-        credits_remaining=balance.credits if balance else 0,
+        credits_remaining=(balance.credits + balance.daily_credits) if balance else 0,
         assets_generated=completed,
         recent_generations=recent_count,
         success_rate=success_rate,
@@ -174,10 +149,18 @@ async def get_dashboard(
         thumbnail = None
         media_url = None
         duration = None
-        if t.results and isinstance(t.results, list) and len(t.results) > 0:
-            r = t.results[0]
-            thumbnail = r.get("thumbnail")
-            media_url = r.get("url")
+        results = t.results
+        if isinstance(results, str):
+            import json as _json
+            try:
+                results = _json.loads(results)
+            except Exception:
+                results = None
+        if isinstance(results, list) and results and isinstance(results[0], dict):
+            r = results[0]
+            media_url = r.get("url") or r.get("media_url")
+            # Images have no separate thumbnail — fall back to the media itself.
+            thumbnail = r.get("thumbnail") or media_url
             duration = r.get("duration")
 
         recent_items.append(RecentItem(

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { API_BASE } from "@/lib/api";
 import {
   PanelLeft,
   Zap,
@@ -38,7 +39,23 @@ export function TopBar() {
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
-  const credits = user?.credits ?? 0;
+  // Real available balance (credits + daily) from the same source the dashboard
+  // and pricing use, so the header count is always consistent across the app.
+  const [liveCredits, setLiveCredits] = useState<number | null>(null);
+  useEffect(() => {
+    let active = true;
+    const load = () =>
+      fetch(`${API_BASE}/models/pricing/user`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (active && d && typeof d.credits === "number") setLiveCredits(d.credits); })
+        .catch(() => {});
+    load();
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    return () => { active = false; window.removeEventListener("focus", onFocus); };
+  }, []);
+
+  const credits = liveCredits ?? user?.credits ?? 0;
   const displayName = user?.name || user?.email?.split("@")[0] || "访客";
   const initial = (displayName[0] ?? "B").toUpperCase();
 

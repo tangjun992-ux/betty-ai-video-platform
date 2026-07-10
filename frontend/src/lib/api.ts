@@ -180,6 +180,21 @@ export async function uploadImage(file: File): Promise<{ url: string }> {
   return res.json();
 }
 
+/** Enhance a prompt into a richer professional version */
+export async function enhancePrompt(
+  prompt: string,
+  mediaType: string = "auto",
+  style?: string
+): Promise<{ original: string; enhanced: string; additions: string[]; changed: boolean }> {
+  const res = await fetch(`${API_BASE}/generate/enhance`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, media_type: mediaType, style: style || null }),
+  });
+  if (!res.ok) throw new Error(`优化失败: ${res.status}`);
+  return res.json();
+}
+
 /** Analyze a prompt without submitting — accepts string or object */
 export async function analyzePrompt(input: string | { prompt: string; media_type?: string; quality?: string; model?: string }) {
   const body = typeof input === "string" ? { prompt: input } : input;
