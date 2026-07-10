@@ -1,31 +1,34 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Send, Plus, MessageSquare, ImagePlus, Sparkles, Wand2, Lightbulb, Globe,
+  Send, Plus, MessageSquare, ImagePlus, Sparkles, Wand2, Lightbulb,
   Film, Image as ImageIcon, Mic, Layers, Clapperboard, Check, Loader2, Coins, ArrowRight,
+  Pencil, RefreshCw, ChevronDown, X, Music, Type as TypeIcon, Scissors, Ratio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
 import { API_BASE } from "@/lib/api";
 
+const MEDIA_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
+const resolveMedia = (u?: string) => (!u ? "" : u.startsWith("/") ? `${MEDIA_ORIGIN}${u}` : u);
+
+interface StepParams { aspect_ratio?: string; duration?: number; shot?: number; styles?: string[]; }
 interface Step {
   id: string; action: string; title: string; model_id: string; model_name: string;
   reason: string; prompt: string; depends_on: string[]; est_credits: number;
-  status: string; result?: any;
+  status: string; result?: any; params?: StepParams; skip?: boolean;
 }
 interface Plan { brief: string; intent: string; summary: string; total_credits: number; steps: Step[]; }
-interface Asset { step: string; model: string; type?: string; media_url?: string; url?: string; thumbnail?: string; dry_run?: boolean; }
-interface RunResult { plan: Plan; assets: Asset[]; asset_count: number; dry_run: boolean; }
-
+interface Asset { step_id?: string; step: string; model: string; type?: string; media_url?: string; url?: string; thumbnail?: string; shot?: number; }
 interface Session { id: string; title: string; lastMessage: string; }
+interface ModelOpt { id: string; name: string; }
 
 const QUICK = [
   { icon: Clapperboard, label: "咖啡产品宣传片", brief: "做一个30秒的咖啡产品宣传片，电影级画质，温暖光线" },
-  { icon: Mic, label: "数字人口播", brief: "生成一个数字人口播讲解新品发布的视频" },
+  { icon: Mic, label: "数字人口播", brief: "生成一个数字人口播讲解新品发布的视频，竖屏" },
   { icon: Layers, label: "国风系列写真", brief: "给我一组国风人像写真，四张，统一风格" },
-  { icon: Lightbulb, label: "赛博朋克海报", brief: "画一张赛博朋克城市夜景海报，霓虹质感" },
+  { icon: Lightbulb, label: "赛博朋克短片", brief: "科幻赛博朋克城市概念短片，15秒，霓虹质感" },
 ];
 
 const intentLabel: Record<string, string> = {
@@ -33,99 +36,11 @@ const intentLabel: Record<string, string> = {
   video_from_image: "图生视频", image_series: "系列图", image: "单图创作",
 };
 const actionIcon = (a: string) =>
-  a === "enhance_prompt" ? Wand2 : a === "lipsync" ? Mic : a.includes("video") ? Film : ImageIcon;
+  a === "enhance_prompt" ? Wand2 : a === "lipsync" ? Mic : a === "audio" ? Music
+  : a === "subtitle" ? TypeIcon : a === "compose" ? Scissors : a.includes("video") ? Film : ImageIcon;
 
-/* ═══════════════════════════════════════════════════════
-   Hero Demo Reel — cycles through generated "output" previews
-   ═══════════════════════════════════════════════════════ */
-
-const DEMO_SCENES = [
-  { icon: Clapperboard, title: "产品宣传片", desc: "30s 电影级咖啡广告", color: "from-amber-500/20 to-orange-500/10", accent: "amber" },
-  { icon: Mic, title: "数字人口播", desc: "AI 虚拟主播带货", color: "from-cyan-500/20 to-blue-500/10", accent: "cyan" },
-  { icon: Layers, title: "系列写真", desc: "4 张国风统一风格", color: "from-brand/20 to-accent-violet/10", accent: "purple" },
-  { icon: Film, title: "短剧生成", desc: "赛博朋克概念短片", color: "from-rose-500/20 to-pink-500/10", accent: "rose" },
-];
-
-function DemoReel() {
-  const [active, setActive] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => setActive((a) => (a + 1) % DEMO_SCENES.length), 3000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const current = DEMO_SCENES[active];
-  const CurrentIcon = current.icon;
-
-  return (
-    <div className="relative mb-8 rounded-2xl overflow-hidden border border-cosmic-border bg-cosmic-surface shadow-elevation-sm">
-      <div className="grid md:grid-cols-2">
-        {/* Left: cycle demo */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={active}
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ duration: 0.4 }}
-            className={cn("flex flex-col items-center justify-center p-10 text-center min-h-[280px]", current.color)}
-          >
-            <CurrentIcon className="w-16 h-16 text-text-primary/20 mb-4" />
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <h3 className="text-xl font-semibold text-text-primary mb-1">{current.title}</h3>
-              <p className="text-text-secondary text-sm mb-4">{current.desc}</p>
-              <div className="flex items-center justify-center gap-1.5 text-xs text-text-tertiary">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                一键生成 · 全自动工作流
-              </div>
-            </motion.div>
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Right: step flow preview */}
-        <div className="p-8 flex flex-col justify-center border-l border-cosmic-border">
-          <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-4">Agent 执行流程</p>
-          <div className="space-y-3">
-            {["💡 解析意图 → 规划脚本", "🎨 智能选模型 → 生成视觉", "🎥 转视频 → 配乐 → 合成"].map((step, i) => (
-              <motion.div
-                key={step}
-                initial={{ opacity: 0, x: -12 }}
-                animate={{
-                  opacity: active === i || (i === 0) ? 1 : 0.35,
-                  x: 0,
-                  borderColor: active === i ? "hsl(252 78% 63% / 0.25)" : "transparent",
-                }}
-                transition={{ duration: 0.4, delay: i * 0.1 }}
-                className="flex items-center gap-3 px-4 py-3 rounded-xl border bg-cosmic-subtle/50 text-sm text-text-secondary"
-              >
-                <span className="text-lg">{step.slice(0, 2)}</span>
-                <span>{step.slice(3)}</span>
-                {i < 2 && (
-                  <motion.div
-                    className="text-text-disabled text-[10px]"
-                    animate={{ opacity: active > i ? 1 : 0.3 }}
-                  >→</motion.div>
-                )}
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Dot indicators */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-        {DEMO_SCENES.map((_, i) => (
-          <button key={i} onClick={() => setActive(i)}
-            className={cn("w-2 h-2 rounded-full transition-all", active === i ? "bg-brand w-5" : "bg-cosmic-border hover:bg-text-disabled")} />
-        ))}
-      </div>
-    </div>
-  );
-}
+const isMediaStep = (a: string) => ["image", "video", "lipsync"].includes(a);
+const isSkippable = (a: string) => ["audio", "subtitle"].includes(a);
 
 export default function AgentPage() {
   const [sessions, setSessions] = useState<Session[]>([{ id: "1", title: "新导演会话", lastMessage: "不写提示词，只做导演" }]);
@@ -134,13 +49,30 @@ export default function AgentPage() {
   const [refImage, setRefImage] = useState(false);
   const [duration, setDuration] = useState(15);
   const [plan, setPlan] = useState<Plan | null>(null);
-  const [run, setRun] = useState<RunResult | null>(null);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [phase, setPhase] = useState<"idle" | "planning" | "planned" | "running" | "done">("idle");
+  const [dryRunMode, setDryRunMode] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [rerunning, setRerunning] = useState<string | null>(null);
+  const [models, setModels] = useState<{ image: ModelOpt[]; video: ModelOpt[] }>({ image: [], video: [] });
   const fileRef = useRef<HTMLInputElement>(null);
   const [activeUid, setActiveUid] = useState<string | null>(null);
 
-  const loadSessions = async () => {
+  // ── models catalog (for per-step model swap) ──
+  useEffect(() => {
+    fetch(`${API_BASE}/models/`).then((r) => r.json()).then((d) => {
+      const img: ModelOpt[] = [], vid: ModelOpt[] = [];
+      for (const m of d.models || []) {
+        const opt = { id: m.id, name: m.display_name || m.name || m.id };
+        if (m.capabilities?.media_types?.includes("video")) vid.push(opt);
+        else img.push(opt);
+      }
+      setModels({ image: img, video: vid });
+    }).catch(() => {});
+  }, []);
+
+  const loadSessions = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/director/sessions?user_id=0`);
       if (res.ok) {
@@ -149,10 +81,10 @@ export default function AgentPage() {
           setSessions(d.sessions.map((s: any) => ({ id: s.session_uid, title: s.title, lastMessage: s.brief || "导演会话" })));
       }
     } catch {}
-  };
-  useEffect(() => { loadSessions(); }, []);
+  }, []);
+  useEffect(() => { loadSessions(); }, [loadSessions]);
 
-  const saveSession = async (p: Plan, r: RunResult | null) => {
+  const saveSession = async (p: Plan, a: Asset[]) => {
     try {
       let uid = activeUid;
       if (!uid) {
@@ -165,14 +97,14 @@ export default function AgentPage() {
       if (uid) {
         await fetch(`${API_BASE}/director/sessions/${uid}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: (p.brief || "新会话").slice(0, 30), intent: p.intent, plan: p, assets: r?.assets || [], status: r ? "done" : "planned" }),
+          body: JSON.stringify({ title: (p.brief || "新会话").slice(0, 30), intent: p.intent, plan: p, assets: a, status: a.length ? "done" : "planned" }),
         });
         loadSessions();
       }
     } catch {}
   };
 
-  const reset = () => { setPlan(null); setRun(null); setPhase("idle"); setErr(null); };
+  const reset = () => { setPlan(null); setAssets([]); setPhase("idle"); setErr(null); setEditingId(null); };
 
   const makePlan = async (text?: string) => {
     const b = (text ?? brief).trim();
@@ -189,31 +121,86 @@ export default function AgentPage() {
     } catch (e: any) { setErr(`无法连接导演引擎 (${e?.message}) — 请确认后端已启动`); setPhase("idle"); }
   };
 
+  // ── edit a step in place ──
+  const updateStep = (id: string, patch: Partial<Step>) => {
+    setPlan((p) => p ? { ...p, steps: p.steps.map((s) => s.id === id ? { ...s, ...patch } : s) } : p);
+  };
+  const swapModel = (id: string, opt: ModelOpt) => updateStep(id, { model_id: opt.id, model_name: opt.name });
+  const toggleSkip = (id: string, skip: boolean) => updateStep(id, { skip });
+
+  // ── streaming execution ──
   const execute = async (dryRun = true) => {
     if (!plan) return;
-    setPhase("running"); setErr(null);
+    setDryRunMode(dryRun);
+    setPhase("running"); setErr(null); setAssets([]);
+    // reset live statuses
+    setPlan((p) => p ? { ...p, steps: p.steps.map((s) => ({ ...s, status: s.skip ? "skipped" : "pending" })) } : p);
+    const planForRun: Plan = { ...plan, steps: plan.steps };
+    const liveAssets: Asset[] = [];
     try {
-      const res = await fetch(`${API_BASE}/director/run`, {
+      const res = await fetch(`${API_BASE}/director/run/stream`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief: plan.brief, has_ref_image: refImage, duration, dry_run: dryRun }),
+        body: JSON.stringify({ brief: plan.brief, has_ref_image: refImage, duration, dry_run: dryRun, plan: planForRun }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: RunResult = await res.json();
-      setRun(data); setPlan(data.plan); setPhase("done");
-      saveSession(data.plan, data);
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data:")) continue;
+          let ev: any;
+          try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          if (ev.type === "step_start") {
+            setPlan((p) => p ? { ...p, steps: p.steps.map((s) => s.id === ev.id ? { ...s, status: "running" } : s) } : p);
+          } else if (ev.type === "step_done") {
+            setPlan((p) => p ? { ...p, steps: p.steps.map((s) => s.id === ev.id ? { ...s, status: "done", result: ev.step?.result } : s) } : p);
+            if (ev.asset) { liveAssets.push(ev.asset); setAssets([...liveAssets]); }
+          } else if (ev.type === "step_error") {
+            setPlan((p) => p ? { ...p, steps: p.steps.map((s) => s.id === ev.id ? { ...s, status: "failed" } : s) } : p);
+          } else if (ev.type === "complete") {
+            setPhase("done");
+            setPlan((cur) => { if (cur) saveSession(cur, liveAssets); return cur; });
+          }
+        }
+      }
+      setPhase("done");
     } catch (e: any) { setErr(`执行失败 (${e?.message})`); setPhase("planned"); }
   };
 
-  const newSession = () => {
-    setActiveUid(null); setActiveSession(""); reset(); setBrief("");
+  // ── per-step regenerate ──
+  const regenerate = async (asset: Asset) => {
+    if (!plan || !asset.step_id) return;
+    const step = plan.steps.find((s) => s.id === asset.step_id);
+    if (!step) return;
+    setRerunning(asset.step_id);
+    try {
+      const res = await fetch(`${API_BASE}/director/step/rerun`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step, dry_run: dryRunMode }),
+      });
+      const d = await res.json();
+      if (d.ok && d.asset) setAssets((prev) => prev.map((a) => a.step_id === asset.step_id ? d.asset : a));
+    } catch {} finally { setRerunning(null); }
   };
+
+  const newSession = () => { setActiveUid(null); setActiveSession(""); reset(); setBrief(""); };
+
+  const modelOptsFor = (action: string) => (action.includes("video") || action === "lipsync" ? models.video : models.image);
+  const running = phase === "running";
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">
       {/* Sessions */}
       <div className="hidden md:flex w-60 flex-shrink-0 flex-col border-r border-cosmic-border/40">
         <div className="p-3 border-b border-cosmic-border/40">
-          <button onClick={newSession} className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl bg-accent-cyan/[0.08] text-accent-cyan text-sm font-medium hover:bg-accent-cyan/[0.12] transition-all">
+          <button onClick={newSession} className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl bg-brand/[0.08] text-brand text-sm font-medium hover:bg-brand/[0.12] transition-all">
             <Plus className="w-4 h-4" /><span>新会话</span>
           </button>
         </div>
@@ -237,25 +224,25 @@ export default function AgentPage() {
         <div className="max-w-3xl w-full mx-auto px-4 py-8 flex-1">
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-accent-cyan/10 text-accent-cyan text-xs font-medium mb-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-medium mb-3">
               <Sparkles className="w-3.5 h-3.5" /> DIRECTOR AGENT
             </div>
             <h1 className="text-2xl font-bold mb-1">不写提示词，只做导演</h1>
-            <p className="text-sm text-text-secondary">一句话说出你想要的，AI 自动规划多步、智能选模型、产出成品</p>
+            <p className="text-sm text-text-secondary">一句话说出你想要的，AI 自动拆分镜、智能选模型、逐镜生成、剪辑成片</p>
           </div>
 
           {/* Input */}
-          <div className="bg-cosmic-surface/40 border border-cosmic-border/40 rounded-2xl p-3 focus-within:border-accent-cyan/30 transition-all mb-3">
+          <div className="bg-cosmic-surface/40 border border-cosmic-border/40 rounded-2xl p-3 focus-within:border-brand/30 transition-all mb-3">
             <textarea value={brief} onChange={(e) => setBrief(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); makePlan(); } }}
-              placeholder="例如：做一个30秒的咖啡产品宣传片，电影级画质..."
+              placeholder="例如：做一个30秒的咖啡产品宣传片，电影级画质，竖屏抖音..."
               rows={2} className="w-full bg-transparent border-0 resize-none text-sm placeholder:text-text-secondary/50 focus:outline-none" />
             <div className="flex items-center justify-between mt-2 pt-2 border-t border-cosmic-border/30">
               <div className="flex items-center gap-2">
                 <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => setRefImage(!!e.target.files?.length)} />
                 <button onClick={() => fileRef.current?.click()}
                   className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors",
-                    refImage ? "bg-accent-cyan/10 text-accent-cyan" : "text-text-secondary hover:text-text-primary")}>
+                    refImage ? "bg-brand/10 text-brand" : "text-text-secondary hover:text-text-primary")}>
                   <ImagePlus className="w-4 h-4" />{refImage ? "已加参考图" : "参考图"}
                 </button>
                 <div className="flex items-center gap-1 text-xs text-text-secondary">
@@ -268,24 +255,21 @@ export default function AgentPage() {
               </div>
               <button onClick={() => makePlan()} disabled={!brief.trim() || phase === "planning"}
                 className={cn("flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                  brief.trim() && phase !== "planning" ? "bg-accent-cyan text-white hover:bg-accent-cyan/80" : "bg-cosmic-surface text-text-secondary cursor-not-allowed")}>
+                  brief.trim() && phase !== "planning" ? "bg-brand text-white hover:bg-brand-strong" : "bg-cosmic-surface text-text-secondary cursor-not-allowed")}>
                 {phase === "planning" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 {phase === "planning" ? "规划中" : "开始导演"}
               </button>
             </div>
           </div>
 
-          {err && <p className="text-center text-sm text-amber-400 py-3">{err}</p>}
-
-          {/* Agent 工作流示意 */}
-          {phase === "idle" && !err && <DemoReel />}
+          {err && <p className="text-center text-sm text-amber-500 py-3">{err}</p>}
 
           {/* Empty → quick starts */}
           {phase === "idle" && !err && (
             <div className="grid grid-cols-2 gap-2 mt-4">
               {QUICK.map((q) => (
                 <button key={q.label} onClick={() => makePlan(q.brief)}
-                  className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-cosmic-surface/40 border border-cosmic-border/40 text-sm text-text-secondary hover:text-accent-cyan hover:border-accent-cyan/30 transition-all text-left">
+                  className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-cosmic-surface/40 border border-cosmic-border/40 text-sm text-text-secondary hover:text-brand hover:border-brand/30 transition-all text-left">
                   <q.icon className="w-4 h-4 flex-shrink-0" /><span className="truncate">{q.label}</span>
                 </button>
               ))}
@@ -298,13 +282,13 @@ export default function AgentPage() {
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-5">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-lg bg-accent-cyan/10 text-accent-cyan text-xs font-medium">
+                    <span className="px-2.5 py-1 rounded-lg bg-brand/10 text-brand text-xs font-medium">
                       {intentLabel[plan.intent] || plan.intent}
                     </span>
-                    <span className="text-xs text-text-secondary">{plan.steps.length} 步</span>
+                    <span className="text-xs text-text-secondary">{plan.steps.length} 步 · 分镜脚本</span>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-amber-400">
-                    <Coins className="w-3.5 h-3.5" />{plan.total_credits} 积分
+                  <div className="flex items-center gap-1 text-xs text-amber-500">
+                    <Coins className="w-3.5 h-3.5" />{plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)} 积分
                   </div>
                 </div>
                 <p className="text-sm text-text-secondary mb-4">{plan.summary}</p>
@@ -313,42 +297,95 @@ export default function AgentPage() {
                   {plan.steps.map((s, i) => {
                     const Icon = actionIcon(s.action);
                     const done = s.status === "done";
-                    const running = s.status === "running";
+                    const isRunning = s.status === "running";
+                    const failed = s.status === "failed";
+                    const skipped = s.skip;
+                    const editing = editingId === s.id;
+                    const opts = modelOptsFor(s.action);
                     return (
-                      <motion.div key={s.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                        className="flex gap-3 p-3 rounded-xl bg-cosmic-surface/30 border border-cosmic-border/40">
-                        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                          done ? "bg-emerald-500/15 text-emerald-400" : running ? "bg-accent-cyan/15 text-accent-cyan" : "bg-cosmic-border/30 text-text-secondary")}>
-                          {done ? <Check className="w-4 h-4" /> : running ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-medium">{s.title}</p>
-                            {s.est_credits > 0 && <span className="text-[11px] text-amber-400/80 flex-shrink-0">{s.est_credits}积分</span>}
+                      <motion.div key={s.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: skipped ? 0.5 : 1, x: 0 }} transition={{ delay: i * 0.03 }}
+                        className={cn("rounded-xl border transition-colors",
+                          isRunning ? "border-brand/40 bg-brand/[0.03]" : done ? "border-emerald-500/30 bg-emerald-500/[0.02]" : "border-cosmic-border/40 bg-cosmic-surface/30")}>
+                        <div className="flex gap-3 p-3">
+                          <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5",
+                            done ? "bg-emerald-500/15 text-emerald-500" : isRunning ? "bg-brand/15 text-brand" : failed ? "bg-red-500/15 text-red-500" : "bg-cosmic-border/30 text-text-secondary")}>
+                            {done ? <Check className="w-4 h-4" /> : isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : failed ? <X className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
                           </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-accent-cyan/10 text-accent-cyan">{s.model_name}</span>
-                            <p className="text-[11px] text-text-secondary truncate">{s.reason}</p>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className={cn("text-sm font-medium truncate", skipped && "line-through")}>{s.title}</p>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {s.params?.aspect_ratio && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] text-text-tertiary"><Ratio className="w-2.5 h-2.5" />{s.params.aspect_ratio}</span>
+                                )}
+                                {s.est_credits > 0 && <span className="text-[11px] text-amber-500/80">{s.est_credits}积分</span>}
+                                {isMediaStep(s.action) && phase !== "running" && (
+                                  <button onClick={() => setEditingId(editing ? null : s.id)} title="编辑此步"
+                                    className="p-1 rounded hover:bg-cosmic-subtle text-text-tertiary hover:text-brand transition-colors">
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                )}
+                                {isSkippable(s.action) && phase !== "running" && (
+                                  <button onClick={() => toggleSkip(s.id, !skipped)} title={skipped ? "启用此步" : "跳过此步"}
+                                    className={cn("text-[10px] px-1.5 py-0.5 rounded transition-colors", skipped ? "text-brand hover:bg-brand/10" : "text-text-tertiary hover:bg-cosmic-subtle")}>
+                                    {skipped ? "启用" : "跳过"}
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-brand/10 text-brand whitespace-nowrap">{s.model_name}</span>
+                              <p className="text-[11px] text-text-secondary truncate">{s.reason}</p>
+                            </div>
                           </div>
                         </div>
+
+                        {/* Inline editor */}
+                        <AnimatePresence>
+                          {editing && (
+                            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden border-t border-cosmic-border/40">
+                              <div className="p-3 space-y-2.5">
+                                <div>
+                                  <label className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">镜头 Prompt</label>
+                                  <textarea value={s.prompt} onChange={(e) => updateStep(s.id, { prompt: e.target.value })} rows={3}
+                                    className="mt-1 w-full text-xs rounded-lg bg-cosmic-subtle border border-cosmic-border/60 p-2 resize-none focus:outline-none focus:border-brand/40" />
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <label className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wider">模型</label>
+                                  <div className="flex flex-wrap gap-1">
+                                    {opts.slice(0, 8).map((o) => (
+                                      <button key={o.id} onClick={() => swapModel(s.id, o)}
+                                        className={cn("text-[11px] px-2 py-1 rounded-lg border transition-colors",
+                                          s.model_id === o.id ? "bg-brand/10 text-brand border-brand/30" : "border-cosmic-border/60 text-text-secondary hover:border-cosmic-border")}>
+                                        {o.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </motion.div>
                     );
                   })}
                 </div>
 
                 {/* Execute */}
-                {(phase === "planned" || phase === "running") && (
+                {(phase === "planned" || phase === "running" || phase === "done") && (
                   <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                    <button onClick={() => execute(true)} disabled={phase === "running"}
+                    <button onClick={() => execute(true)} disabled={running}
                       className={cn("flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold transition-all",
-                        phase === "running" ? "bg-cosmic-surface text-text-secondary" : "bg-gradient-to-r from-accent-cyan to-accent-cyan/80 text-white hover:opacity-90")}>
-                      {phase === "running" ? <><Loader2 className="w-4 h-4 animate-spin" />导演执行中...</> : <><Clapperboard className="w-4 h-4" />免费预览成片<ArrowRight className="w-4 h-4" /></>}
+                        running ? "bg-cosmic-surface text-text-secondary" : "bg-brand text-white hover:bg-brand-strong shadow-button-glow")}>
+                      {running && dryRunMode ? <><Loader2 className="w-4 h-4 animate-spin" />导演执行中...</> : <><Clapperboard className="w-4 h-4" />免费预览成片<ArrowRight className="w-4 h-4" /></>}
                     </button>
-                    <button onClick={() => execute(false)} disabled={phase === "running"}
-                      title="调用真实模型生成，消耗积分"
+                    <button onClick={() => execute(false)} disabled={running}
+                      title="调用真实模型逐镜生成，消耗积分"
                       className={cn("flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border transition-all",
-                        phase === "running" ? "border-cosmic-border/40 text-text-secondary" : "border-amber-400/40 text-amber-400 hover:bg-amber-400/10")}>
-                      <Coins className="w-4 h-4" />真实生成 · {plan.total_credits}积分
+                        running ? "border-cosmic-border/40 text-text-secondary" : "border-amber-400/50 text-amber-500 hover:bg-amber-400/10")}>
+                      {running && !dryRunMode ? <Loader2 className="w-4 h-4 animate-spin" /> : <Coins className="w-4 h-4" />}
+                      真实生成 · {plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)}积分
                     </button>
                   </div>
                 )}
@@ -357,43 +394,51 @@ export default function AgentPage() {
           </AnimatePresence>
 
           {/* Assets */}
-          {run && run.assets.length > 0 && (
+          {assets.length > 0 && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6">
               <div className="flex items-center gap-2 mb-3">
-                <Check className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-semibold">产出 {run.asset_count} 个资产{run.dry_run && <span className="text-[11px] text-text-secondary ml-1">(预览模式)</span>}</h3>
+                {running ? <Loader2 className="w-4 h-4 text-brand animate-spin" /> : <Check className="w-4 h-4 text-emerald-500" />}
+                <h3 className="text-sm font-semibold">
+                  {running ? "逐镜产出中" : "产出"} {assets.length} 个资产
+                  {dryRunMode && <span className="text-[11px] text-text-secondary ml-1">(预览模式)</span>}
+                </h3>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {run.assets.map((a, i) => {
-                  const media = a.media_url || a.url || "";
+                {assets.map((a, i) => {
+                  const media = resolveMedia(a.media_url || a.url);
+                  const thumb = resolveMedia(a.thumbnail);
                   const hasMedia = media.startsWith("/api/v1/media") || media.startsWith("http");
+                  const isVideo = a.type === "video";
+                  const busy = rerunning === a.step_id;
                   return (
-                    <div key={i} className="group rounded-xl overflow-hidden bg-cosmic-surface/30 border border-cosmic-border/40 hover:border-brand/40 transition-colors">
+                    <motion.div key={a.step_id || i} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }}
+                      className="group rounded-xl overflow-hidden bg-cosmic-surface/30 border border-cosmic-border/40 hover:border-brand/40 transition-colors">
                       <div className="relative aspect-video bg-gradient-to-br from-cosmic-surface to-cosmic-border/40 flex items-center justify-center overflow-hidden">
-                        {hasMedia && a.type === "video" ? (
-                          <video src={media} poster={a.thumbnail} muted loop playsInline
+                        {hasMedia && isVideo ? (
+                          <video src={media} poster={thumb} muted loop playsInline
                             className="w-full h-full object-cover"
                             onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
-                            onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
-                          />
+                            onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }} />
                         ) : hasMedia ? (
                           <img src={media} alt={a.step} className="w-full h-full object-cover" loading="lazy" />
-                        ) : a.type === "video" ? (
-                          <Film className="w-8 h-8 text-accent-cyan/40" />
-                        ) : (
-                          <ImageIcon className="w-8 h-8 text-accent-cyan/40" />
-                        )}
-                        {a.type === "video" && hasMedia && (
+                        ) : isVideo ? <Film className="w-8 h-8 text-brand/40" /> : <ImageIcon className="w-8 h-8 text-brand/40" />}
+                        {isVideo && hasMedia && (
                           <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[10px] text-white">
-                            <Film className="w-2.5 h-2.5" /> 视频
+                            <Film className="w-2.5 h-2.5" /> {a.shot ? `分镜 ${a.shot}` : "视频"}
                           </span>
+                        )}
+                        {a.step_id && !running && (
+                          <button onClick={() => regenerate(a)} disabled={busy} title="重生成此镜"
+                            className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/55 backdrop-blur-md flex items-center justify-center text-white opacity-0 group-hover:opacity-100 hover:bg-black/70 transition-all">
+                            <RefreshCw className={cn("w-3.5 h-3.5", busy && "animate-spin")} />
+                          </button>
                         )}
                       </div>
                       <div className="p-2.5">
                         <p className="text-xs font-medium truncate">{a.step}</p>
                         <p className="text-[10px] text-text-secondary truncate">{a.model}</p>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
