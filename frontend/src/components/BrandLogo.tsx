@@ -2,7 +2,8 @@ import { cn } from "@/lib/utils";
 
 /* ═══════════════════════════════════════════════════════
    BrandLogo — betty 品牌标识（内联 SVG，透明背景，任意缩放）
-   BrandMark:  图形 Logo（品牌紫渐变圆角方块 + 白色四角星芒）
+   BrandMark:  几何字母标「b」— 深靛蓝方角容器 + 白色字母，
+               专业、克制、去 AI 星芒化（对标 Notion/Linear/Vercel 字母标）
    BrandLogo:  图形 + 文字组合
    ═══════════════════════════════════════════════════════ */
 
@@ -13,28 +14,28 @@ export function BrandMark({ className }: { className?: string }) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={cn("shrink-0", className)}
-      aria-hidden="true"
+      role="img"
+      aria-label="betty"
     >
       <defs>
-        <linearGradient id="betty-mark-bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#8B7CF6" />
-          <stop offset="55%" stopColor="#6C5CE7" />
-          <stop offset="100%" stopColor="#5847D6" />
+        <linearGradient id="betty-mark-bg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#7A6BF0" />
+          <stop offset="100%" stopColor="#5A49D6" />
         </linearGradient>
       </defs>
-      {/* Rounded-square base */}
-      <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#betty-mark-bg)" />
-      {/* Primary four-point spark */}
-      <path
-        d="M30 12c1.7 9.6 7.1 15 16.7 16.7.4.07.4.6 0 .66C37.1 31 31.7 36.4 30 46c-.07.4-.6.4-.66 0C27.6 36.4 22.2 31 12.6 29.36c-.4-.07-.4-.6 0-.66C22.2 27 27.6 21.6 29.34 12c.07-.4.6-.4.66 0Z"
-        fill="white"
-      />
-      {/* Secondary small spark */}
-      <path
-        d="M45.5 38c.8 4.4 3.3 6.9 7.7 7.7.2.03.2.27 0 .3-4.4.8-6.9 3.3-7.7 7.7-.03.2-.27.2-.3 0-.8-4.4-3.3-6.9-7.7-7.7-.2-.03-.2-.27 0-.3 4.4-.8 6.9-3.3 7.7-7.7.03-.2.27-.2.3 0Z"
-        fill="white"
-        fillOpacity="0.85"
-      />
+      {/* Squircle container — single-hue restrained gradient */}
+      <rect x="3" y="3" width="58" height="58" rx="16" fill="url(#betty-mark-bg)" />
+      {/* Subtle top inner highlight for polished product-icon depth */}
+      <rect x="3" y="3" width="58" height="58" rx="16" fill="white" fillOpacity="0.06" />
+      {/* Geometric lowercase "b" monogram (stem + bowl ring, counter = negative space) */}
+      <g fill="#FFFFFF">
+        <rect x="20" y="13" width="7.5" height="38" rx="3.75" />
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M33.6 24C40.9 24 46.8 29.9 46.8 37.2C46.8 44.5 40.9 50.4 33.6 50.4C26.3 50.4 20.4 44.5 20.4 37.2C20.4 29.9 26.3 24 33.6 24ZM33.6 31.2C30.3 31.2 27.6 33.9 27.6 37.2C27.6 40.5 30.3 43.2 33.6 43.2C36.9 43.2 39.6 40.5 39.6 37.2C39.6 33.9 36.9 31.2 33.6 31.2Z"
+        />
+      </g>
     </svg>
   );
 }

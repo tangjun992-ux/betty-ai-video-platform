@@ -401,17 +401,17 @@
 @layer utilities {
   /* ─── GRADIENT TEXT (品牌紫渐变, 用于 Hero 关键词) ─── */
   .text-gradient {
+    /* Restrained, static single-hue-family gradient (brand → violet).
+       Dropped the flowing rainbow animation + fuchsia for a more premium,
+       big-platform look (less "AI startup" candy gradient). */
     background: linear-gradient(
       120deg,
       hsl(var(--brand)),
-      hsl(var(--accent-violet)),
-      hsl(var(--accent-fuchsia))
+      hsl(var(--accent-violet))
     );
-    background-size: 200% 200%;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    animation: gradient-flow 8s ease infinite;
   }
   .text-gradient-static {
     background: linear-gradient(
