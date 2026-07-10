@@ -88,6 +88,7 @@ export default function AgentPage() {
   const [refining, setRefining] = useState(false);
   const [changes, setChanges] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const pollStop = useRef(false);
   const [stepTimes, setStepTimes] = useState<Record<string, number>>({});
   const [totalMs, setTotalMs] = useState<number | null>(null);
 
@@ -216,7 +217,48 @@ export default function AgentPage() {
     });
   };
 
-  const cancelRun = () => { abortRef.current?.abort(); };
+  const cancelRun = () => { abortRef.current?.abort(); pollStop.current = true; setPhase("planned"); };
+
+  // Apply an async progress snapshot to the live UI (steps / assets / timing).
+  const applyProgress = (s: any) => {
+    setPlan((p) => p ? { ...p, steps: p.steps.map((st) => {
+      const ps = (s.steps || []).find((x: any) => x.id === st.id);
+      return ps ? { ...st, status: ps.status } : st;
+    }) } : p);
+    const times: Record<string, number> = {};
+    (s.steps || []).forEach((x: any) => { if (x.elapsed_ms != null) times[x.id] = x.elapsed_ms; });
+    setStepTimes(times);
+    if (Array.isArray(s.assets)) setAssets(s.assets);
+  };
+
+  // Real generation → background Celery task + polling (no long-lived connection).
+  const executeAsync = async () => {
+    if (!plan) return;
+    pollStop.current = false;
+    try {
+      const res = await fetch(`${API_BASE}/director/run/async`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief: plan.brief, has_ref_image: refImage, duration, dry_run: false, plan }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const { job_id } = await res.json();
+      while (!pollStop.current) {
+        await new Promise((r) => setTimeout(r, 1800));
+        if (pollStop.current) break;
+        let s: any;
+        try { s = await (await fetch(`${API_BASE}/director/progress/${job_id}`)).json(); }
+        catch { continue; }
+        applyProgress(s);
+        if (s.done || s.status === "failed") {
+          if (s.status === "failed") setErr(`执行失败 (${s.error || "未知错误"})`);
+          if (typeof s.total_ms === "number") setTotalMs(s.total_ms);
+          setPhase("done");
+          setPlan((cur) => { if (cur) saveSession(cur, s.assets || []); return cur; });
+          break;
+        }
+      }
+    } catch (e: any) { setErr(`执行失败 (${e?.message})`); setPhase("planned"); }
+  };
 
   // ── streaming execution ──
   const execute = async (dryRun = true) => {
@@ -225,6 +267,10 @@ export default function AgentPage() {
     setPhase("running"); setErr(null); setAssets([]); setChanges([]); setStepTimes({}); setTotalMs(null);
     // reset live statuses
     setPlan((p) => p ? { ...p, steps: p.steps.map((s) => ({ ...s, status: s.skip ? "skipped" : "pending" })) } : p);
+    // Real generation can take many minutes (6 shots × ~150s) → run as a
+    // background task with polling so no connection times out. Free preview
+    // stays on the snappy SSE stream.
+    if (!dryRun) { await executeAsync(); return; }
     const planForRun: Plan = { ...plan, steps: plan.steps };
     const liveAssets: Asset[] = [];
     const ctrl = new AbortController();

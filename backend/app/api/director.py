@@ -102,6 +102,35 @@ async def run_plan_stream(req: RunRequest):
     })
 
 
+@router.post("/run/async", summary="异步执行导演计划 (后台任务, 避免长视频阻塞)")
+async def run_plan_async(req: RunRequest):
+    """Kick off the plan in a Celery task; poll GET /director/progress/<job_id>.
+    Use this for real multi-shot films (6 shots × ~150s) that would time out over
+    a live connection."""
+    plan = _resolve_plan(req)
+    dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    job_id = uuid.uuid4().hex
+    from app.tasks.director_tasks import run_director, write_progress
+    # Seed a 'queued' snapshot so the first poll always returns something.
+    write_progress(job_id, {
+        "job_id": job_id, "status": "queued", "done": False, "dry_run": dry,
+        "plan": plan.to_dict(),
+        "steps": [{"id": s.id, "status": "skipped" if s.skip else "pending", "title": s.title, "elapsed_ms": None} for s in plan.steps],
+        "assets": [], "asset_count": 0, "total_ms": None,
+    })
+    run_director.delay(job_id, plan.to_dict(), dry, None)
+    return {"job_id": job_id, "plan": plan.to_dict(), "dry_run": dry}
+
+
+@router.get("/progress/{job_id}", summary="查询异步执行进度")
+async def run_progress(job_id: str):
+    from app.tasks.director_tasks import read_progress
+    state = read_progress(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="job not found or expired")
+    return state
+
+
 @router.post("/step/rerun", summary="重新执行单个步骤 (per-step 重生成)")
 async def rerun_step(req: StepRerunRequest):
     dry = _dry_run_default() if req.dry_run is None else req.dry_run

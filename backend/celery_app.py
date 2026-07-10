@@ -9,6 +9,7 @@ app = Celery(
         "app.tasks.image_tasks",
         "app.tasks.video_tasks",
         "app.tasks.pipeline_tasks",
+        "app.tasks.director_tasks",
         "app.collector.tasks",
     ],
 )
@@ -28,6 +29,7 @@ app.conf.update(
         "app.tasks.image_tasks.*": {"queue": "image_q"},
         "app.tasks.video_tasks.*": {"queue": "video_q"},
         "app.tasks.pipeline_tasks.*": {"queue": "pipeline_q"},
+        "app.tasks.director_tasks.*": {"queue": "director_q"},
         "app.collector.tasks.*": {"queue": "collector_q"},
     },
     broker_connection_retry_on_startup=True,
