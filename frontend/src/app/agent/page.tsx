@@ -25,11 +25,36 @@ interface Asset { step_id?: string; step: string; model: string; type?: string; 
 interface Session { id: string; title: string; lastMessage: string; }
 interface ModelOpt { id: string; name: string; }
 
-const QUICK = [
-  { icon: Clapperboard, label: "咖啡产品宣传片", brief: "做一个30秒的咖啡产品宣传片，电影级画质，温暖光线" },
-  { icon: Mic, label: "数字人口播", brief: "生成一个数字人口播讲解新品发布的视频，竖屏" },
-  { icon: Layers, label: "国风系列写真", brief: "给我一组国风人像写真，四张，统一风格" },
-  { icon: Lightbulb, label: "赛博朋克短片", brief: "科幻赛博朋克城市概念短片，15秒，霓虹质感" },
+// 场景化专业工作流 — 严格对标 yapper.so/agent 的 "Try Feature" 能力卡片
+interface Scenario {
+  icon: any; cat: "视频" | "图片" | "工具"; title: string; desc: string;
+  brief: string; duration?: number; vertical?: boolean; color: string;
+}
+const SCENARIOS: Scenario[] = [
+  { icon: Clapperboard, cat: "视频", title: "产品广告", color: "from-amber-500 to-orange-600",
+    desc: "从产品/卖点/粗略创意，快速生成高转化投放广告",
+    brief: "为新品制作一条高转化产品广告视频，突出核心卖点，适合社媒快速投放测试，电影级画质", duration: 15 },
+  { icon: Film, cat: "视频", title: "产品商业片", color: "from-brand to-accent-violet",
+    desc: "电影级产品视频与品牌大片，用于发布与品牌campaign",
+    brief: "一条电影级产品商业宣传片，精致布光与流畅运镜，高级品牌质感，多镜头叙事", duration: 30 },
+  { icon: Mic, cat: "视频", title: "UGC 种草", color: "from-rose-500 to-pink-600",
+    desc: "真实、原生的创作者风格短视频，适配社交信息流",
+    brief: "一条 UGC 风格种草短视频，真实自然，竖屏手机拍摄感，口语化推荐产品", duration: 15, vertical: true },
+  { icon: Layers, cat: "视频", title: "微短剧", color: "from-violet-500 to-purple-600",
+    desc: "从一个前提/反转/人物弧，生成可追的竖屏短剧",
+    brief: "一部竖屏微短剧短片，强钩子开场加剧情反转，人物情绪张力，电影级叙事运镜", duration: 30, vertical: true },
+  { icon: Sparkles, cat: "视频", title: "动漫生成", color: "from-cyan-500 to-blue-600",
+    desc: "从故事或情绪，生成电影级动漫场景、角色与运动",
+    brief: "一段电影级动漫短片，唯美场景与角色，新海诚式光影与色彩，细腻氛围", duration: 15 },
+  { icon: ImageIcon, cat: "图片", title: "产品摄影", color: "from-emerald-500 to-teal-600",
+    desc: "影棚级产品图，布光/场景/道具/商业质感一步到位",
+    brief: "一组影棚级产品摄影图，柔光箱布光，纯净背景，反射高光，商业级质感，系列四张" },
+  { icon: Lightbulb, cat: "图片", title: "AI 写真", color: "from-fuchsia-500 to-pink-600",
+    desc: "专业形象照，适合领英、简历、名片、社媒头像",
+    brief: "一组专业形象写真，正装，柔和棚拍布光，自然表情，四张统一风格" },
+  { icon: Wand2, cat: "视频", title: "数字人口播", color: "from-sky-500 to-indigo-600",
+    desc: "图像 + 文案生成开口说话的数字人讲解视频",
+    brief: "一个竖屏数字人口播视频，自然口型同步，正面棚拍形象，讲解产品卖点", duration: 15, vertical: true },
 ];
 
 const intentLabel: Record<string, string> = {
@@ -111,19 +136,26 @@ export default function AgentPage() {
 
   const reset = () => { setPlan(null); setAssets([]); setPhase("idle"); setErr(null); setEditingId(null); };
 
-  const makePlan = async (text?: string) => {
+  const makePlan = async (text?: string, opts?: { duration?: number }) => {
     const b = (text ?? brief).trim();
     if (!b) return;
-    setBrief(b); reset(); setPhase("planning");
+    const dur = opts?.duration ?? duration;
+    setBrief(b); if (opts?.duration) setDuration(opts.duration);
+    reset(); setPhase("planning");
     try {
       const res = await fetch(`${API_BASE}/director/plan`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief: b, has_ref_image: refImage, duration }),
+        body: JSON.stringify({ brief: b, has_ref_image: refImage, duration: dur }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Plan = await res.json();
       setPlan(data); setPhase("planned");
     } catch (e: any) { setErr(`无法连接导演引擎 (${e?.message}) — 请确认后端已启动`); setPhase("idle"); }
+  };
+
+  const startScenario = (sc: Scenario) => {
+    if (sc.duration) setDuration(sc.duration);
+    makePlan(sc.brief, { duration: sc.duration });
   };
 
   // ── edit a step in place ──
@@ -308,15 +340,30 @@ export default function AgentPage() {
 
           {err && <p className="text-center text-sm text-amber-500 py-3">{err}</p>}
 
-          {/* Empty → quick starts */}
+          {/* Empty → scenario feature cards (对标 yapper /agent Try Feature) */}
           {phase === "idle" && !err && (
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              {QUICK.map((q) => (
-                <button key={q.label} onClick={() => makePlan(q.brief)}
-                  className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-cosmic-surface/40 border border-cosmic-border/40 text-sm text-text-secondary hover:text-brand hover:border-brand/30 transition-all text-left">
-                  <q.icon className="w-4 h-4 flex-shrink-0" /><span className="truncate">{q.label}</span>
-                </button>
-              ))}
+            <div className="mt-5">
+              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-3">选择一个专业场景 · 或直接描述你的创意</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {SCENARIOS.map((sc) => (
+                  <button key={sc.title} onClick={() => startScenario(sc)}
+                    className="group relative flex items-start gap-3 p-4 rounded-2xl bg-cosmic-surface/50 border border-cosmic-border/50 hover:border-brand/40 hover:shadow-card transition-all text-left">
+                    <div className={cn("w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center flex-shrink-0", sc.color)}>
+                      <sc.icon className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-sm font-semibold text-text-primary">{sc.title}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cosmic-subtle text-text-tertiary">{sc.cat}</span>
+                      </div>
+                      <p className="text-[11px] text-text-secondary leading-snug line-clamp-2">{sc.desc}</p>
+                    </div>
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[11px] font-medium text-brand opacity-0 group-hover:opacity-100 transition-opacity">
+                      试用 <ArrowRight className="w-3 h-3" />
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
