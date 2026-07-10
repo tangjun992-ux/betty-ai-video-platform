@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.director import planner, DirectorExecutor, DirectorPlanner, plan_from_dict, DirectorStep
+from app.director import planner, DirectorExecutor, DirectorPlanner, plan_from_dict, refine_plan, DirectorStep
 from app.db import get_db
 from app.models.director_session import DirectorSession
 
@@ -58,6 +58,18 @@ def _resolve_plan(req: RunRequest):
 async def make_plan(req: PlanRequest):
     plan = planner.plan(req.brief, has_ref_image=req.has_ref_image, duration=req.duration)
     return plan.to_dict()
+
+
+class RefineRequest(BaseModel):
+    plan: dict = Field(..., description="当前计划")
+    directive: str = Field(..., description="导演指令，如：把第2镜改暖一点 / 加一个镜头 / 换成 Veo 3.1 / 竖屏")
+
+
+@router.post("/refine", summary="对话式导演：用自然语言迭代计划")
+async def refine(req: RefineRequest):
+    plan = plan_from_dict(req.plan)
+    updated, changes = refine_plan(plan, req.directive)
+    return {"plan": updated.to_dict(), "changes": changes}
 
 
 @router.post("/run", summary="执行导演计划，产出多资产 (非流式)")

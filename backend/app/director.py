@@ -343,6 +343,145 @@ class DirectorPlanner:
         return DirectorPlan(brief=brief, intent=intent, summary=summary, steps=steps, total_credits=total)
 
 
+def _catalog_lookup(directive: str, media_type: str):
+    """Find a model in the catalog whose name/id appears in the directive."""
+    d = directive.lower()
+    for m in _catalog():
+        if media_type not in m["capabilities"]["media_types"]:
+            continue
+        name = (m.get("display_name") or "").lower()
+        mid = (m.get("id") or "").lower()
+        # match by id token, or by display name w/o spaces (e.g. "veo 3.1" ~ "veo3.1")
+        if mid and mid in d:
+            return m
+        if name and (name in d or name.replace(" ", "") in d.replace(" ", "")):
+            return m
+    return None
+
+
+_REFINE_MOODS = [
+    (["暖", "warmer", "warm", "金色"], "暖色调，金色光线"),
+    (["冷色", "更冷", "cooler", "cool", "冷调", "冷峻"], "冷色调，冷峻光线"),
+    (["电影感", "cinematic", "大片"], "更强电影感，戏剧性布光"),
+    (["明亮", "brighter", "bright", "清新"], "明亮通透，高调布光"),
+    (["暗", "darker", "dark", "低调", "深沉"], "暗调氛围，低调布光"),
+    (["快节奏", "faster", "fast", "动感"], "快节奏，凌厉剪辑感"),
+    (["舒缓", "slower", "slow", "慢节奏", "治愈"], "舒缓节奏，柔和过渡"),
+    (["梦幻", "dreamy", "唯美"], "梦幻唯美，柔光颗粒"),
+    (["高级", "premium", "质感"], "高级质感，精致细节"),
+]
+
+_ASPECT_DIRECTIVES = [
+    (["竖屏", "vertical", "9:16", "抖音", "tiktok", "reels", "shorts"], "9:16"),
+    (["横屏", "landscape", "16:9", "宽屏"], "16:9"),
+    (["方形", "square", "1:1"], "1:1"),
+]
+
+
+def refine_plan(plan: DirectorPlan, directive: str) -> tuple[DirectorPlan, list[str]]:
+    """Apply a natural-language director directive to an existing plan.
+
+    Deterministic rules (no LLM needed): mood/color, pace, aspect ratio, add/remove
+    a shot, swap model, target a specific shot ("第2镜"), plus a catch-all note.
+    Returns (updated_plan, list of human-readable applied changes).
+    """
+    d = (directive or "").strip()
+    changes: list[str] = []
+    steps = plan.steps
+    media_steps = [s for s in steps if s.action in ("image", "video", "lipsync")]
+    video_steps = [s for s in steps if s.action in ("video", "lipsync")]
+
+    def sid() -> str:
+        return uuid.uuid4().hex[:8]
+
+    # Target a specific shot? "第2镜 / shot 2 / 分镜3"
+    target = None
+    m = re.search(r"(?:第|分镜|shot)\s*([0-9一二三四五六七八九十]+)", d, re.I)
+    if m:
+        num_map = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6}
+        raw = m.group(1)
+        idx = num_map.get(raw, None) or (int(raw) if raw.isdigit() else None)
+        if idx and 1 <= idx <= len(video_steps):
+            target = video_steps[idx - 1]
+
+    scope = [target] if target else media_steps
+
+    # 1) Mood / color / pace → append style note to scoped prompts
+    applied_note = None
+    for kws, note in _REFINE_MOODS:
+        if _has(d, kws):
+            applied_note = note
+            for s in scope:
+                if note not in s.prompt:
+                    s.prompt = f"{s.prompt}，{note}"
+            changes.append(f"{'第' + str(idx) + '镜' if target else '全部镜头'}调整为「{note}」")
+            break
+
+    # 2) Aspect ratio
+    for kws, ratio in _ASPECT_DIRECTIVES:
+        if _has(d, kws):
+            for s in media_steps:
+                s.params = {**(s.params or {}), "aspect_ratio": ratio}
+            changes.append(f"画幅改为 {ratio}")
+            break
+
+    # 3) Model swap (video first, then image)
+    for mt, label in (("video", "视频"), ("image", "图片")):
+        found = _catalog_lookup(d, mt)
+        if found and _has(d, ["换", "改用", "用", "switch", "use", "换成"]):
+            for s in (video_steps if mt == "video" else [x for x in media_steps if x.action == "image"]):
+                s.model_id = found["id"]
+                s.model_name = found["display_name"]
+            changes.append(f"{label}模型换为 {found['display_name']}")
+            break
+
+    # 4) Add a shot
+    if _has(d, ["加镜头", "加一个镜头", "多一个镜头", "增加镜头", "再来一个镜头", "add shot", "加个镜头", "多来"]):
+        if video_steps:
+            base = video_steps[-1]
+            styles = (base.params or {}).get("styles") or _styles_from_brief(plan.brief)
+            beat_cn, beat_desc, cam_en = _SHOT_BEATS[len(video_steps) % len(_SHOT_BEATS)]
+            new = DirectorStep(
+                id=sid(), action="video", title=f"分镜 {len(video_steps)+1} · {beat_cn}",
+                model_id=base.model_id, model_name=base.model_name,
+                reason=f"新增分镜 · {beat_desc}",
+                prompt=_shot_prompt(plan.brief, f"{beat_cn}·{beat_desc}", cam_en, styles),
+                depends_on=list(base.depends_on), est_credits=base.est_credits,
+                params=dict(base.params or {}))
+            # insert right after the last video step
+            pos = steps.index(base) + 1
+            steps.insert(pos, new)
+            # compose should depend on the new shot too
+            for s in steps:
+                if s.action == "compose" and base.id in s.depends_on:
+                    s.depends_on.append(new.id)
+            changes.append("新增 1 个分镜")
+
+    # 5) Remove a shot
+    elif _has(d, ["删镜头", "少一个镜头", "去掉镜头", "删掉", "remove shot", "减一个", "少个镜头"]) and len(video_steps) > 1:
+        victim = target or video_steps[-1]
+        steps[:] = [s for s in steps if s.id != victim.id]
+        for s in steps:
+            if victim.id in s.depends_on:
+                s.depends_on = [x for x in s.depends_on if x != victim.id]
+        changes.append("删除 1 个分镜")
+
+    # 6) Catch-all: if nothing matched, append the raw directive as a director's note
+    if not changes and d:
+        for s in scope:
+            s.prompt = f"{s.prompt}，{d}"
+        changes.append(f"已按指令微调镜头：{d[:24]}")
+
+    # Recompute totals + summary
+    plan.total_credits = sum(s.est_credits for s in plan.steps if not s.skip)
+    n_shots = len([s for s in plan.steps if s.action == "video"])
+    n_assets = len([s for s in plan.steps if s.action in ("image", "video", "lipsync", "compose")])
+    plan.summary = (f"已按导演指令更新：{'；'.join(changes)}。共 {len(plan.steps)} 步"
+                    f"{('，' + str(n_shots) + ' 个分镜') if n_shots > 1 else ''}，"
+                    f"预计 {plan.total_credits} 积分。")
+    return plan, changes
+
+
 def plan_from_dict(data: dict) -> DirectorPlan:
     """Rebuild a DirectorPlan from a (possibly user-edited) client payload."""
     steps = []
