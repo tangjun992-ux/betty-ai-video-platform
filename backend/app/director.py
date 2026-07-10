@@ -78,8 +78,14 @@ def _catalog() -> list[dict]:
 
 
 def _pick_model(media_type: str, want_styles: list[str], prefer: str = "balanced") -> dict:
-    """从模型库挑选最合适的模型。prefer: fast | balanced | quality"""
-    cands = [m for m in _catalog() if media_type in m["capabilities"]["media_types"]]
+    """从模型库挑选最合适的模型。prefer: fast | balanced | quality
+
+    可靠性优先：若存在 active(网关已验证可用) 模型，则只在 active 中挑选，避免
+    自动路由到 beta/未支持模型导致真实调用 422。用户仍可在编辑器手动切换任意模型。
+    """
+    all_cands = [m for m in _catalog() if media_type in m["capabilities"]["media_types"]]
+    active = [m for m in all_cands if m.get("status") == "active"]
+    cands = active or all_cands
     if not cands:
         # 兜底
         return {"id": "seedance-2.0" if media_type == "video" else "gpt-image-2",
@@ -622,8 +628,29 @@ class DirectorExecutor:
                 out = await adapter.generate_image(prompt=step.prompt, model_id=step.model_id,
                                                    size=_size_from_params(step.params, "1024x1024"))
                 res = out[0] if isinstance(out, list) else out
+            rd = res.to_dict() if hasattr(res, "to_dict") else (res or {})
+            if rd.get("error"):
+                step.status = "failed"
+                return {"type": media_type, "error": rd["error"]}
+            out = {
+                "type": media_type,
+                "url": rd.get("media_url", ""),
+                "media_url": rd.get("media_url", ""),
+                "thumbnail": rd.get("thumbnail_url") or rd.get("media_url", ""),
+                "model": step.model_id,
+                "cost": rd.get("cost", step.est_credits),
+                "duration": duration if media_type == "video" else None,
+            }
+            # Localize provider URLs into our storage (persist + video poster) so
+            # assets don't expire AND the compose step can stitch local shot files.
+            try:
+                from app.services.media_store import persist_results
+                out = await asyncio.to_thread(persist_results, [out])
+                out = out[0] if isinstance(out, list) else out
+            except Exception as e:
+                logger.warning("[director] persist failed: %s", e)
             step.status = "done"
-            return res.to_dict() if hasattr(res, "to_dict") else res
+            return out
         except Exception as e:
             logger.exception("[director] step %s failed", step.id)
             step.status = "failed"
