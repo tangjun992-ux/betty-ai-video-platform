@@ -355,11 +355,12 @@ def _probe_duration(path: str) -> float:
 
 
 def compose_final_video(video_urls: list[str], style: Optional[str] = None,
-                        with_audio: bool = True) -> tuple[str, str]:
+                        with_audio: bool = True, narration_url: Optional[str] = None) -> tuple[str, str]:
     """
     Stitch multiple shot videos into ONE final film (the Director Agent's hero
     deliverable). Scales/pads every shot to the first shot's canvas, concatenates
-    with ffmpeg, muxes a soft procedural ambient bed (配乐), returns
+    with ffmpeg, and muxes audio: a real TTS narration track when provided
+    (narration_url), otherwise a soft procedural ambient bed. Returns
     (final_video_url, poster_url).
     """
     paths = [p for p in (_local_media_path(u) for u in video_urls) if p]
@@ -376,8 +377,12 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
 
     audio_args = []
     total_dur = sum(_probe_duration(p) for p in paths) if with_audio else 0.0
-    if with_audio and total_dur > 0:
-        # FINITE soft sine pad (196Hz), length = total film — a无限源会让 ffmpeg 挂起。
+    narration_path = _local_media_path(narration_url) if narration_url else None
+    if with_audio and narration_path:
+        # Real narration voiceover, trimmed to film length via -shortest.
+        audio_args = ["-i", narration_path]
+    elif with_audio and total_dur > 0:
+        # FINITE soft sine pad (196Hz), length = total film — 无限源会让 ffmpeg 挂起。
         audio_args = ["-f", "lavfi", "-t", f"{total_dur:.2f}",
                       "-i", "sine=frequency=196:sample_rate=44100"]
     else:
@@ -397,7 +402,9 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
     concat_in = "".join(f"[v{i}]" for i in range(len(paths)))
     filter_complex = ";".join(filters) + f";{concat_in}concat=n={len(paths)}:v=1:a=0[outv]"
     if with_audio:
-        filter_complex += f";[{audio_idx}:a]tremolo=f=0.12:d=0.6,volume=0.05[aud]"
+        # Narration at full listenable volume; procedural ambient bed kept subtle.
+        a_filter = "volume=1.0" if narration_path else "tremolo=f=0.12:d=0.6,volume=0.05"
+        filter_complex += f";[{audio_idx}:a]{a_filter}[aud]"
 
     cmd = ["ffmpeg", "-y", "-loglevel", "error", *inputs, *audio_args,
            "-filter_complex", filter_complex, "-map", "[outv]"]
@@ -427,6 +434,25 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
         poster_url = ""
 
     return (f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{out_name}", poster_url)
+
+
+def render_demo_speech(text: str) -> str:
+    """Offline placeholder 'voiceover': a short soft tone whose length scales
+    with the text (used only when no TTS provider key is configured)."""
+    dur = max(2, min(len(text) // 6, 20))
+    gen_dir = _generated_dir()
+    name = f"tts_{uuid.uuid4().hex[:12]}.mp3"
+    out = gen_dir / name
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-t", str(dur),
+             "-i", "sine=frequency=330:sample_rate=44100",
+             "-af", "tremolo=f=5:d=0.4,volume=0.25", "-c:a", "libmp3lame", str(out)],
+            check=True, capture_output=True, timeout=60,
+        )
+    except Exception as e:
+        raise RuntimeError(f"Demo speech render failed: {e}")
+    return f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{name}"
 
 
 class DemoAdapter(BaseModelAdapter):

@@ -274,6 +274,31 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
     )
 
 
+class SpeechRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000, description="要配音的文本/脚本")
+    voice: str = Field(default="Rachel", description="音色")
+
+
+@router.post("/speech", summary="AI 配音 (TTS)")
+async def generate_speech(req: SpeechRequest):
+    """Text-to-speech voiceover (对标 yapper Generate Audio). Real ElevenLabs via
+    KIE when a key is configured; a short local tone otherwise."""
+    from app.adapters.demo_provider import demo_mode_active
+    if demo_mode_active():
+        from app.adapters.demo_provider import render_demo_speech
+        import asyncio as _a
+        url = await _a.to_thread(render_demo_speech, req.text)
+        return {"url": url, "media_type": "audio", "model": "demo-tts", "demo": True}
+    from app.adapters.kie_adapter import KieAdapter
+    from app.services.media_store import persist_results
+    res = await KieAdapter().generate_speech(req.text, voice=req.voice)
+    out = {"type": "audio", "url": res.media_url, "media_url": res.media_url, "model": res.model}
+    import asyncio as _a
+    out = (await _a.to_thread(persist_results, [out]))[0]
+    return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
+            "media_type": "audio", "model": res.model, "cost": res.cost}
+
+
 class EnhanceRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=5000)
     media_type: str = Field(default="auto")

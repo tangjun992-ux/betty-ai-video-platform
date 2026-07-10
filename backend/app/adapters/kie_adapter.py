@@ -347,6 +347,45 @@ class KieAdapter(BaseModelAdapter):
             },
         )
 
+    # ── audio: text-to-speech ────────────────────────────────
+    async def generate_speech(self, text: str, *, voice: str = "Rachel",
+                              model_id: str = "elevenlabs/text-to-speech-multilingual-v2",
+                              **kwargs) -> GenerationResult:
+        """Generate a voiceover (TTS) → returns an audio GenerationResult."""
+        logger.info("[KIE] tts → %r voice=%s", text[:40], voice)
+        payload = {"model": model_id, "text": text, "voice": voice}
+        for k in ("stability", "similarity_boost", "style", "speed", "language_code"):
+            if k in kwargs and kwargs[k] is not None:
+                payload[k] = kwargs[k]
+        result = await self._submit_and_poll(payload, media_type="audio", timeout=180)
+        url = _extract_url(result, "audioUrl")
+        return GenerationResult(
+            media_url=url, media_type="audio", model=model_id,
+            cost=_extract_kie_cost(result, "audio"),
+            meta={"kie_task_id": result.get("taskId", ""), "voice": voice},
+        )
+
+    # ── lip-sync / talking avatar (image + audio → video) ─────
+    async def generate_lipsync(self, *, image_url: str, audio_url: str,
+                               prompt: str = "a person talking naturally on camera",
+                               model_id: str = "infinitalk/from-audio",
+                               resolution: str = "480p", **kwargs) -> GenerationResult:
+        """Drive a portrait image with an audio track → talking video."""
+        logger.info("[KIE] lipsync → model=%s img=%r", model_id, image_url[:60])
+        payload = {"model": model_id, "image_url": image_url,
+                   "audio_url": audio_url, "prompt": prompt}
+        # infinitalk supports a resolution knob; kling avatar does not.
+        if model_id.startswith("infinitalk"):
+            payload["resolution"] = resolution
+        result = await self._submit_and_poll(payload, media_type="video", timeout=600)
+        url = _extract_url(result, "videoUrl")
+        cover = _extract_url(result, "coverUrl") or ""
+        return GenerationResult(
+            media_url=url, thumbnail_url=cover, media_type="video", model=model_id,
+            cost=_extract_kie_cost(result, "video"),
+            meta={"kie_task_id": result.get("taskId", ""), "lipsync": True},
+        )
+
     # ── core: submit + poll ─────────────────────────────────
     async def _submit_and_poll(
         self, payload: dict, *, media_type: str, timeout: int = 180

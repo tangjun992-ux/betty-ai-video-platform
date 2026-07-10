@@ -229,20 +229,23 @@ class DirectorPlanner:
         if _has(brief, _TALK_KW):
             intent = "talking"
             img = _pick_model("image", styles + ["portrait"], "quality")
-            vstep = _pick_model("video", styles, "balanced")
+            s_voice = DirectorStep(id=sid(), action="audio", title="AI 配音 · 旁白 (TTS)",
+                model_id="elevenlabs-tts", model_name="ElevenLabs TTS",
+                reason="把脚本转成自然旁白，用于驱动数字人口型与成片解说",
+                prompt=brief, depends_on=[enh_id], est_credits=2, params={"script": brief})
             s_img = DirectorStep(id=sid(), action="image", title="生成数字人形象",
                 model_id=img["id"], model_name=img["display_name"],
                 reason=f"口播需要高保真人像，选 {img['display_name']}（人像/写实强）",
                 prompt=f"{brief}｜数字人半身像，正面视角，专业棚拍布光，干净背景，真实皮肤质感",
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": "9:16" if vertical else "3:4"})
-            s_talk = DirectorStep(id=sid(), action="lipsync", title="唇形同步配音",
-                model_id="seedance-2.0", model_name="Seedance 2.0",
-                reason="Seedance 支持唇形同步，驱动人像自然开口说话",
-                prompt=f"{brief}｜数字人自然开口讲解，口型精准同步，微表情自然",
-                depends_on=[s_img.id], est_credits=_credits_of(vstep, "video", duration),
-                params={"aspect_ratio": "9:16" if vertical else "16:9", "duration": duration})
-            steps += [s_img, s_talk]
+            s_talk = DirectorStep(id=sid(), action="lipsync", title="唇形同步驱动 (数字人开口)",
+                model_id="infinitalk", model_name="InfiniteTalk",
+                reason="用旁白音频精准驱动人像口型，生成自然开口说话的数字人",
+                prompt="a person talking naturally to camera, accurate lip sync",
+                depends_on=[s_img.id, s_voice.id], est_credits=6,
+                params={"aspect_ratio": "9:16" if vertical else "16:9"})
+            steps += [s_voice, s_img, s_talk]
 
         elif _has(brief, _CAMPAIGN_KW) and _has(brief, _VIDEO_KW):
             intent = "campaign"
@@ -331,14 +334,15 @@ class DirectorPlanner:
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": img_aspect}))
 
-        # 视频类意图自动追加成片步骤：配乐 → 字幕 → 合成 (对标 yapper Agent 成片)
+        # 视频类意图自动追加成片步骤：配音 → 字幕 → 合成 (对标 yapper Agent 成片)
+        # 口播(talking)已自带配音+唇形，成品即唇形视频，无需再拼接。
         video_steps = [s for s in steps if s.action in ("video", "lipsync")]
-        if video_steps:
+        if video_steps and intent != "talking":
             vid_ids = [s.id for s in video_steps]
-            s_audio = DirectorStep(id=sid(), action="audio", title="AI 配乐",
-                model_id="audio-engine", model_name="AI Music",
-                reason="根据画面情绪自动生成背景音乐，提升成片感染力",
-                prompt=f"{brief} 的背景配乐，情绪贴合画面", depends_on=[vid_ids[-1]], est_credits=2)
+            s_audio = DirectorStep(id=sid(), action="audio", title="AI 配音 · 解说 (TTS)",
+                model_id="elevenlabs-tts", model_name="ElevenLabs TTS",
+                reason="将创意脚本转成自然解说旁白，随成片一起输出",
+                prompt=brief, depends_on=[vid_ids[-1]], est_credits=2, params={"script": brief})
             s_sub = DirectorStep(id=sid(), action="subtitle", title="智能字幕",
                 model_id="subtitle-engine", model_name="Auto Caption",
                 reason="自动生成并烧录字幕，适配社媒传播",
@@ -567,20 +571,55 @@ class DirectorExecutor:
                 step.status = "done"
                 return {"type": "prompt", "enhanced_prompt": enhanced}
 
-            if step.action in ("audio", "subtitle"):
+            if step.action == "subtitle":
                 await asyncio.sleep(0.02)
                 step.status = "done"
-                return {"type": step.action, "ok": True, "model": step.model_name,
-                        "note": "成片后期编排步骤", "cost": step.est_credits}
+                return {"type": "subtitle", "ok": True, "model": step.model_name,
+                        "note": "字幕编排", "cost": step.est_credits}
+
+            if step.action == "audio":
+                # Real TTS voiceover (配音) — narration that the final film muxes,
+                # and that lip-sync uses to drive the avatar. Demo → local tone.
+                script = (step.params or {}).get("script") or step.prompt or ""
+                script = script[:600]
+                try:
+                    from app.adapters.demo_provider import demo_mode_active
+                    use_demo_a = self.dry_run or demo_mode_active()
+                except Exception:
+                    use_demo_a = self.dry_run
+                try:
+                    if use_demo_a:
+                        from app.adapters.demo_provider import render_demo_speech
+                        url = await asyncio.to_thread(render_demo_speech, script)
+                        step.status = "done"
+                        return {"type": "audio", "url": url, "media_url": url,
+                                "model": "demo-tts", "cost": 0, "narration": True}
+                    from app.adapters.kie_adapter import KieAdapter
+                    from app.services.media_store import persist_results
+                    res = await KieAdapter().generate_speech(script, voice="Rachel")
+                    out = {"type": "audio", "url": res.media_url, "media_url": res.media_url,
+                           "model": res.model, "cost": res.cost, "narration": True}
+                    out = (await asyncio.to_thread(persist_results, [out]))[0]
+                    step.status = "done"
+                    return out
+                except Exception as e:
+                    logger.warning("[director] tts failed: %s", e)
+                    step.status = "done"
+                    return {"type": "audio", "ok": False, "note": f"配音失败: {e}"}
 
             if step.action == "compose":
-                # Stitch all upstream shot videos into ONE final film (hero deliverable).
+                # Stitch all upstream shot videos into ONE final film (hero deliverable),
+                # muxing the real narration voiceover when available.
                 results = getattr(self, "_results", {}) or {}
-                shot_urls = []
+                shot_urls, narration_url = [], None
                 for dep in step.depends_on:
                     r = results.get(dep)
-                    if isinstance(r, dict) and r.get("type") == "video":
+                    if not isinstance(r, dict):
+                        continue
+                    if r.get("type") == "video":
                         shot_urls.append(r.get("media_url") or r.get("url"))
+                    elif r.get("type") == "audio" and (r.get("media_url") or r.get("url")):
+                        narration_url = r.get("media_url") or r.get("url")
                 shot_urls = [u for u in shot_urls if u]
                 if not shot_urls:
                     step.status = "done"
@@ -588,15 +627,62 @@ class DirectorExecutor:
                             "note": "无分镜可合成"}
                 try:
                     from app.adapters.demo_provider import compose_final_video
-                    final_url, poster = await asyncio.to_thread(compose_final_video, shot_urls)
+                    final_url, poster = await asyncio.to_thread(
+                        compose_final_video, shot_urls, None, True, narration_url)
                     step.status = "done"
                     return {"type": "video", "media_url": final_url, "url": final_url,
                             "thumbnail": poster, "model": step.model_name, "cost": 0,
-                            "final": True, "shot_count": len(shot_urls)}
+                            "final": True, "shot_count": len(shot_urls),
+                            "has_voiceover": bool(narration_url)}
                 except Exception as e:
                     logger.warning("[director] compose failed: %s", e)
                     step.status = "done"
                     return {"type": "compose", "ok": False, "note": f"合成失败: {e}"}
+
+            if step.action == "lipsync":
+                # Talking avatar: drive the avatar image with the narration audio.
+                results = getattr(self, "_results", {}) or {}
+                img_pub = (step.params or {}).get("image_url")
+                aud_pub = None
+                img_local = None
+                for dep in step.depends_on:
+                    r = results.get(dep)
+                    if not isinstance(r, dict):
+                        continue
+                    if r.get("type") == "image":
+                        img_pub = img_pub or r.get("source_url") or r.get("media_url")
+                        img_local = r.get("media_url") or r.get("url")
+                    elif r.get("type") == "audio":
+                        aud_pub = r.get("source_url") or r.get("media_url")
+                try:
+                    from app.adapters.demo_provider import demo_mode_active
+                    use_demo_l = self.dry_run or demo_mode_active()
+                except Exception:
+                    use_demo_l = self.dry_run
+                if use_demo_l or not (img_pub and aud_pub):
+                    # Demo: animate the avatar image (Ken Burns) as a stand-in.
+                    from app.adapters.demo_provider import render_demo_video
+                    ls_seed = (step.params or {}).get("seed")
+                    v_url, thumb = await asyncio.to_thread(
+                        render_demo_video, step.prompt, "720x1280", 5, "portrait", img_local, ls_seed)
+                    step.status = "done"
+                    return {"type": "video", "media_url": v_url, "url": v_url, "thumbnail": thumb,
+                            "model": step.model_id, "cost": step.est_credits, "lipsync": True}
+                try:
+                    from app.adapters.kie_adapter import KieAdapter
+                    from app.services.media_store import persist_results
+                    res = await KieAdapter().generate_lipsync(
+                        image_url=img_pub, audio_url=aud_pub, prompt=step.prompt)
+                    out = {"type": "video", "url": res.media_url, "media_url": res.media_url,
+                           "thumbnail": res.thumbnail_url or "", "model": res.model,
+                           "cost": res.cost, "lipsync": True}
+                    out = (await asyncio.to_thread(persist_results, [out]))[0]
+                    step.status = "done"
+                    return out
+                except Exception as e:
+                    logger.warning("[director] lipsync failed: %s", e)
+                    step.status = "failed"
+                    return {"type": "video", "error": f"唇形同步失败: {e}"}
 
             media_type = "video" if step.action in ("video", "lipsync") else "image"
             duration = int((step.params or {}).get("duration", 5) or 5)
