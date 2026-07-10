@@ -28,14 +28,20 @@ logger = logging.getLogger(__name__)
 # Image models use flat names; video models use provider/model format
 KIE_MODEL_IDS = {
     # ─── Image models (15) internal → KIE API model ID ───
+    # ✅ verified working against the live KIE gateway (unified createTask)
     "gpt-image-2": "gpt-image-2-text-to-image",
     "dall-e-3": "gpt-image-2-text-to-image",
     "nano-banana": "nano-banana-2",
-    "nano-banana-pro": "nano-banana-2-pro",
+    "nano-banana-2": "nano-banana-2",
+    "nano-banana-pro": "nano-banana-pro",
+    "nano-banana-basic": "google/nano-banana",
+    "imagen-4": "google/imagen4",
+    "imagen-4-fast": "google/imagen4-fast",
+    "imagen-4-ultra": "google/imagen4-ultra",
+    # ── unverified guesses (kept for manual selection; may 422) ──
     "flux-1.1-pro": "black-forest/flux-1.1-pro",
     "flux-1-dev": "black-forest/flux-1-dev",
     "flux-kontext": "black-forest/flux-kontext",
-    "imagen-4": "google/imagen-4",
     "ideogram-v3": "ideogram/ideogram-v3",
     "recraft-v3": "recraft/recraft-v3",
     "seedream-3": "bytedance/seedream-3",
@@ -57,9 +63,12 @@ KIE_MODEL_IDS = {
     "veo-3": "veo3/veo-3",
     "sora-2": "sora/sora-2",
     "sora-2-pro": "sora/sora-2-pro",
-    "kling-2.5-turbo": "kling/kling-v2.5-turbo",
-    "kling-2.1-master": "kling/kling-v2.1-master",
-    "kling-2.1-pro": "kling/kling-v2.1-pro",
+    # Kling — verified-recognised IDs on the live gateway
+    "kling-3.0": "kling-3.0/video",
+    "kling-2.6": "kling-2.6/text-to-video",
+    "kling-2.5-turbo": "kling/v2-5-turbo-text-to-video-pro",
+    "kling-2.1-master": "kling/v2-1-master-text-to-video",
+    "kling-2.1-pro": "kling/v2-1-pro",
     "kling-1.6": "kling/kling-v1.6",
     "wan-2.5": "wan/wan-2.5",
     "wan-2.2": "wan/wan-2.2",
@@ -256,9 +265,11 @@ class KieAdapter(BaseModelAdapter):
             "prompt": prompt,
         }
 
-        # Aspect ratio
+        # Aspect ratio — model families disagree on the key name, so send the
+        # verified-compatible superset (camel + snake). KIE ignores unknown keys.
         ratio = _size_to_ratio(size)
         payload["aspectRatio"] = ratio
+        payload["aspect_ratio"] = ratio
 
         # Number of images (n varies by model)
         if count > 1:

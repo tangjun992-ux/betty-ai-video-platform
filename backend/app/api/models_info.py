@@ -43,9 +43,9 @@ MODELS = [
     ),
     ModelInfo(
         id="nano-banana-pro", provider="KIE.ai → Google", display_name="Nano Banana 2 Pro",
-        description="Google 旗舰，超高保真与一致性",
+        description="Google 旗舰，超高保真与一致性 (已真实验证)",
         capabilities=ModelCapability(media_types=["image"], max_resolution="4K", max_duration_s=0, avg_latency_s=12, styles=["photorealistic", "cinematic", "portrait"], cost_per_image_credits=4, cost_per_5s_video_credits=0),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="active",
     ),
     ModelInfo(
         id="flux-1.1-pro", provider="KIE.ai → Black Forest", display_name="FLUX 1.1 Pro",
