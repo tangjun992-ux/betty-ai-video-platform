@@ -65,6 +65,25 @@ class RefineRequest(BaseModel):
     directive: str = Field(..., description="导演指令，如：把第2镜改暖一点 / 加一个镜头 / 换成 Veo 3.1 / 竖屏")
 
 
+class IdeateRequest(BaseModel):
+    brief: str = Field(..., min_length=1)
+
+
+@router.post("/ideate", summary="帮我构思：从一句话发散多个创意方向")
+async def ideate(req: IdeateRequest):
+    """Expand a rough idea into several distinct creative concepts to pick from
+    (对标 yapper 'Help Ideate')."""
+    b = req.brief.strip()
+    angles = [
+        ("电影感大片", f"{b}，电影级运镜与调色，史诗氛围，宽银幕构图"),
+        ("高能快剪", f"{b}，快节奏踩点剪辑，动感转场，强视觉冲击，竖屏"),
+        ("情绪治愈", f"{b}，柔和自然光，舒缓节奏，温暖治愈氛围"),
+        ("悬念钩子", f"{b}，强钩子开场加剧情反转，抓住前 3 秒注意力，竖屏"),
+        ("高级质感", f"{b}，极简高级质感，精致布光，商业大片级细节"),
+    ]
+    return {"concepts": [{"title": t, "brief": br} for t, br in angles]}
+
+
 @router.post("/refine", summary="对话式导演：用自然语言迭代计划")
 async def refine(req: RefineRequest):
     plan = plan_from_dict(req.plan)

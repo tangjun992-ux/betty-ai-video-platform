@@ -179,6 +179,34 @@ export default function AgentPage() {
     makePlan(sc.brief, { duration: sc.duration });
   };
 
+  // ── composer modes (对标 yapper: Help Prompt / Help Ideate) ──
+  const [concepts, setConcepts] = useState<{ title: string; brief: string }[]>([]);
+  const [composerBusy, setComposerBusy] = useState<"polish" | "ideate" | null>(null);
+  const polishBrief = async () => {
+    if (!brief.trim() || composerBusy) return;
+    setComposerBusy("polish");
+    try {
+      const r = await fetch(`${API_BASE}/generate/enhance`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: brief.trim(), media_type: "auto" }),
+      });
+      const d = await r.json();
+      if (d.enhanced) setBrief(d.enhanced);
+    } catch {} finally { setComposerBusy(null); }
+  };
+  const ideate = async () => {
+    if (!brief.trim() || composerBusy) return;
+    setComposerBusy("ideate");
+    try {
+      const r = await fetch(`${API_BASE}/director/ideate`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brief: brief.trim() }),
+      });
+      const d = await r.json();
+      setConcepts(d.concepts || []);
+    } catch {} finally { setComposerBusy(null); }
+  };
+
   // ── edit a step in place ──
   const updateStep = (id: string, patch: Partial<Step>) => {
     setPlan((p) => p ? { ...p, steps: p.steps.map((s) => s.id === id ? { ...s, ...patch } : s) } : p);
@@ -396,6 +424,15 @@ export default function AgentPage() {
                     {[5, 10, 15, 30].map((d) => <option key={d} value={d} className="bg-cosmic-surface">{d}s</option>)}
                   </select>
                 </div>
+                {/* composer modes — 对标 yapper Help Prompt / Help Ideate */}
+                <button onClick={polishBrief} disabled={!brief.trim() || !!composerBusy}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40">
+                  {composerBusy === "polish" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} 润色
+                </button>
+                <button onClick={ideate} disabled={!brief.trim() || !!composerBusy}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40">
+                  {composerBusy === "ideate" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lightbulb className="w-3.5 h-3.5" />} 帮我构思
+                </button>
               </div>
               <button onClick={() => makePlan()} disabled={!brief.trim() || phase === "planning"}
                 className={cn("flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all",
@@ -407,6 +444,23 @@ export default function AgentPage() {
           </div>
 
           {err && <p className="text-center text-sm text-amber-500 py-3">{err}</p>}
+
+          {/* Ideate concepts — pick a creative direction */}
+          {concepts.length > 0 && phase === "idle" && (
+            <div className="mt-3">
+              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">选一个创意方向 · 点击采用</p>
+              <div className="flex flex-wrap gap-2">
+                {concepts.map((c) => (
+                  <button key={c.title} onClick={() => { setBrief(c.brief); setConcepts([]); }}
+                    className="group flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cosmic-surface/50 border border-cosmic-border/50 hover:border-brand/40 transition-all text-left max-w-full">
+                    <Lightbulb className="w-3.5 h-3.5 text-brand flex-shrink-0" />
+                    <span className="text-xs font-medium text-text-primary">{c.title}</span>
+                    <span className="text-[11px] text-text-secondary truncate hidden sm:inline max-w-[220px]">· {c.brief.slice(c.brief.indexOf("，") + 1)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Empty → scenario feature cards (对标 yapper /agent Try Feature) */}
           {phase === "idle" && !err && (
