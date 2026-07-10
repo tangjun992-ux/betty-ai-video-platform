@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Send, Plus, MessageSquare, ImagePlus, Sparkles, Wand2, Lightbulb,
   Film, Image as ImageIcon, Mic, Layers, Clapperboard, Check, Loader2, Coins, ArrowRight,
-  Pencil, RefreshCw, ChevronDown, X, Music, Type as TypeIcon, Scissors, Ratio,
+  Pencil, RefreshCw, X, Music, Type as TypeIcon, Scissors, Ratio,
+  Download, Trash2, StopCircle, CornerDownLeft, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api";
@@ -20,7 +21,7 @@ interface Step {
   status: string; result?: any; params?: StepParams; skip?: boolean;
 }
 interface Plan { brief: string; intent: string; summary: string; total_credits: number; steps: Step[]; }
-interface Asset { step_id?: string; step: string; model: string; type?: string; media_url?: string; url?: string; thumbnail?: string; shot?: number; }
+interface Asset { step_id?: string; step: string; model: string; type?: string; media_url?: string; url?: string; thumbnail?: string; shot?: number; final?: boolean; shot_count?: number; }
 interface Session { id: string; title: string; lastMessage: string; }
 interface ModelOpt { id: string; name: string; }
 
@@ -58,6 +59,10 @@ export default function AgentPage() {
   const [models, setModels] = useState<{ image: ModelOpt[]; video: ModelOpt[] }>({ image: [], video: [] });
   const fileRef = useRef<HTMLInputElement>(null);
   const [activeUid, setActiveUid] = useState<string | null>(null);
+  const [refineText, setRefineText] = useState("");
+  const [refining, setRefining] = useState(false);
+  const [changes, setChanges] = useState<string[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
   // ── models catalog (for per-step model swap) ──
   useEffect(() => {
@@ -128,19 +133,55 @@ export default function AgentPage() {
   const swapModel = (id: string, opt: ModelOpt) => updateStep(id, { model_id: opt.id, model_name: opt.name });
   const toggleSkip = (id: string, skip: boolean) => updateStep(id, { skip });
 
+  // ── conversational director refine ──
+  const refine = async (directive?: string) => {
+    const dir = (directive ?? refineText).trim();
+    if (!dir || !plan || refining) return;
+    setRefining(true);
+    try {
+      const res = await fetch(`${API_BASE}/director/refine`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, directive: dir }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const d = await res.json();
+      setPlan(d.plan);
+      setChanges(d.changes || []);
+      setRefineText("");
+      setPhase("planned"); setAssets([]);
+    } catch (e: any) { setErr(`迭代失败 (${e?.message})`); }
+    finally { setRefining(false); }
+  };
+
+  // ── remove a shot locally (safe: also detach from compose deps) ──
+  const removeShot = (id: string) => {
+    setPlan((p) => {
+      if (!p) return p;
+      const steps = p.steps.filter((s) => s.id !== id).map((s) => ({
+        ...s, depends_on: (s.depends_on || []).filter((x) => x !== id),
+      }));
+      return { ...p, steps };
+    });
+  };
+
+  const cancelRun = () => { abortRef.current?.abort(); };
+
   // ── streaming execution ──
   const execute = async (dryRun = true) => {
     if (!plan) return;
     setDryRunMode(dryRun);
-    setPhase("running"); setErr(null); setAssets([]);
+    setPhase("running"); setErr(null); setAssets([]); setChanges([]);
     // reset live statuses
     setPlan((p) => p ? { ...p, steps: p.steps.map((s) => ({ ...s, status: s.skip ? "skipped" : "pending" })) } : p);
     const planForRun: Plan = { ...plan, steps: plan.steps };
     const liveAssets: Asset[] = [];
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
     try {
       const res = await fetch(`${API_BASE}/director/run/stream`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ brief: plan.brief, has_ref_image: refImage, duration, dry_run: dryRun, plan: planForRun }),
+        signal: ctrl.signal,
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       const reader = res.body.getReader();
@@ -171,7 +212,10 @@ export default function AgentPage() {
         }
       }
       setPhase("done");
-    } catch (e: any) { setErr(`执行失败 (${e?.message})`); setPhase("planned"); }
+    } catch (e: any) {
+      if (e?.name === "AbortError") { setPhase("planned"); setErr("已取消执行"); }
+      else { setErr(`执行失败 (${e?.message})`); setPhase("planned"); }
+    } finally { abortRef.current = null; }
   };
 
   // ── per-step regenerate ──
@@ -325,6 +369,12 @@ export default function AgentPage() {
                                     <Pencil className="w-3 h-3" />
                                   </button>
                                 )}
+                                {(s.action === "video" || s.action === "lipsync") && phase !== "running" && (
+                                  <button onClick={() => removeShot(s.id)} title="删除此镜"
+                                    className="p-1 rounded hover:bg-red-500/10 text-text-tertiary hover:text-red-500 transition-colors">
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
                                 {isSkippable(s.action) && phase !== "running" && (
                                   <button onClick={() => toggleSkip(s.id, !skipped)} title={skipped ? "启用此步" : "跳过此步"}
                                     className={cn("text-[10px] px-1.5 py-0.5 rounded transition-colors", skipped ? "text-brand hover:bg-brand/10" : "text-text-tertiary hover:bg-cosmic-subtle")}>
@@ -372,21 +422,75 @@ export default function AgentPage() {
                   })}
                 </div>
 
+                {/* Add shot */}
+                {phase !== "running" && plan.steps.some((s) => s.action === "video") && (
+                  <button onClick={() => refine("加一个镜头")} disabled={refining}
+                    className="mt-2 flex items-center justify-center gap-1.5 w-full py-2 rounded-xl border border-dashed border-cosmic-border/60 text-xs text-text-secondary hover:text-brand hover:border-brand/40 transition-colors">
+                    <Plus className="w-3.5 h-3.5" /> 加一个分镜
+                  </button>
+                )}
+
+                {/* Conversational refine bar */}
+                {(phase === "planned" || phase === "done") && (
+                  <div className="mt-4">
+                    {changes.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {changes.map((c, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">
+                            <Check className="w-3 h-3" /> {c}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 rounded-xl border border-cosmic-border/50 bg-cosmic-surface/40 p-1.5 focus-within:border-brand/40 transition-colors">
+                      <Wand2 className="w-4 h-4 text-brand ml-1.5 flex-shrink-0" />
+                      <input value={refineText} onChange={(e) => setRefineText(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); refine(); } }}
+                        placeholder="告诉导演如何调整：把第2镜改暖 / 加个镜头 / 换成 Veo 3.1 / 竖屏…"
+                        className="flex-1 bg-transparent text-sm placeholder:text-text-secondary/50 focus:outline-none" />
+                      <button onClick={() => refine()} disabled={!refineText.trim() || refining}
+                        className={cn("flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0",
+                          refineText.trim() && !refining ? "bg-brand text-white hover:bg-brand-strong" : "bg-cosmic-surface text-text-secondary")}>
+                        {refining ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CornerDownLeft className="w-3.5 h-3.5" />}
+                        迭代
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {["更有电影感", "画面更暖", "竖屏", "加一个镜头"].map((q) => (
+                        <button key={q} onClick={() => refine(q)} disabled={refining}
+                          className="text-[11px] px-2.5 py-1 rounded-full bg-cosmic-subtle text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors">
+                          {q}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Execute */}
                 {(phase === "planned" || phase === "running" || phase === "done") && (
                   <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                    <button onClick={() => execute(true)} disabled={running}
-                      className={cn("flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold transition-all",
-                        running ? "bg-cosmic-surface text-text-secondary" : "bg-brand text-white hover:bg-brand-strong shadow-button-glow")}>
-                      {running && dryRunMode ? <><Loader2 className="w-4 h-4 animate-spin" />导演执行中...</> : <><Clapperboard className="w-4 h-4" />免费预览成片<ArrowRight className="w-4 h-4" /></>}
-                    </button>
-                    <button onClick={() => execute(false)} disabled={running}
-                      title="调用真实模型逐镜生成，消耗积分"
-                      className={cn("flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border transition-all",
-                        running ? "border-cosmic-border/40 text-text-secondary" : "border-amber-400/50 text-amber-500 hover:bg-amber-400/10")}>
-                      {running && !dryRunMode ? <Loader2 className="w-4 h-4 animate-spin" /> : <Coins className="w-4 h-4" />}
-                      真实生成 · {plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)}积分
-                    </button>
+                    {running ? (
+                      <>
+                        <div className="flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold bg-cosmic-surface text-text-secondary">
+                          <Loader2 className="w-4 h-4 animate-spin" />导演执行中...
+                        </div>
+                        <button onClick={cancelRun}
+                          className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border border-red-400/50 text-red-500 hover:bg-red-500/10 transition-all">
+                          <StopCircle className="w-4 h-4" /> 取消
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => execute(true)}
+                          className="flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold bg-brand text-white hover:bg-brand-strong shadow-button-glow transition-all">
+                          <Clapperboard className="w-4 h-4" />免费预览成片<ArrowRight className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => execute(false)} title="调用真实模型逐镜生成，消耗积分"
+                          className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border border-amber-400/50 text-amber-500 hover:bg-amber-400/10 transition-all">
+                          <Coins className="w-4 h-4" />真实生成 · {plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)}积分
+                        </button>
+                      </>
+                    )}
                   </div>
                 )}
               </motion.div>
@@ -394,17 +498,40 @@ export default function AgentPage() {
           </AnimatePresence>
 
           {/* Assets */}
-          {assets.length > 0 && (
+          {assets.length > 0 && (() => {
+            const finalAsset = assets.find((a) => a.final);
+            const shotAssets = assets.filter((a) => !a.final);
+            const fMedia = resolveMedia(finalAsset?.media_url || finalAsset?.url);
+            return (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6">
+              {/* Final film — hero deliverable */}
+              {finalAsset && fMedia && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  className="mb-4 rounded-2xl overflow-hidden border border-brand/30 bg-brand/[0.03]">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-brand/15">
+                    <div className="flex items-center gap-2">
+                      <Star className="w-4 h-4 text-brand" />
+                      <span className="text-sm font-semibold">成片 · Final Cut</span>
+                      {finalAsset.shot_count ? <span className="text-[11px] text-text-secondary">{finalAsset.shot_count} 个分镜合成</span> : null}
+                    </div>
+                    <a href={fMedia} download target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-medium hover:bg-brand-strong transition-colors">
+                      <Download className="w-3.5 h-3.5" /> 下载成片
+                    </a>
+                  </div>
+                  <video src={fMedia} controls poster={resolveMedia(finalAsset.thumbnail)} className="w-full max-h-[52vh] bg-black object-contain" />
+                </motion.div>
+              )}
+
               <div className="flex items-center gap-2 mb-3">
                 {running ? <Loader2 className="w-4 h-4 text-brand animate-spin" /> : <Check className="w-4 h-4 text-emerald-500" />}
                 <h3 className="text-sm font-semibold">
-                  {running ? "逐镜产出中" : "产出"} {assets.length} 个资产
+                  {running ? "逐镜产出中" : "分镜素材"} {shotAssets.length} 个
                   {dryRunMode && <span className="text-[11px] text-text-secondary ml-1">(预览模式)</span>}
                 </h3>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {assets.map((a, i) => {
+                {shotAssets.map((a, i) => {
                   const media = resolveMedia(a.media_url || a.url);
                   const thumb = resolveMedia(a.thumbnail);
                   const hasMedia = media.startsWith("/api/v1/media") || media.startsWith("http");
@@ -443,7 +570,8 @@ export default function AgentPage() {
                 })}
               </div>
             </motion.div>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>
