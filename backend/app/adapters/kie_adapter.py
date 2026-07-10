@@ -358,6 +358,32 @@ class KieAdapter(BaseModelAdapter):
             },
         )
 
+    # ── file upload: local bytes → public KIE URL (3-day TTL) ─
+    async def upload_public_url(self, data: bytes, *, filename: str = "upload.png",
+                                content_type: str = "image/png",
+                                upload_path: str = "betty/uploads") -> str:
+        """Upload raw bytes to KIE and return a publicly-fetchable URL.
+        Needed so KIE models (lip-sync, i2v) can reach user-uploaded assets."""
+        import base64 as _b64
+        if not self._api_key:
+            raise RuntimeError("KIE_API_KEY not configured")
+        data_url = f"data:{content_type};base64," + _b64.b64encode(data).decode()
+        headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=90) as client:
+            resp = await client.post(
+                "https://kieai.redpandaai.co/api/file-base64-upload",
+                headers=headers,
+                json={"base64Data": data_url, "uploadPath": upload_path, "fileName": filename},
+            )
+            resp.raise_for_status()
+            body = resp.json()
+        data_obj = body.get("data") or {}
+        url = (data_obj.get("downloadUrl") or data_obj.get("fileUrl")
+               or data_obj.get("url") or "")
+        if not url:
+            raise RuntimeError(f"KIE upload returned no URL: {body}")
+        return url
+
     # ── audio: text-to-speech ────────────────────────────────
     async def generate_speech(self, text: str, *, voice: str = "Rachel",
                               model_id: str = "elevenlabs/text-to-speech-multilingual-v2",
@@ -388,7 +414,8 @@ class KieAdapter(BaseModelAdapter):
         # infinitalk supports a resolution knob; kling avatar does not.
         if model_id.startswith("infinitalk"):
             payload["resolution"] = resolution
-        result = await self._submit_and_poll(payload, media_type="video", timeout=600)
+        # Lip-sync (esp. infinitalk) can run many minutes for longer audio.
+        result = await self._submit_and_poll(payload, media_type="video", timeout=1200)
         url = _extract_url(result, "videoUrl")
         cover = _extract_url(result, "coverUrl") or ""
         return GenerationResult(

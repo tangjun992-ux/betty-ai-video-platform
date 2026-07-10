@@ -195,6 +195,23 @@ export async function enhancePrompt(
   return res.json();
 }
 
+/** Generate a voiceover (TTS) from text — real ElevenLabs via KIE */
+export async function generateSpeech(
+  text: string,
+  voice: string = "Rachel"
+): Promise<{ url: string; media_type: string; model: string; cost?: number }> {
+  const res = await fetch(`${API_BASE}/generate/speech`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, voice }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `配音失败: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Analyze a prompt without submitting — accepts string or object */
 export async function analyzePrompt(input: string | { prompt: string; media_type?: string; quality?: string; model?: string }) {
   const body = typeof input === "string" ? { prompt: input } : input;

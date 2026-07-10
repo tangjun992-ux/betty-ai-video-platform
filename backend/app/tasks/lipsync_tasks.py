@@ -83,61 +83,82 @@ def process_lipsync(
                  started_at=datetime.now(timezone.utc))
     _broadcast_progress(db_task_id, 5, "lipsync_init", "正在加载参考图片...")
 
-    # Stage 2: TTS (if text provided)
-    audio_url_final = audio_url
-    if text and not audio_url:
-        self.update_state(state="PROGRESS", meta={"current_stage": "tts", "progress": 15})
-        _update_task(db_task_id, progress=15, current_stage="tts")
-        _broadcast_progress(db_task_id, 15, "tts", f"正在合成语音 ({voice_id})...")
-        
-        # Simulate TTS — in production, call Azure/Edge TTS API
-        audio_url_final = f"/uploads/lipsync/tts_{uuid.uuid4().hex[:8]}.mp3"
-        logger.info(f"[Lipsync] TTS: text={text[:50]}... → voice={voice_id}")
-
-    # Stage 3: Face detection
-    self.update_state(state="PROGRESS", meta={"current_stage": "face_detect", "progress": 30})
-    _update_task(db_task_id, progress=30, current_stage="face_detect")
-    _broadcast_progress(db_task_id, 30, "face_detect", "正在分析面部特征...")
-
-    # Stage 4: Lipsync generation
-    self.update_state(state="PROGRESS", meta={"current_stage": "lipsync", "progress": 50})
-    _update_task(db_task_id, progress=50, current_stage="lipsync")
-    _broadcast_progress(db_task_id, 50, "lipsync", "正在生成唇形同步动画...")
-
-    # Stage 5: Rendering
-    self.update_state(state="PROGRESS", meta={"current_stage": "rendering", "progress": 75})
-    _update_task(db_task_id, progress=75, current_stage="rendering")
-    _broadcast_progress(db_task_id, 75, "rendering", "正在渲染最终视频...")
-
     try:
-        # In production: call actual lipsync API (e.g., D-ID, HeyGen, SadTalker)
-        # For now, return a mock result with the original image as a placeholder
-        output_url = image_url  # Placeholder — would be actual video URL
+        from app.adapters.demo_provider import demo_mode_active, _local_media_path
+        from app.adapters.kie_adapter import KieAdapter
 
-        output = persist_results([{
-            "type": "video",
-            "url": output_url,
-            "thumbnail": image_url,
-            "model": model or "lipsync-v1",
-            "duration": 5,
-        }])
+        def _to_public(url: str, default_ct: str) -> str:
+            """Ensure a URL is publicly fetchable by KIE (upload local files)."""
+            if not url:
+                return url
+            if url.startswith("http://") or url.startswith("https://"):
+                # local backend URLs aren't reachable by KIE → upload
+                if "/api/v1/media" not in url and "localhost" not in url and "127.0.0.1" not in url:
+                    return url
+            p = _local_media_path(url)
+            if not p:
+                return url
+            with open(p, "rb") as f:
+                data = f.read()
+            ext = os.path.splitext(p)[1].lstrip(".") or ("png" if "image" in default_ct else "mp3")
+            ct = f"image/{ext}" if default_ct.startswith("image") else f"audio/{ext}"
+            return asyncio.run(KieAdapter().upload_public_url(
+                data, filename=f"ls_{uuid.uuid4().hex[:8]}.{ext}", content_type=ct))
+
+        demo = demo_mode_active()
+
+        # Stage 2: voiceover — real TTS if text given
+        audio_public = audio_url
+        if text and not audio_url:
+            self.update_state(state="PROGRESS", meta={"current_stage": "tts", "progress": 15})
+            _update_task(db_task_id, progress=15, current_stage="tts")
+            _broadcast_progress(db_task_id, 15, "tts", "正在合成语音...")
+            if demo:
+                from app.adapters.demo_provider import render_demo_speech
+                audio_public = render_demo_speech(text)
+            else:
+                res = asyncio.run(KieAdapter().generate_speech(text, voice="Rachel"))
+                audio_public = res.media_url  # public KIE tempfile
+        elif audio_url:
+            audio_public = _to_public(audio_url, "audio/mpeg") if not demo else audio_url
+
+        # Stage 3: make the portrait publicly reachable by KIE
+        self.update_state(state="PROGRESS", meta={"current_stage": "face_detect", "progress": 30})
+        _update_task(db_task_id, progress=30, current_stage="face_detect")
+        _broadcast_progress(db_task_id, 30, "face_detect", "正在准备人物图片...")
+        image_public = image_url if demo else _to_public(image_url, "image/png")
+
+        # Stage 4/5: real lip-sync generation
+        self.update_state(state="PROGRESS", meta={"current_stage": "lipsync", "progress": 50})
+        _update_task(db_task_id, progress=50, current_stage="lipsync")
+        _broadcast_progress(db_task_id, 50, "lipsync", "正在生成唇形同步视频...")
+
+        if demo:
+            from app.adapters.demo_provider import render_demo_video
+            v_url, thumb = render_demo_video(text or "talking avatar", "720x1280", 5, "portrait",
+                                             _local_media_path(image_url) and image_url or None)
+            output = persist_results([{"type": "video", "url": v_url, "thumbnail": thumb,
+                                       "model": "demo-lipsync", "duration": 5}])
+        else:
+            res = asyncio.run(KieAdapter().generate_lipsync(
+                image_url=image_public, audio_url=audio_public,
+                prompt="a person talking naturally to camera, accurate lip sync"))
+            _update_task(db_task_id, progress=85, current_stage="rendering")
+            _broadcast_progress(db_task_id, 85, "rendering", "正在渲染最终视频...")
+            output = persist_results([{
+                "type": "video", "url": res.media_url,
+                "thumbnail": res.thumbnail_url or "", "model": res.model, "duration": 5,
+            }])
+
         _update_task(
-            db_task_id,
-            status="completed",
-            progress=100,
-            current_stage="completed",
-            completed_at=datetime.now(timezone.utc),
-            results=json.dumps(output),
+            db_task_id, status="completed", progress=100, current_stage="completed",
+            completed_at=datetime.now(timezone.utc), results=json.dumps(output),
         )
         _broadcast_progress(db_task_id, 100, "completed", "唇形同步完成！")
-
-        return {
-            "status": "completed",
-            "results": [{"type": "video", "url": output_url}],
-        }
+        return {"status": "completed", "results": output}
 
     except Exception as e:
-        logger.error(f"Lipsync failed: {e}")
+        logger.error(f"Lipsync failed: {e}", exc_info=True)
         _update_task(db_task_id, status="failed", progress=0, current_stage="failed",
                      error_message=str(e), completed_at=datetime.now(timezone.utc))
         return {"status": "failed", "error": str(e)}
