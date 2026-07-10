@@ -143,7 +143,7 @@ def generate_video_task(
     try:
         result = _run_async(
             adapter.generate_video(
-                prompt=prompt, image_url=image_url,
+                prompt=prompt, model_id=model, image_url=image_url,
                 duration=duration, resolution=resolution,
             )
         )
@@ -203,7 +203,7 @@ def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duratio
     try:
         result = _run_async(
             fb.generate_video(
-                prompt=prompt, image_url=image_url,
+                prompt=prompt, model_id=fallback_id, image_url=image_url,
                 duration=duration, resolution=resolution,
             )
         )

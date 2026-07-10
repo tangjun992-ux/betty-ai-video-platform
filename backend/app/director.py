@@ -277,13 +277,14 @@ class DirectorExecutor:
 
             media_type = "video" if step.action in ("video", "lipsync") else "image"
 
-            # Demo mode: render real, viewable local media (Pillow / ffmpeg) even
-            # in dry-run so the Agent produces a genuine deliverable without keys.
+            # Preview (dry_run) or no-key → render viewable local media (Pillow /
+            # ffmpeg) for free. Only an explicit real run (dry_run=False) with a
+            # configured provider burns credits on the real models below.
             try:
                 from app.adapters.demo_provider import demo_mode_active
-                use_demo = demo_mode_active()
+                use_demo = self.dry_run or demo_mode_active()
             except Exception:
-                use_demo = False
+                use_demo = self.dry_run
             if use_demo:
                 from app.adapters.demo_provider import render_demo_image, render_demo_video
                 styles = _styles_from_brief(step.prompt)
@@ -297,12 +298,6 @@ class DirectorExecutor:
                 step.status = "done"
                 return {"type": "image", "media_url": img_url, "url": img_url,
                         "thumbnail": img_url, "model": step.model_id, "cost": step.est_credits}
-
-            if self.dry_run:
-                await asyncio.sleep(0.05)
-                step.status = "done"
-                return {"type": media_type, "media_url": f"/dry-run/{step.id}.{('mp4' if media_type=='video' else 'png')}",
-                        "model": step.model_id, "dry_run": True, "cost": step.est_credits}
 
             from app.adapters.registry import get_adapter
             adapter = get_adapter(step.model_id)

@@ -305,7 +305,30 @@ class KieAdapter(BaseModelAdapter):
         if image_url:
             payload["imageUrl"] = image_url
 
-        result = await self._submit_and_poll(payload, media_type="video", timeout=600)
+        # Not every model accepts every resolution token (e.g. seedance-2-fast
+        # rejects 1080p). Retry down a safe ladder on "invalid resolution" (422)
+        # so a valid request is never lost to a resolution mismatch.
+        res_ladder = [r for r in (kie_res, "720p", "480p") if r]
+        seen = set()
+        result = None
+        last_err: Optional[Exception] = None
+        for res_try in res_ladder:
+            if res_try in seen:
+                continue
+            seen.add(res_try)
+            payload["resolution"] = res_try
+            try:
+                result = await self._submit_and_poll(payload, media_type="video", timeout=600)
+                break
+            except RuntimeError as e:
+                msg = str(e).lower()
+                if "resolution" in msg and ("422" in msg or "invalid" in msg):
+                    logger.warning("[KIE] resolution %s rejected for %s, retrying lower", res_try, kie_id)
+                    last_err = e
+                    continue
+                raise
+        if result is None:
+            raise last_err or RuntimeError("KIE video generation failed: no valid resolution")
 
         url = _extract_url(result, "videoUrl")
         cover = _extract_url(result, "coverUrl") or url

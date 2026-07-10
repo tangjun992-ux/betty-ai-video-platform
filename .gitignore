@@ -43,3 +43,4 @@ backend/outputs/
 
 # Temp
 /tmp/
+backend/dump.rdb

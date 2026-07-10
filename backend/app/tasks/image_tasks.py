@@ -141,7 +141,7 @@ def generate_image_task(
 
     try:
         result = _run_async(
-            adapter.generate_image(prompt=prompt, size=size, style=style, count=count)
+            adapter.generate_image(prompt=prompt, model_id=model, size=size, style=style, count=count)
         )
         # Adapt single GenerationResult to list for uniform processing
         results = [result] if not isinstance(result, list) else result
@@ -215,15 +215,20 @@ def _handle_retryable(self, db_task_id, model, error, media_type, *args):
         if media_type == "image":
             results = _run_async(
                 fb_adapter.generate_image(
-                    prompt=args[0], size=args[1] if len(args) > 1 else "1024x1024",
+                    prompt=args[0], model_id=fallback_id,
+                    size=args[1] if len(args) > 1 else "1024x1024",
                     style=args[2] if len(args) > 2 else "auto",
                     count=args[3] if len(args) > 3 else 1,
                 )
             )
         else:
             results = _run_async(
-                fb_adapter.generate_video(prompt=args[0])
+                fb_adapter.generate_video(prompt=args[0], model_id=fallback_id)
             )
+
+        # Normalize single-result adapters (e.g. KIE) to a list.
+        if not isinstance(results, list):
+            results = [results]
 
         # ... process results (simplified)
         output = []

@@ -189,13 +189,13 @@ export default function AgentPage() {
     } catch (e: any) { setErr(`无法连接导演引擎 (${e?.message}) — 请确认后端已启动`); setPhase("idle"); }
   };
 
-  const execute = async () => {
+  const execute = async (dryRun = true) => {
     if (!plan) return;
     setPhase("running"); setErr(null);
     try {
       const res = await fetch(`${API_BASE}/director/run`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief: plan.brief, has_ref_image: refImage, duration }),
+        body: JSON.stringify({ brief: plan.brief, has_ref_image: refImage, duration, dry_run: dryRun }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: RunResult = await res.json();
@@ -338,11 +338,19 @@ export default function AgentPage() {
 
                 {/* Execute */}
                 {(phase === "planned" || phase === "running") && (
-                  <button onClick={execute} disabled={phase === "running"}
-                    className={cn("flex items-center justify-center gap-2 w-full mt-4 py-3 rounded-xl text-sm font-semibold transition-all",
-                      phase === "running" ? "bg-cosmic-surface text-text-secondary" : "bg-gradient-to-r from-accent-cyan to-accent-cyan/80 text-white hover:opacity-90")}>
-                    {phase === "running" ? <><Loader2 className="w-4 h-4 animate-spin" />导演执行中...</> : <><Clapperboard className="w-4 h-4" />一键执行 · 产出成品<ArrowRight className="w-4 h-4" /></>}
-                  </button>
+                  <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                    <button onClick={() => execute(true)} disabled={phase === "running"}
+                      className={cn("flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold transition-all",
+                        phase === "running" ? "bg-cosmic-surface text-text-secondary" : "bg-gradient-to-r from-accent-cyan to-accent-cyan/80 text-white hover:opacity-90")}>
+                      {phase === "running" ? <><Loader2 className="w-4 h-4 animate-spin" />导演执行中...</> : <><Clapperboard className="w-4 h-4" />免费预览成片<ArrowRight className="w-4 h-4" /></>}
+                    </button>
+                    <button onClick={() => execute(false)} disabled={phase === "running"}
+                      title="调用真实模型生成，消耗积分"
+                      className={cn("flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border transition-all",
+                        phase === "running" ? "border-cosmic-border/40 text-text-secondary" : "border-amber-400/40 text-amber-400 hover:bg-amber-400/10")}>
+                      <Coins className="w-4 h-4" />真实生成 · {plan.total_credits}积分
+                    </button>
+                  </div>
                 )}
               </motion.div>
             )}
