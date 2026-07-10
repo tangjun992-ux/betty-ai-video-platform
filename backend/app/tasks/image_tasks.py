@@ -111,20 +111,25 @@ def generate_image_task(
     _update_task(db_task_id, progress=30, current_stage="generating")
     _broadcast_progress(db_task_id, 30, "generating", "模型已选定，开始生成...")
 
-    # Get adapter and fallback config
-    get_adapter = _load_adapters()
-    adapter = get_adapter(model)
-    if not adapter:
-        # Try fallback
-        from app.fallback_handler import get_fallback
-        fallback_id = get_fallback(model)
-        if fallback_id:
-            adapter = get_adapter(fallback_id)
-            model = fallback_id
-            _update_task(db_task_id, selected_model=model, current_stage="fallback_used")
+    # Demo mode: render locally when no provider key is configured.
+    from app.adapters.demo_provider import demo_mode_active, DemoAdapter
+    if demo_mode_active():
+        adapter = DemoAdapter(model_label=model)
+    else:
+        # Get adapter and fallback config
+        get_adapter = _load_adapters()
+        adapter = get_adapter(model)
+        if not adapter:
+            # Try fallback
+            from app.fallback_handler import get_fallback
+            fallback_id = get_fallback(model)
+            if fallback_id:
+                adapter = get_adapter(fallback_id)
+                model = fallback_id
+                _update_task(db_task_id, selected_model=model, current_stage="fallback_used")
 
-    if not adapter:
-        return _mark_failed(db_task_id, f"No adapter for model or fallback: {model}")
+        if not adapter:
+            return _mark_failed(db_task_id, f"No adapter for model or fallback: {model}")
 
     size = params.get("size", params.get("resolution", "1024x1024"))
     style = params.get("style", "auto")

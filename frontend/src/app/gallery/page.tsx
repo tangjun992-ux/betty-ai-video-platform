@@ -174,7 +174,7 @@ export default function GalleryPage() {
         {/* Style chips */}
         {styleOptions.length > 0 && (
           <div className="flex flex-wrap justify-center gap-2">
-            {[{ key: "all", label: "全部风格" } as StyleOption, ...styleOptions.slice(0, 15)].map((s) => (
+            {[{ key: "all", label: "全部风格" } as StyleOption, ...styleOptions.filter((s) => s.key !== "all").slice(0, 15)].map((s) => (
               <button
                 key={s.key}
                 onClick={() => setStyle(s.key)}
@@ -263,109 +263,92 @@ export default function GalleryPage() {
             key={`${mediaFilter}-${style}-${sort}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4"
+            className="columns-2 md:columns-3 xl:columns-4 2xl:columns-5 gap-3 space-y-3"
           >
-            {filtered.map((item) => (
-              <div
-                key={item.id}
-                className="group relative bg-cosmic-surface border border-cosmic-border rounded-2xl overflow-hidden break-inside-avoid hover:border-cosmic-border-hover hover:shadow-card hover:-translate-y-0.5 transition-all duration-300"
-                onMouseEnter={() => setHoveredId(item.id)}
-                onMouseLeave={() => setHoveredId(null)}
-              >
-                {/* Media */}
-                <div className="relative bg-cosmic-deep overflow-hidden">
+            {filtered.map((item) => {
+              const remixHref = (() => {
+                const p = encodeURIComponent(item.prompt || "");
+                const m = encodeURIComponent(item.model_used || "");
+                return item.media_type === "video"
+                  ? `/create/video?prompt=${p}&model=${m}`
+                  : `/create/image?prompt=${p}&model=${m}`;
+              })();
+              return (
+                <div
+                  key={item.id}
+                  className="group relative rounded-xl overflow-hidden break-inside-avoid bg-cosmic-deep ring-1 ring-cosmic-border hover:ring-brand/40 hover:shadow-card transition-all duration-300"
+                  onMouseEnter={() => setHoveredId(item.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                >
+                  {/* Media — fills the card, yapper-style media-forward layout */}
                   {item.media_type === "video" ? (
-                    <div className="relative">
-                      <video
-                        src={item.url}
-                        className="w-full object-cover"
-                        muted loop playsInline
-                        autoPlay={hoveredId === item.id}
-                        poster={item.thumbnail}
-                      />
-                      {hoveredId !== item.id && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
-                          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <svg className="w-6 h-6 text-text-accent-cyan ml-1" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z"/>
-                            </svg>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <video
+                      src={item.url}
+                      className="w-full object-cover align-middle"
+                      muted loop playsInline
+                      autoPlay={hoveredId === item.id}
+                      poster={item.thumbnail}
+                    />
                   ) : (
                     <img
                       src={item.url}
                       alt={item.prompt}
-                      className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="w-full object-cover align-middle group-hover:scale-[1.03] transition-transform duration-500"
                       loading="lazy"
                     />
                   )}
 
                   {/* Top badges */}
-                  <div className="absolute top-3 left-3 flex gap-2">
-                    <span className="px-2 py-1 bg-black/60 backdrop-blur-md rounded-full text-[11px] text-white font-medium">
+                  <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+                    {item.media_type === "video" && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-full text-[10px] text-white font-medium">
+                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        视频
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 bg-black/55 backdrop-blur-md rounded-full text-[10px] text-white/90 font-medium">
                       {item.model_used}
                     </span>
                   </div>
-                  <div className="absolute top-3 right-3">
-                    <span className="px-2 py-1 bg-warning-muted backdrop-blur-md rounded-full text-[11px] text-warning border border-warning/20">
-                      ⚡ {item.credits_cost}cr
+                  <div className="absolute top-2.5 right-2.5">
+                    <span className="px-2 py-0.5 bg-black/55 backdrop-blur-md rounded-full text-[10px] text-warning font-medium">
+                      ⚡{item.credits_cost}
                     </span>
                   </div>
-                </div>
 
-                {/* Info */}
-                <div className="p-4">
-                  <p className="text-sm text-text-accent-cyan/80 line-clamp-2 leading-relaxed mb-2">
-                    {item.prompt}
-                  </p>
-
-                  {item.styles.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {item.styles.slice(0, 3).map((s) => (
-                        <span key={s} className="px-2 py-0.5 rounded-full text-[10px] bg-cosmic-subtle text-text-secondary border border-cosmic-border">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{item.avatar}</span>
-                      <span className="text-xs text-text-secondary">{item.username}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-text-secondary">
-                      <span>❤️ {item.likes}</span>
-                      <span>👁 {item.views}</span>
+                  {/* Hover overlay — prompt + actions rise from the bottom */}
+                  <div className="absolute inset-0 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none">
+                    <div className="p-3 pointer-events-auto">
+                      <p className="text-[13px] text-white/95 line-clamp-2 leading-snug mb-2.5">
+                        {item.prompt}
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 text-[11px] text-white/70">
+                          <span className="inline-flex items-center gap-1">❤️ {item.likes}</span>
+                          <span className="inline-flex items-center gap-1">👁 {item.views}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => navigator.clipboard.writeText(item.prompt)}
+                            title="复制 Prompt"
+                            className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 backdrop-blur-md flex items-center justify-center text-white transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          </button>
+                          <a
+                            href={remixHref}
+                            className="inline-flex items-center gap-1 px-2.5 h-7 rounded-lg bg-white text-black text-[11px] font-semibold hover:bg-white/90 transition-colors"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            做同款
+                          </a>
+                        </div>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => navigator.clipboard.writeText(item.prompt)}
-                      className="flex-1 py-1.5 rounded-lg text-xs bg-cosmic-subtle hover:bg-cosmic-border text-text-secondary hover:text-brand transition-all flex items-center justify-center gap-1 border border-cosmic-border hover:border-cosmic-border-hover"
-                    >
-                      📋 复制 Prompt
-                    </button>
-                    <a
-                      href={(() => {
-                        const p = encodeURIComponent(item.prompt || "");
-                        const m = encodeURIComponent(item.model_used || "");
-                        return item.media_type === "video"
-                          ? `/create/video?prompt=${p}&model=${m}`
-                          : `/create/image?prompt=${p}&model=${m}`;
-                      })()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand/[0.08] text-brand text-xs font-medium border border-brand/20 hover:bg-brand/[0.15] transition-colors"
-                    >
-                      🔄 做同款
-                    </a>
-                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </motion.div>
         )}
       </AnimatePresence>

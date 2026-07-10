@@ -30,3 +30,7 @@ oss2>=1.0.0
 pyyaml>=6.0.2
 python-dotenv>=1.0.1
 loguru>=0.7.2
+
+# Demo generation mode (local image/video render when no provider key is set)
+# ffmpeg (system package) is also required for demo video rendering.
+Pillow>=10.0.0

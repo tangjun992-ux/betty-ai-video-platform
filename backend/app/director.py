@@ -276,6 +276,28 @@ class DirectorExecutor:
                         "media_url": f"/dry-run/final_{step.id}.mp4" if step.action == "compose" else None}
 
             media_type = "video" if step.action in ("video", "lipsync") else "image"
+
+            # Demo mode: render real, viewable local media (Pillow / ffmpeg) even
+            # in dry-run so the Agent produces a genuine deliverable without keys.
+            try:
+                from app.adapters.demo_provider import demo_mode_active
+                use_demo = demo_mode_active()
+            except Exception:
+                use_demo = False
+            if use_demo:
+                from app.adapters.demo_provider import render_demo_image, render_demo_video
+                styles = _styles_from_brief(step.prompt)
+                style = styles[0] if styles else "cinematic"
+                if media_type == "video":
+                    v_url, thumb = await asyncio.to_thread(render_demo_video, step.prompt, "1280x720", 5, style)
+                    step.status = "done"
+                    return {"type": "video", "media_url": v_url, "url": v_url,
+                            "thumbnail": thumb, "model": step.model_id, "cost": step.est_credits}
+                img_url = await asyncio.to_thread(render_demo_image, step.prompt, "1024x1024", style, 0)
+                step.status = "done"
+                return {"type": "image", "media_url": img_url, "url": img_url,
+                        "thumbnail": img_url, "model": step.model_id, "cost": step.est_credits}
+
             if self.dry_run:
                 await asyncio.sleep(0.05)
                 step.status = "done"

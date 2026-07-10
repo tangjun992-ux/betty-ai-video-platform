@@ -115,18 +115,23 @@ def generate_video_task(
     _update_task(db_task_id, progress=30, current_stage="generating")
     _broadcast_progress(db_task_id, 30, "generating", "视频模型已启动，开始生成...")
 
-    get_adapter = _load_adapters()
-    adapter = get_adapter(model)
-    if not adapter:
-        from app.fallback_handler import get_fallback
-        fallback_id = get_fallback(model)
-        if fallback_id:
-            adapter = get_adapter(fallback_id)
-            model = fallback_id
-            _update_task(db_task_id, selected_model=model, current_stage="fallback_used")
+    # Demo mode: render locally when no provider key is configured.
+    from app.adapters.demo_provider import demo_mode_active, DemoAdapter
+    if demo_mode_active():
+        adapter = DemoAdapter(model_label=model)
+    else:
+        get_adapter = _load_adapters()
+        adapter = get_adapter(model)
+        if not adapter:
+            from app.fallback_handler import get_fallback
+            fallback_id = get_fallback(model)
+            if fallback_id:
+                adapter = get_adapter(fallback_id)
+                model = fallback_id
+                _update_task(db_task_id, selected_model=model, current_stage="fallback_used")
 
-    if not adapter:
-        return _mark_failed(db_task_id, f"No adapter for model or fallback: {model}")
+        if not adapter:
+            return _mark_failed(db_task_id, f"No adapter for model or fallback: {model}")
 
     duration = params.get("duration", 5)
     resolution = params.get("resolution", "1080p")

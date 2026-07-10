@@ -16,7 +16,7 @@ interface Step {
   status: string; result?: any;
 }
 interface Plan { brief: string; intent: string; summary: string; total_credits: number; steps: Step[]; }
-interface Asset { step: string; model: string; type?: string; media_url?: string; dry_run?: boolean; }
+interface Asset { step: string; model: string; type?: string; media_url?: string; url?: string; thumbnail?: string; dry_run?: boolean; }
 interface RunResult { plan: Plan; assets: Asset[]; asset_count: number; dry_run: boolean; }
 
 interface Session { id: string; title: string; lastMessage: string; }
@@ -356,17 +356,38 @@ export default function AgentPage() {
                 <h3 className="text-sm font-semibold">产出 {run.asset_count} 个资产{run.dry_run && <span className="text-[11px] text-text-secondary ml-1">(预览模式)</span>}</h3>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {run.assets.map((a, i) => (
-                  <div key={i} className="rounded-xl overflow-hidden bg-cosmic-surface/30 border border-cosmic-border/40">
-                    <div className="aspect-video bg-gradient-to-br from-cosmic-surface to-cosmic-border/40 flex items-center justify-center">
-                      {a.type === "video" ? <Film className="w-8 h-8 text-accent-cyan/40" /> : <ImageIcon className="w-8 h-8 text-accent-cyan/40" />}
+                {run.assets.map((a, i) => {
+                  const media = a.media_url || a.url || "";
+                  const hasMedia = media.startsWith("/api/v1/media") || media.startsWith("http");
+                  return (
+                    <div key={i} className="group rounded-xl overflow-hidden bg-cosmic-surface/30 border border-cosmic-border/40 hover:border-brand/40 transition-colors">
+                      <div className="relative aspect-video bg-gradient-to-br from-cosmic-surface to-cosmic-border/40 flex items-center justify-center overflow-hidden">
+                        {hasMedia && a.type === "video" ? (
+                          <video src={media} poster={a.thumbnail} muted loop playsInline
+                            className="w-full h-full object-cover"
+                            onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
+                            onMouseLeave={(e) => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                          />
+                        ) : hasMedia ? (
+                          <img src={media} alt={a.step} className="w-full h-full object-cover" loading="lazy" />
+                        ) : a.type === "video" ? (
+                          <Film className="w-8 h-8 text-accent-cyan/40" />
+                        ) : (
+                          <ImageIcon className="w-8 h-8 text-accent-cyan/40" />
+                        )}
+                        {a.type === "video" && hasMedia && (
+                          <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-black/60 backdrop-blur-md rounded text-[10px] text-white">
+                            <Film className="w-2.5 h-2.5" /> 视频
+                          </span>
+                        )}
+                      </div>
+                      <div className="p-2.5">
+                        <p className="text-xs font-medium truncate">{a.step}</p>
+                        <p className="text-[10px] text-text-secondary truncate">{a.model}</p>
+                      </div>
                     </div>
-                    <div className="p-2.5">
-                      <p className="text-xs font-medium truncate">{a.step}</p>
-                      <p className="text-[10px] text-text-secondary truncate">{a.model}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </motion.div>
           )}

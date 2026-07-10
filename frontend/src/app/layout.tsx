@@ -25,6 +25,11 @@ export const metadata: Metadata = {
   authors: [{ name: "betty", url: baseUrl }],
   creator: "betty",
   publisher: "betty",
+  icons: {
+    icon: [{ url: "/favicon.png", type: "image/png" }],
+    shortcut: ["/favicon.png"],
+    apple: [{ url: "/favicon.png" }],
+  },
   robots: {
     index: true,
     follow: true,
