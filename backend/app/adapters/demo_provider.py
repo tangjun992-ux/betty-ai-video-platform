@@ -274,6 +274,99 @@ def render_demo_video(prompt: str, resolution: str, duration: int, style: Option
     )
 
 
+def _local_media_path(url: str) -> Optional[str]:
+    """Map a served /api/v1/media/<sub>/<name> URL back to a local file path."""
+    if not url:
+        return None
+    prefix = f"{MEDIA_URL_PREFIX}/"
+    idx = url.find(prefix)
+    if idx < 0:
+        return None
+    rel = url[idx + len(prefix):].split("?", 1)[0]
+    p = Path(settings.STORAGE_LOCAL_PATH) / rel
+    return str(p) if p.exists() else None
+
+
+def _probe_size(path: str) -> tuple[int, int]:
+    """Return (w,h) of a video via ffprobe; fall back to 1280x720."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", path],
+            check=True, capture_output=True, timeout=30,
+        ).stdout.decode().strip()
+        w, h = out.split("x")[:2]
+        return int(w), int(h)
+    except Exception:
+        return 1280, 720
+
+
+def compose_final_video(video_urls: list[str], style: Optional[str] = None) -> tuple[str, str]:
+    """
+    Stitch multiple shot videos into ONE final film (the Director Agent's hero
+    deliverable). Scales/pads every shot to the first shot's canvas, concatenates
+    with ffmpeg, and returns (final_video_url, poster_url).
+    """
+    paths = [p for p in (_local_media_path(u) for u in video_urls) if p]
+    if not paths:
+        raise RuntimeError("compose: no local shot videos to stitch")
+
+    gen_dir = _generated_dir()
+    out_name = f"final_{uuid.uuid4().hex[:12]}.mp4"
+    out_path = gen_dir / out_name
+
+    w, h = _probe_size(paths[0])
+    w -= w % 2
+    h -= h % 2
+
+    if len(paths) == 1:
+        # Single shot → re-encode to a clean final (uniform params).
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", paths[0],
+               "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                      f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1",
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25",
+               "-movflags", "+faststart", str(out_path)]
+    else:
+        inputs = []
+        for p in paths:
+            inputs += ["-i", p]
+        # scale+pad each stream to the common canvas, then concat
+        filters = []
+        for i in range(len(paths)):
+            filters.append(
+                f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25[v{i}]"
+            )
+        concat_in = "".join(f"[v{i}]" for i in range(len(paths)))
+        filter_complex = ";".join(filters) + f";{concat_in}concat=n={len(paths)}:v=1:a=0[outv]"
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", *inputs,
+               "-filter_complex", filter_complex, "-map", "[outv]",
+               "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25",
+               "-movflags", "+faststart", str(out_path)]
+
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=300)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        stderr = getattr(e, "stderr", b"")
+        logger.error("[demo] compose failed: %s", stderr[:600] if stderr else e)
+        raise RuntimeError(f"Final compose failed: {e}")
+
+    # Poster = first frame of the final film
+    poster_name = f"finalposter_{uuid.uuid4().hex[:12]}.jpg"
+    poster_path = gen_dir / poster_name
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-ss", "0.1", "-i", str(out_path),
+             "-frames:v", "1", "-q:v", "3", str(poster_path)],
+            check=True, capture_output=True, timeout=60,
+        )
+        poster_url = f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{poster_name}"
+    except Exception:
+        poster_url = ""
+
+    return (f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{out_name}", poster_url)
+
+
 class DemoAdapter(BaseModelAdapter):
     """Drop-in adapter used by Celery tasks when no provider key is configured."""
 

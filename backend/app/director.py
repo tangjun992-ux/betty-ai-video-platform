@@ -405,12 +405,36 @@ class DirectorExecutor:
                 step.status = "done"
                 return {"type": "prompt", "enhanced_prompt": enhanced}
 
-            if step.action in ("audio", "subtitle", "compose"):
+            if step.action in ("audio", "subtitle"):
                 await asyncio.sleep(0.02)
                 step.status = "done"
                 return {"type": step.action, "ok": True, "model": step.model_name,
-                        "note": "成片后期编排步骤", "cost": step.est_credits,
-                        "media_url": f"/dry-run/final_{step.id}.mp4" if step.action == "compose" else None}
+                        "note": "成片后期编排步骤", "cost": step.est_credits}
+
+            if step.action == "compose":
+                # Stitch all upstream shot videos into ONE final film (hero deliverable).
+                results = getattr(self, "_results", {}) or {}
+                shot_urls = []
+                for dep in step.depends_on:
+                    r = results.get(dep)
+                    if isinstance(r, dict) and r.get("type") == "video":
+                        shot_urls.append(r.get("media_url") or r.get("url"))
+                shot_urls = [u for u in shot_urls if u]
+                if not shot_urls:
+                    step.status = "done"
+                    return {"type": "compose", "ok": True, "model": step.model_name,
+                            "note": "无分镜可合成"}
+                try:
+                    from app.adapters.demo_provider import compose_final_video
+                    final_url, poster = await asyncio.to_thread(compose_final_video, shot_urls)
+                    step.status = "done"
+                    return {"type": "video", "media_url": final_url, "url": final_url,
+                            "thumbnail": poster, "model": step.model_name, "cost": 0,
+                            "final": True, "shot_count": len(shot_urls)}
+                except Exception as e:
+                    logger.warning("[director] compose failed: %s", e)
+                    step.status = "done"
+                    return {"type": "compose", "ok": False, "note": f"合成失败: {e}"}
 
             media_type = "video" if step.action in ("video", "lipsync") else "image"
             duration = int((step.params or {}).get("duration", 5) or 5)
@@ -482,6 +506,7 @@ class DirectorExecutor:
         跳过(skip)的步骤视为已满足依赖但不产出。
         """
         done: dict[str, dict] = {}
+        self._results = done  # expose to _run_step (compose gathers upstream shots)
         assets: list[dict] = []
         remaining = list(plan.steps)
         guard = 0
@@ -525,7 +550,7 @@ class DirectorExecutor:
                     yield {"type": "step_error", "id": s.id, "error": r["error"]}
                     continue
                 asset = None
-                if s.action in ("image", "video", "lipsync"):
+                if s.action in ("image", "video", "lipsync") or (s.action == "compose" and r.get("type") == "video"):
                     asset = self._asset_from(s, r)
                     assets.append(asset)
                 yield {"type": "step_done", "id": s.id, "step": s.to_dict(), "asset": asset}
