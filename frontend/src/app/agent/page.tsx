@@ -88,6 +88,8 @@ export default function AgentPage() {
   const [refining, setRefining] = useState(false);
   const [changes, setChanges] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
+  const [stepTimes, setStepTimes] = useState<Record<string, number>>({});
+  const [totalMs, setTotalMs] = useState<number | null>(null);
 
   // ── models catalog (for per-step model swap) ──
   useEffect(() => {
@@ -113,6 +115,24 @@ export default function AgentPage() {
     } catch {}
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  // ── resume a session via ?session=<uid> deep-link (from /sessions) ──
+  const loadSession = useCallback(async (uid: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/director/sessions/${uid}`);
+      if (!res.ok) return;
+      const s = await res.json();
+      setActiveUid(uid);
+      if (s.brief) setBrief(s.brief);
+      const p = s.plan && s.plan.steps ? s.plan as Plan : null;
+      const a = Array.isArray(s.assets) ? s.assets as Asset[] : [];
+      if (p) { setPlan(p); setAssets(a); setPhase(a.length ? "done" : "planned"); }
+    } catch {}
+  }, []);
+  useEffect(() => {
+    const uid = new URLSearchParams(window.location.search).get("session");
+    if (uid) loadSession(uid);
+  }, [loadSession]);
 
   const saveSession = async (p: Plan, a: Asset[]) => {
     try {
@@ -202,7 +222,7 @@ export default function AgentPage() {
   const execute = async (dryRun = true) => {
     if (!plan) return;
     setDryRunMode(dryRun);
-    setPhase("running"); setErr(null); setAssets([]); setChanges([]);
+    setPhase("running"); setErr(null); setAssets([]); setChanges([]); setStepTimes({}); setTotalMs(null);
     // reset live statuses
     setPlan((p) => p ? { ...p, steps: p.steps.map((s) => ({ ...s, status: s.skip ? "skipped" : "pending" })) } : p);
     const planForRun: Plan = { ...plan, steps: plan.steps };
@@ -234,11 +254,13 @@ export default function AgentPage() {
             setPlan((p) => p ? { ...p, steps: p.steps.map((s) => s.id === ev.id ? { ...s, status: "running" } : s) } : p);
           } else if (ev.type === "step_done") {
             setPlan((p) => p ? { ...p, steps: p.steps.map((s) => s.id === ev.id ? { ...s, status: "done", result: ev.step?.result } : s) } : p);
+            if (typeof ev.elapsed_ms === "number") setStepTimes((t) => ({ ...t, [ev.id]: ev.elapsed_ms }));
             if (ev.asset) { liveAssets.push(ev.asset); setAssets([...liveAssets]); }
           } else if (ev.type === "step_error") {
             setPlan((p) => p ? { ...p, steps: p.steps.map((s) => s.id === ev.id ? { ...s, status: "failed" } : s) } : p);
           } else if (ev.type === "complete") {
             setPhase("done");
+            if (typeof ev.total_ms === "number") setTotalMs(ev.total_ms);
             setPlan((cur) => { if (cur) saveSession(cur, liveAssets); return cur; });
           }
         }
@@ -409,6 +431,9 @@ export default function AgentPage() {
                                 {s.params?.aspect_ratio && (
                                   <span className="inline-flex items-center gap-0.5 text-[10px] text-text-tertiary"><Ratio className="w-2.5 h-2.5" />{s.params.aspect_ratio}</span>
                                 )}
+                                {stepTimes[s.id] != null && (
+                                  <span className="text-[10px] text-emerald-500/80">{(stepTimes[s.id] / 1000).toFixed(1)}s</span>
+                                )}
                                 {s.est_credits > 0 && <span className="text-[11px] text-amber-500/80">{s.est_credits}积分</span>}
                                 {isMediaStep(s.action) && phase !== "running" && (
                                   <button onClick={() => setEditingId(editing ? null : s.id)} title="编辑此步"
@@ -575,6 +600,7 @@ export default function AgentPage() {
                 <h3 className="text-sm font-semibold">
                   {running ? "逐镜产出中" : "分镜素材"} {shotAssets.length} 个
                   {dryRunMode && <span className="text-[11px] text-text-secondary ml-1">(预览模式)</span>}
+                  {totalMs != null && !running && <span className="text-[11px] text-text-tertiary ml-2">⚡ 用时 {(totalMs / 1000).toFixed(1)}s</span>}
                 </h3>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

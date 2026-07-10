@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Optional
@@ -191,6 +192,11 @@ def _n_shots(duration: int) -> int:
 class DirectorPlanner:
     def plan(self, brief: str, has_ref_image: bool = False, duration: int = 5) -> DirectorPlan:
         brief = (brief or "").strip()
+        # Parse an explicit duration from the brief ("30秒 / 30s / 30 seconds") so the
+        # storyboard length matches the user's stated intent, not just the UI dropdown.
+        dm = re.search(r"(\d{1,3})\s*(?:秒|s\b|sec|seconds?)", brief, re.I)
+        if dm:
+            duration = max(5, min(int(dm.group(1)), 60))
         styles = _styles_from_brief(brief)
         vertical = _has(brief, ["竖屏", "抖音", "tiktok", "reels", "shorts", "手机", "9:16"])
         steps: list[DirectorStep] = []
@@ -649,6 +655,7 @@ class DirectorExecutor:
         assets: list[dict] = []
         remaining = list(plan.steps)
         guard = 0
+        t_start = time.monotonic()
 
         # 预处理：跳过步骤直接标记完成 (满足依赖)
         for s in remaining:
@@ -676,26 +683,30 @@ class DirectorExecutor:
                 yield {"type": "step_start", "id": s.id, "title": s.title,
                        "action": s.action, "model_name": s.model_name}
 
-            # 并行执行本层，完成一个推一个 (协程返回 (step, result) 以便映射)
+            # 并行执行本层，完成一个推一个 (协程返回 (step, result, 耗时) 以便映射与计时)
             async def _exec(step: DirectorStep):
-                return step, await self._run_step(step)
+                t0 = time.monotonic()
+                r = await self._run_step(step)
+                return step, r, int((time.monotonic() - t0) * 1000)
 
             tasks = [asyncio.ensure_future(_exec(s)) for s in ready]
             for fut in asyncio.as_completed(tasks):
-                s, r = await fut
+                s, r, elapsed_ms = await fut
                 s.result = r
                 done[s.id] = r
                 if "error" in r:
-                    yield {"type": "step_error", "id": s.id, "error": r["error"]}
+                    yield {"type": "step_error", "id": s.id, "error": r["error"], "elapsed_ms": elapsed_ms}
                     continue
                 asset = None
                 if s.action in ("image", "video", "lipsync") or (s.action == "compose" and r.get("type") == "video"):
                     asset = self._asset_from(s, r)
                     assets.append(asset)
-                yield {"type": "step_done", "id": s.id, "step": s.to_dict(), "asset": asset}
+                yield {"type": "step_done", "id": s.id, "step": s.to_dict(),
+                       "asset": asset, "elapsed_ms": elapsed_ms}
 
         yield {"type": "complete", "asset_count": len(assets), "assets": assets,
-               "dry_run": self.dry_run, "plan": plan.to_dict()}
+               "dry_run": self.dry_run, "plan": plan.to_dict(),
+               "total_ms": int((time.monotonic() - t_start) * 1000)}
 
     async def run_single(self, step: DirectorStep) -> dict:
         """重新执行单个步骤 (用于 per-step 重生成)。"""
