@@ -9,6 +9,7 @@ to the stable /api/v1/media/generated/... path served by the backend.
 import logging
 import mimetypes
 import os
+import subprocess
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -19,6 +20,8 @@ import httpx
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+_VIDEO_EXTS = {".mp4", ".webm", ".mov", ".m4v"}
 
 GENERATED_SUBDIR = "generated"
 MEDIA_URL_PREFIX = "/api/v1/media"
@@ -171,6 +174,45 @@ async def backfill_generated_media() -> None:
         logger.warning("media_store: backfill skipped: %s", e)
 
 
+def _local_path_from_url(url: str) -> Optional[Path]:
+    """Map a served /api/v1/media/<sub>/<name> URL back to its local file path."""
+    if not url:
+        return None
+    prefix = f"{MEDIA_URL_PREFIX}/"
+    idx = url.find(prefix)
+    if idx < 0:
+        return None
+    rel = url[idx + len(prefix):].split("?", 1)[0]
+    p = Path(settings.STORAGE_LOCAL_PATH) / rel
+    return p if p.exists() else None
+
+
+def extract_video_poster(video_url: str) -> Optional[str]:
+    """
+    Extract the first frame of a locally-stored video as a JPEG poster and
+    return its /api/v1/media/... URL. Returns None if ffmpeg/frame unavailable.
+    Used for real provider videos that ship without a separate cover image.
+    """
+    local_video = _local_path_from_url(video_url)
+    if not local_video:
+        return None
+    out_dir = Path(settings.STORAGE_LOCAL_PATH) / GENERATED_SUBDIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+    name = f"poster_{uuid.uuid4().hex[:12]}.jpg"
+    out_path = out_dir / name
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-ss", "0.1",
+             "-i", str(local_video), "-frames:v", "1", "-q:v", "3", str(out_path)],
+            check=True, capture_output=True, timeout=60,
+        )
+        if out_path.exists() and out_path.stat().st_size > 0:
+            return f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{name}"
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
+        logger.warning("media_store: poster extraction failed for %s: %s", video_url[:80], e)
+    return None
+
+
 def persist_results(results: list) -> list:
     """
     Rewrite external `url`/`thumbnail` fields of generation results to local
@@ -197,4 +239,16 @@ def persist_results(results: list) -> list:
             local_t = localize_media_url(thumb, "image")
             if local_t:
                 r["thumbnail"] = local_t
+
+        # Videos often ship without a real cover (or the cover is the video
+        # itself). Derive a genuine first-frame JPEG poster so grids/cards show
+        # an image thumbnail instead of failing to load an .mp4 as <img>.
+        is_video = (r.get("type") == "video") or r.get("media_type") == "video"
+        cur_thumb = r.get("thumbnail") or ""
+        thumb_ext = os.path.splitext(urlparse(cur_thumb).path)[1].lower()
+        video_url = r.get("url") or r.get("media_url") or ""
+        if is_video and (not cur_thumb or cur_thumb == video_url or thumb_ext in _VIDEO_EXTS):
+            poster = extract_video_poster(video_url)
+            if poster:
+                r["thumbnail"] = poster
     return results
