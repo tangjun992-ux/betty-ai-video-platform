@@ -3,14 +3,17 @@ Director API — 导演式编排端点 (对标 yapper Agent)
   POST /director/plan  → 生成创作计划 (用户先看导演方案)
   POST /director/run   → 执行计划，产出多资产 (默认 DRY_RUN)
 """
+import json
 import os
 import uuid
+from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.director import planner, DirectorExecutor, DirectorPlanner
+from app.director import planner, DirectorExecutor, DirectorPlanner, plan_from_dict, DirectorStep
 from app.db import get_db
 from app.models.director_session import DirectorSession
 
@@ -36,6 +39,19 @@ class PlanRequest(BaseModel):
 
 class RunRequest(PlanRequest):
     dry_run: bool | None = Field(default=None, description="留空则按服务端默认")
+    plan: Optional[dict] = Field(default=None, description="可选：客户端已编辑的计划，优先于 brief 自动规划")
+
+
+class StepRerunRequest(BaseModel):
+    step: dict = Field(..., description="要重新执行的单个步骤")
+    dry_run: bool | None = None
+
+
+def _resolve_plan(req: RunRequest):
+    """Use the (edited) client plan when provided, else auto-plan from the brief."""
+    if req.plan and req.plan.get("steps"):
+        return plan_from_dict(req.plan)
+    return DirectorPlanner().plan(req.brief, has_ref_image=req.has_ref_image, duration=req.duration)
 
 
 @router.post("/plan", summary="生成导演式创作计划")
@@ -44,12 +60,50 @@ async def make_plan(req: PlanRequest):
     return plan.to_dict()
 
 
-@router.post("/run", summary="执行导演计划，产出多资产")
+@router.post("/run", summary="执行导演计划，产出多资产 (非流式)")
 async def run_plan(req: RunRequest):
-    plan = DirectorPlanner().plan(req.brief, has_ref_image=req.has_ref_image, duration=req.duration)
+    plan = _resolve_plan(req)
     dry = _dry_run_default() if req.dry_run is None else req.dry_run
     executor = DirectorExecutor(dry_run=dry)
     return await executor.run(plan)
+
+
+@router.post("/run/stream", summary="流式执行导演计划 (SSE)")
+async def run_plan_stream(req: RunRequest):
+    """Stream per-step events (SSE). Frontend reads the body incrementally to
+    animate the director's progress and surface assets as each shot completes."""
+    plan = _resolve_plan(req)
+    dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    executor = DirectorExecutor(dry_run=dry)
+
+    async def gen():
+        # Emit the (resolved) plan first so the client can render steps immediately.
+        yield f"data: {json.dumps({'type': 'plan', 'plan': plan.to_dict()}, ensure_ascii=False)}\n\n"
+        try:
+            async for ev in executor.run_stream(plan):
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        except Exception as e:  # pragma: no cover
+            yield f"data: {json.dumps({'type': 'step_error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive",
+    })
+
+
+@router.post("/step/rerun", summary="重新执行单个步骤 (per-step 重生成)")
+async def rerun_step(req: StepRerunRequest):
+    dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    executor = DirectorExecutor(dry_run=dry)
+    data = dict(req.step)
+    step = DirectorStep(
+        id=data.get("id") or uuid.uuid4().hex[:8],
+        action=data.get("action", "image"), title=data.get("title", ""),
+        model_id=data.get("model_id", ""), model_name=data.get("model_name", ""),
+        reason=data.get("reason", ""), prompt=data.get("prompt", ""),
+        depends_on=[], est_credits=int(data.get("est_credits", 0) or 0),
+        params=data.get("params", {}) or {},
+    )
+    return await executor.run_single(step)
 
 
 # ─────────────────────── Sessions (对标 yapper Sessions) ───────────────────────
