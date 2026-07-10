@@ -147,6 +147,17 @@ def _gradient_image(seed: str, w: int, h: int):
     return base
 
 
+def _cover_resize(img, w: int, h: int):
+    """Resize+center-crop so the image fills (w,h) without distortion."""
+    from PIL import Image
+    iw, ih = img.size
+    scale = max(w / iw, h / ih)
+    nw, nh = max(w, int(iw * scale)), max(h, int(ih * scale))
+    img = img.resize((nw, nh), Image.LANCZOS)
+    left, top = (nw - w) // 2, (nh - h) // 2
+    return img.crop((left, top, left + w, top + h))
+
+
 def _apply_style_grade(img, style: Optional[str]):
     from PIL import ImageEnhance
 
@@ -190,12 +201,37 @@ def _add_watermark(img):
     return img
 
 
-def render_demo_image(prompt: str, size: str, style: Optional[str], index: int = 0) -> str:
+def _load_local_image(url: str):
+    """Load a locally-stored /api/v1/media image as a PIL.Image (for keyframe base)."""
+    if not url:
+        return None
+    try:
+        from PIL import Image
+        prefix = f"{MEDIA_URL_PREFIX}/"
+        idx = url.find(prefix)
+        if idx >= 0:
+            rel = url[idx + len(prefix):].split("?", 1)[0]
+            p = Path(settings.STORAGE_LOCAL_PATH) / rel
+            if p.exists():
+                return Image.open(p).convert("RGB")
+        if url.startswith(("http://", "https://")):
+            import httpx
+            from io import BytesIO
+            with httpx.Client(timeout=15, follow_redirects=True) as c:
+                r = c.get(url); r.raise_for_status()
+                return Image.open(BytesIO(r.content)).convert("RGB")
+    except Exception as e:
+        logger.warning("[demo] load base image failed: %s", e)
+    return None
+
+
+def render_demo_image(prompt: str, size: str, style: Optional[str], index: int = 0,
+                      seed: Optional[str] = None) -> str:
     """Render one demo image locally; return its /api/v1/media/... URL."""
     from PIL import Image  # noqa: F401 — ensure Pillow present
 
     w, h = _parse_size(size)
-    seed = _seed_from(prompt, index)
+    seed = seed or _seed_from(prompt, index)
     img = _fetch_seed_photo(seed, w, h) or _gradient_image(seed, w, h)
     if img.size != (w, h):
         img = img.resize((w, h))
@@ -208,17 +244,21 @@ def render_demo_image(prompt: str, size: str, style: Optional[str], index: int =
     return f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{name}"
 
 
-def render_demo_video(prompt: str, resolution: str, duration: int, style: Optional[str]) -> tuple[str, str]:
+def render_demo_video(prompt: str, resolution: str, duration: int, style: Optional[str],
+                      base_image_url: Optional[str] = None, seed: Optional[str] = None) -> tuple[str, str]:
     """
-    Render one demo video (Ken Burns zoom over a seeded image) with ffmpeg.
+    Render one demo video (Ken Burns zoom over an image) with ffmpeg.
+    If base_image_url is given (keyframe / reference image), animate THAT image —
+    this mirrors real image-to-video and keeps every shot visually consistent.
     Returns (video_url, thumbnail_url).
     """
     w, h = _parse_size(resolution, default=(1280, 720))
     duration = max(2, min(int(duration or 5), 12))
-    seed = _seed_from(prompt, 0)
-    img = _fetch_seed_photo(seed, w, h) or _gradient_image(seed, w, h)
+    seed = seed or _seed_from(prompt, 0)
+    img = _load_local_image(base_image_url) or _fetch_seed_photo(seed, w, h) or _gradient_image(seed, w, h)
     if img.size != (w, h):
-        img = img.resize((w, h))
+        # cover-crop to fill the target canvas (keeps aspect, no distortion)
+        img = _cover_resize(img, w, h)
     img = _apply_style_grade(img, style)
 
     gen_dir = _generated_dir()
@@ -301,11 +341,26 @@ def _probe_size(path: str) -> tuple[int, int]:
         return 1280, 720
 
 
-def compose_final_video(video_urls: list[str], style: Optional[str] = None) -> tuple[str, str]:
+def _probe_duration(path: str) -> float:
+    """Return duration (s) of a media file via ffprobe; fall back to 5.0."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", path],
+            check=True, capture_output=True, timeout=30,
+        ).stdout.decode().strip()
+        return float(out)
+    except Exception:
+        return 5.0
+
+
+def compose_final_video(video_urls: list[str], style: Optional[str] = None,
+                        with_audio: bool = True) -> tuple[str, str]:
     """
     Stitch multiple shot videos into ONE final film (the Director Agent's hero
     deliverable). Scales/pads every shot to the first shot's canvas, concatenates
-    with ffmpeg, and returns (final_video_url, poster_url).
+    with ffmpeg, muxes a soft procedural ambient bed (配乐), returns
+    (final_video_url, poster_url).
     """
     paths = [p for p in (_local_media_path(u) for u in video_urls) if p]
     if not paths:
@@ -319,30 +374,37 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None) -> t
     w -= w % 2
     h -= h % 2
 
-    if len(paths) == 1:
-        # Single shot → re-encode to a clean final (uniform params).
-        cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", paths[0],
-               "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                      f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1",
-               "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25",
-               "-movflags", "+faststart", str(out_path)]
+    audio_args = []
+    total_dur = sum(_probe_duration(p) for p in paths) if with_audio else 0.0
+    if with_audio and total_dur > 0:
+        # FINITE soft sine pad (196Hz), length = total film — a无限源会让 ffmpeg 挂起。
+        audio_args = ["-f", "lavfi", "-t", f"{total_dur:.2f}",
+                      "-i", "sine=frequency=196:sample_rate=44100"]
     else:
-        inputs = []
-        for p in paths:
-            inputs += ["-i", p]
-        # scale+pad each stream to the common canvas, then concat
-        filters = []
-        for i in range(len(paths)):
-            filters.append(
-                f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25[v{i}]"
-            )
-        concat_in = "".join(f"[v{i}]" for i in range(len(paths)))
-        filter_complex = ";".join(filters) + f";{concat_in}concat=n={len(paths)}:v=1:a=0[outv]"
-        cmd = ["ffmpeg", "-y", "-loglevel", "error", *inputs,
-               "-filter_complex", filter_complex, "-map", "[outv]",
-               "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25",
-               "-movflags", "+faststart", str(out_path)]
+        with_audio = False
+
+    inputs = []
+    for p in paths:
+        inputs += ["-i", p]
+    audio_idx = len(paths)  # the lavfi audio input index (added after video inputs)
+
+    filters = []
+    for i in range(len(paths)):
+        filters.append(
+            f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25[v{i}]"
+        )
+    concat_in = "".join(f"[v{i}]" for i in range(len(paths)))
+    filter_complex = ";".join(filters) + f";{concat_in}concat=n={len(paths)}:v=1:a=0[outv]"
+    if with_audio:
+        filter_complex += f";[{audio_idx}:a]tremolo=f=0.12:d=0.6,volume=0.05[aud]"
+
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", *inputs, *audio_args,
+           "-filter_complex", filter_complex, "-map", "[outv]"]
+    if with_audio:
+        cmd += ["-map", "[aud]", "-c:a", "aac", "-shortest"]
+    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25",
+            "-movflags", "+faststart", str(out_path)]
 
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=300)

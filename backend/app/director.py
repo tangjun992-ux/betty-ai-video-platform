@@ -12,6 +12,7 @@ Director — 导演式编排引擎 (对标 yapper Agent: "DON'T PROMPT, JUST DIR
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 import time
@@ -196,8 +197,10 @@ def _n_shots(duration: int) -> int:
 
 # ─────────────────────────────── 规划器 ───────────────────────────────
 class DirectorPlanner:
-    def plan(self, brief: str, has_ref_image: bool = False, duration: int = 5) -> DirectorPlan:
+    def plan(self, brief: str, has_ref_image: bool = False, duration: int = 5,
+             ref_image_url: str | None = None) -> DirectorPlan:
         brief = (brief or "").strip()
+        has_ref_image = has_ref_image or bool(ref_image_url)
         # Parse an explicit duration from the brief ("30秒 / 30s / 30 seconds") so the
         # storyboard length matches the user's stated intent, not just the UI dropdown.
         dm = re.search(r"(\d{1,3})\s*(?:秒|s\b|sec|seconds?)", brief, re.I)
@@ -345,6 +348,14 @@ class DirectorPlanner:
                 reason=f"将 {len(vid_ids)} 个分镜 + 配乐 + 字幕剪辑合成为最终可发布成片",
                 prompt=brief, depends_on=vid_ids + [s_audio.id, s_sub.id], est_credits=0)
             steps += [s_audio, s_sub, s_comp]
+
+        # 跨镜共享 seed（保持全片风格一致）+ 参考图注入（真正参与图生视频）
+        shared_seed = hashlib.sha1((brief or "x").encode()).hexdigest()[:12]
+        for s in steps:
+            if s.action in ("image", "video", "lipsync"):
+                s.params = {**(s.params or {}), "seed": shared_seed}
+                if ref_image_url and s.action in ("video", "lipsync"):
+                    s.params["image_url"] = ref_image_url
 
         total = sum(s.est_credits for s in steps)
         n_assets = len([s for s in steps if s.action in ("image", "video", "lipsync", "compose")])
@@ -589,6 +600,18 @@ class DirectorExecutor:
 
             media_type = "video" if step.action in ("video", "lipsync") else "image"
             duration = int((step.params or {}).get("duration", 5) or 5)
+            seed = (step.params or {}).get("seed")
+            # Image-to-video consistency: a video shot animates its explicit
+            # reference image, else the keyframe produced by an image dependency —
+            # so every shot shares the same look (跨镜风格一致).
+            base_image_url = (step.params or {}).get("image_url")
+            if media_type == "video" and not base_image_url:
+                results = getattr(self, "_results", {}) or {}
+                for dep in step.depends_on:
+                    r = results.get(dep)
+                    if isinstance(r, dict) and r.get("type") == "image" and (r.get("media_url") or r.get("url")):
+                        base_image_url = r.get("media_url") or r.get("url")
+                        break
 
             # Preview (dry_run) or no-key → render viewable local media (Pillow /
             # ffmpeg) for free. Only an explicit real run (dry_run=False) with a
@@ -604,13 +627,14 @@ class DirectorExecutor:
                 style = styles[0] if styles else "cinematic"
                 if media_type == "video":
                     size = _size_from_params(step.params, "1280x720")
-                    v_url, thumb = await asyncio.to_thread(render_demo_video, step.prompt, size, min(duration, 6), style)
+                    v_url, thumb = await asyncio.to_thread(
+                        render_demo_video, step.prompt, size, min(duration, 6), style, base_image_url, seed)
                     step.status = "done"
                     return {"type": "video", "media_url": v_url, "url": v_url,
                             "thumbnail": thumb, "model": step.model_id, "cost": step.est_credits,
-                            "duration": duration}
+                            "duration": duration, "used_ref": bool(base_image_url)}
                 size = _size_from_params(step.params, "1024x1024")
-                img_url = await asyncio.to_thread(render_demo_image, step.prompt, size, style, 0)
+                img_url = await asyncio.to_thread(render_demo_image, step.prompt, size, style, 0, seed)
                 step.status = "done"
                 return {"type": "image", "media_url": img_url, "url": img_url,
                         "thumbnail": img_url, "model": step.model_id, "cost": step.est_credits}
@@ -622,7 +646,7 @@ class DirectorExecutor:
                 return {"type": media_type, "error": f"no adapter for {step.model_id}"}
             if media_type == "video":
                 res = await adapter.generate_video(prompt=step.prompt, model_id=step.model_id,
-                                                   duration=duration,
+                                                   duration=duration, image_url=base_image_url,
                                                    resolution=_size_from_params(step.params, "1080p"))
             else:
                 out = await adapter.generate_image(prompt=step.prompt, model_id=step.model_id,

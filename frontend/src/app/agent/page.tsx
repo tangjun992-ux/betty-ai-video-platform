@@ -73,6 +73,8 @@ export default function AgentPage() {
   const [activeSession, setActiveSession] = useState("1");
   const [brief, setBrief] = useState("");
   const [refImage, setRefImage] = useState(false);
+  const [refImageUrl, setRefImageUrl] = useState<string | null>(null);
+  const [uploadingRef, setUploadingRef] = useState(false);
   const [duration, setDuration] = useState(15);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
@@ -166,7 +168,7 @@ export default function AgentPage() {
     try {
       const res = await fetch(`${API_BASE}/director/plan`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief: b, has_ref_image: refImage, duration: dur }),
+        body: JSON.stringify({ brief: b, has_ref_image: refImage, duration: dur, ref_image_url: refImageUrl }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Plan = await res.json();
@@ -362,7 +364,19 @@ export default function AgentPage() {
     } catch {} finally { setRerunning(null); }
   };
 
-  const newSession = () => { setActiveUid(null); setActiveSession(""); reset(); setBrief(""); };
+  const newSession = () => { setActiveUid(null); setActiveSession(""); reset(); setBrief(""); setRefImage(false); setRefImageUrl(null); };
+
+  // Upload a reference image → its URL feeds real image-to-video for every shot.
+  const uploadRef = async (file: File) => {
+    setUploadingRef(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${API_BASE}/library/upload`, { method: "POST", body: fd });
+      const d = await res.json();
+      if (d.url) { setRefImageUrl(d.url); setRefImage(true); }
+    } catch {} finally { setUploadingRef(false); }
+  };
 
   const modelOptsFor = (action: string) => (action.includes("video") || action === "lipsync" ? models.video : models.image);
   const running = phase === "running";
@@ -411,12 +425,21 @@ export default function AgentPage() {
               rows={2} className="w-full bg-transparent border-0 resize-none text-sm placeholder:text-text-secondary/50 focus:outline-none" />
             <div className="flex items-center justify-between mt-2 pt-2 border-t border-cosmic-border/30">
               <div className="flex items-center gap-2">
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => setRefImage(!!e.target.files?.length)} />
-                <button onClick={() => fileRef.current?.click()}
-                  className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors",
-                    refImage ? "bg-brand/10 text-brand" : "text-text-secondary hover:text-text-primary")}>
-                  <ImagePlus className="w-4 h-4" />{refImage ? "已加参考图" : "参考图"}
-                </button>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadRef(f); e.target.value = ""; }} />
+                {refImageUrl ? (
+                  <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-lg bg-brand/10 text-brand text-xs">
+                    <img src={resolveMedia(refImageUrl)} alt="ref" className="w-5 h-5 rounded object-cover" />
+                    参考图
+                    <button onClick={() => { setRefImageUrl(null); setRefImage(false); }} className="hover:text-red-500"><X className="w-3 h-3" /></button>
+                  </div>
+                ) : (
+                  <button onClick={() => fileRef.current?.click()} disabled={uploadingRef}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary transition-colors">
+                    {uploadingRef ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+                    {uploadingRef ? "上传中" : "参考图"}
+                  </button>
+                )}
                 <div className="flex items-center gap-1 text-xs text-text-secondary">
                   <Film className="w-3.5 h-3.5" />
                   <select value={duration} onChange={(e) => setDuration(+e.target.value)}

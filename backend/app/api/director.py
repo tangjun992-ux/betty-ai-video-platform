@@ -35,6 +35,7 @@ class PlanRequest(BaseModel):
     brief: str = Field(..., description="一句话创作意图，例如：做一个30秒的咖啡产品宣传片")
     has_ref_image: bool = Field(default=False)
     duration: int = Field(default=5, ge=1, le=60)
+    ref_image_url: Optional[str] = Field(default=None, description="参考图 URL（真正参与图生视频/关键帧）")
 
 
 class RunRequest(PlanRequest):
@@ -51,12 +52,14 @@ def _resolve_plan(req: RunRequest):
     """Use the (edited) client plan when provided, else auto-plan from the brief."""
     if req.plan and req.plan.get("steps"):
         return plan_from_dict(req.plan)
-    return DirectorPlanner().plan(req.brief, has_ref_image=req.has_ref_image, duration=req.duration)
+    return DirectorPlanner().plan(req.brief, has_ref_image=req.has_ref_image,
+                                  duration=req.duration, ref_image_url=req.ref_image_url)
 
 
 @router.post("/plan", summary="生成导演式创作计划")
 async def make_plan(req: PlanRequest):
-    plan = planner.plan(req.brief, has_ref_image=req.has_ref_image, duration=req.duration)
+    plan = planner.plan(req.brief, has_ref_image=req.has_ref_image,
+                        duration=req.duration, ref_image_url=req.ref_image_url)
     return plan.to_dict()
 
 
