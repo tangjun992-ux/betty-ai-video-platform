@@ -707,6 +707,11 @@ class DirectorExecutor:
         remaining = list(plan.steps)
         guard = 0
         t_start = time.monotonic()
+        # Real video providers (KIE) queue concurrent shots on limited GPUs, so
+        # firing all shots at once stalls them all in 'waiting'. Serialize real
+        # video generation (1 at a time) so each shot gets a GPU slot in turn.
+        # Demo renders are fast/local → keep them parallel.
+        vid_sem = asyncio.Semaphore(8 if self.dry_run else 1)
 
         # 预处理：跳过步骤直接标记完成 (满足依赖)
         for s in remaining:
@@ -737,7 +742,11 @@ class DirectorExecutor:
             # 并行执行本层，完成一个推一个 (协程返回 (step, result, 耗时) 以便映射与计时)
             async def _exec(step: DirectorStep):
                 t0 = time.monotonic()
-                r = await self._run_step(step)
+                if step.action in ("video", "lipsync"):
+                    async with vid_sem:  # throttle real video to respect provider GPU queue
+                        r = await self._run_step(step)
+                else:
+                    r = await self._run_step(step)
                 return step, r, int((time.monotonic() - t0) * 1000)
 
             tasks = [asyncio.ensure_future(_exec(s)) for s in ready]

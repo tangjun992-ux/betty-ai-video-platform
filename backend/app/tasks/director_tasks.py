@@ -54,7 +54,8 @@ def _run_async(coro):
         loop.close()
 
 
-@app.task(name="app.tasks.director_tasks.run_director", queue="director_q")
+@app.task(name="app.tasks.director_tasks.run_director", queue="director_q",
+          soft_time_limit=3600, time_limit=3900)
 def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str | None = None):
     """Execute a director plan, persisting live per-step progress to Redis."""
     backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))

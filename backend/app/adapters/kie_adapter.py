@@ -264,7 +264,7 @@ class KieAdapter(BaseModelAdapter):
         if count > 1:
             payload["n"] = count
 
-        result = await self._submit_and_poll(payload, media_type="image", timeout=120)
+        result = await self._submit_and_poll(payload, media_type="image", timeout=180)
 
         cost = _extract_kie_cost(result, "image")
 
@@ -385,7 +385,7 @@ class KieAdapter(BaseModelAdapter):
 
         # Step 2: Poll
         poll_interval = 6 if media_type == "video" else 3
-        max_waiting_seconds = 600 if media_type == "video" else 120
+        max_waiting_seconds = 600 if media_type == "video" else 160
 
         async with httpx.AsyncClient(timeout=30) as client:
             started_at = time.monotonic()
