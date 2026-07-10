@@ -240,7 +240,7 @@ class DirectorPlanner:
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": "9:16" if vertical else "3:4"})
             s_talk = DirectorStep(id=sid(), action="lipsync", title="唇形同步驱动 (数字人开口)",
-                model_id="infinitalk", model_name="InfiniteTalk",
+                model_id="kling-avatar", model_name="Kling AI Avatar",
                 reason="用旁白音频精准驱动人像口型，生成自然开口说话的数字人",
                 prompt="a person talking naturally to camera, accurate lip sync",
                 depends_on=[s_img.id, s_voice.id], est_credits=6,

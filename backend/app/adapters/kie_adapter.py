@@ -405,24 +405,44 @@ class KieAdapter(BaseModelAdapter):
     # ── lip-sync / talking avatar (image + audio → video) ─────
     async def generate_lipsync(self, *, image_url: str, audio_url: str,
                                prompt: str = "a person talking naturally on camera",
-                               model_id: str = "infinitalk/from-audio",
+                               model_id: str = "kling/ai-avatar-pro",
                                resolution: str = "480p", **kwargs) -> GenerationResult:
-        """Drive a portrait image with an audio track → talking video."""
-        logger.info("[KIE] lipsync → model=%s img=%r", model_id, image_url[:60])
-        payload = {"model": model_id, "image_url": image_url,
-                   "audio_url": audio_url, "prompt": prompt}
-        # infinitalk supports a resolution knob; kling avatar does not.
-        if model_id.startswith("infinitalk"):
-            payload["resolution"] = resolution
-        # Lip-sync (esp. infinitalk) can run many minutes for longer audio.
-        result = await self._submit_and_poll(payload, media_type="video", timeout=1200)
-        url = _extract_url(result, "videoUrl")
-        cover = _extract_url(result, "coverUrl") or ""
-        return GenerationResult(
-            media_url=url, thumbnail_url=cover, media_type="video", model=model_id,
-            cost=_extract_kie_cost(result, "video"),
-            meta={"kie_task_id": result.get("taskId", ""), "lipsync": True},
-        )
+        """Drive a portrait image with an audio track → talking video.
+
+        Primary model is kling/ai-avatar-pro (fast, reliable, ~3min). infinitalk
+        is kept as a fallback. KIE lip-sync models are intermittently flaky
+        ("internal error") and infinitalk can queue for many minutes, so we
+        retry on transient errors and fall back across models."""
+        # Try primary model then fallback; retry each on transient errors.
+        candidates = [model_id]
+        if "infinitalk/from-audio" not in candidates:
+            candidates.append("infinitalk/from-audio")
+        last_err: Exception | None = None
+        for mid in candidates:
+            for attempt in range(2):
+                payload = {"model": mid, "image_url": image_url,
+                           "audio_url": audio_url, "prompt": prompt}
+                if mid.startswith("infinitalk"):
+                    payload["resolution"] = resolution
+                try:
+                    logger.info("[KIE] lipsync → model=%s attempt=%d", mid, attempt + 1)
+                    result = await self._submit_and_poll(payload, media_type="video", timeout=1200)
+                    return GenerationResult(
+                        media_url=_extract_url(result, "videoUrl"),
+                        thumbnail_url=_extract_url(result, "coverUrl") or "",
+                        media_type="video", model=mid,
+                        cost=_extract_kie_cost(result, "video"),
+                        meta={"kie_task_id": result.get("taskId", ""), "lipsync": True},
+                    )
+                except Exception as e:  # transient internal error → retry / fall back
+                    last_err = e
+                    msg = str(e).lower()
+                    logger.warning("[KIE] lipsync %s attempt %d failed: %s", mid, attempt + 1, e)
+                    if "internal error" in msg or "try again" in msg:
+                        await asyncio.sleep(4)
+                        continue
+                    break  # non-transient → try next model
+        raise RuntimeError(f"lip-sync failed on all models: {last_err}")
 
     # ── core: submit + poll ─────────────────────────────────
     async def _submit_and_poll(
