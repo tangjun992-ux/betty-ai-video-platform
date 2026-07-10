@@ -37,6 +37,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Sparkles,
 } from "lucide-react";
 
 // ─── NAV ITEMS ──────────────────────────────────────────
@@ -248,6 +249,18 @@ export function AppSidebar() {
           </>
         )}
       </nav>
+
+      {/* ── Upgrade CTA ── */}
+      {!sidebarCollapsed && (
+        <div className="shrink-0 border-t border-cosmic-border p-3">
+          <Link
+            href="/pricing"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-brand/[0.06] border border-brand/10 text-brand text-sm font-medium hover:bg-brand/[0.10] transition-all"
+          >
+            <Sparkles className="w-4 h-4" /> 升级 Pro
+          </Link>
+        </div>
+      )}
 
       {/* ── Collapse Toggle ── */}
       <div className="shrink-0 border-t border-cosmic-border p-2">

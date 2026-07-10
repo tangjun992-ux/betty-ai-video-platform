@@ -34,7 +34,6 @@ function SidebarWidthHandler({ children }: { children: React.ReactNode }) {
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isDashboard = pathname.startsWith("/dashboard");
   const isAuth = pathname.startsWith("/auth");
 
   return (
@@ -42,18 +41,13 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
       <ThemeProvider>
         <TooltipProvider delayDuration={200}>
           <SidebarWidthHandler>
-            {isDashboard ? (
-              <>
-                <ScrollProgress />
-                {children}
-                <ToastContainer />
-              </>
-            ) : isAuth ? (
+            {isAuth ? (
               <>
                 {children}
                 <ToastContainer />
               </>
             ) : (
+              // Single unified shell for the whole app (dashboard included)
               <AppShell>
                 <ScrollProgress />
                 <PageTransition>{children}</PageTransition>
