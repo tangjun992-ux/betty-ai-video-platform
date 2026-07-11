@@ -52,14 +52,20 @@ export function TopBar() {
   useEffect(() => {
     let active = true;
     const load = () =>
-      fetch(`${API_BASE}/models/pricing/user`)
+      fetch(`${API_BASE}/billing/summary`)
         .then((r) => (r.ok ? r.json() : null))
         .then((d) => { if (active && d && typeof d.credits === "number") setLiveCredits(d.credits); })
         .catch(() => {});
     load();
     const onFocus = () => load();
+    const onCredits = () => load();
     window.addEventListener("focus", onFocus);
-    return () => { active = false; window.removeEventListener("focus", onFocus); };
+    window.addEventListener("betty:credits", onCredits);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("betty:credits", onCredits);
+    };
   }, []);
 
   const credits = liveCredits ?? user?.credits ?? 0;
@@ -158,15 +164,16 @@ export function TopBar() {
         {/* Jobs Tray */}
         <JobsTray />
 
-        {/* Credits */}
+        {/* Credits → 积分中心 */}
         <Link
-          href="/pricing"
+          href="/billing"
           className={cn(
             "hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-full",
             "bg-brand/[0.08] text-brand text-xs font-semibold",
             "hover:bg-brand/[0.14] transition-colors",
             "border border-brand/10"
           )}
+          title="积分中心"
         >
           <Zap className="w-3.5 h-3.5" />
           <span>{credits.toLocaleString()}</span>
@@ -212,6 +219,12 @@ export function TopBar() {
                 <Link href="/dashboard" className="cursor-pointer">
                   <Zap className="w-4 h-4 mr-2" />
                   控制台
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/billing" className="cursor-pointer">
+                  <Zap className="w-4 h-4 mr-2" />
+                  积分中心
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />

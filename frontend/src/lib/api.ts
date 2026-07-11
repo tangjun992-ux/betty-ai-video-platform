@@ -236,6 +236,40 @@ export async function editImageTool(params: {
   return res.json();
 }
 
+// ─── Billing (积分/套餐) ────────────────────────────────
+export async function getBillingSummary(): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/summary`);
+  if (!res.ok) throw new Error(`加载余额失败: ${res.status}`);
+  return res.json();
+}
+export async function getCreditPacks(): Promise<{ packs: any[] }> {
+  const res = await fetch(`${API_BASE}/billing/credit-packs`);
+  if (!res.ok) throw new Error(`加载积分包失败: ${res.status}`);
+  return res.json();
+}
+export async function getTransactions(limit = 50): Promise<{ transactions: any[] }> {
+  const res = await fetch(`${API_BASE}/billing/transactions?limit=${limit}`);
+  if (!res.ok) throw new Error(`加载流水失败: ${res.status}`);
+  return res.json();
+}
+export async function checkout(kind: "plan" | "pack", id: string, cycle: "monthly" | "yearly" = "monthly"): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/checkout`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, id, cycle }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `结算失败: ${res.status}`);
+  }
+  const data = await res.json();
+  if (data.mode === "stripe" && data.checkout_url) {
+    window.location.href = data.checkout_url;
+  } else {
+    try { window.dispatchEvent(new Event("betty:credits")); } catch {}
+  }
+  return data;
+}
+
 // ─── Projects (作品集) ──────────────────────────────────
 export interface ProjectItemRef { item_id: string; url: string; thumbnail?: string | null; media_type: string; title?: string | null; }
 export interface ProjectDTO { id: string; name: string; description?: string | null; cover?: string | null; item_count: number; items: ProjectItemRef[]; created_at: string; updated_at: string; }

@@ -1,24 +1,27 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Check, ChevronDown, Info } from "lucide-react";
+import { Check, ChevronDown, Info, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { checkout } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 // 前 3 档固定，对齐 yapper: Starter 1k / Personal 3k / Creator 7k(Most Popular)
 const PLANS = [
   {
-    name: "Starter", priceMonthly: 9.99, priceYearly: 7.99, credits: 1000, popular: false,
+    id: "starter", name: "Starter", priceMonthly: 9.99, priceYearly: 7.99, credits: 1000, popular: false,
     color: "from-slate-500 to-slate-400",
     features: ["1,000 Credits / 月", "16+ 专业图片模型", "1080p 分辨率", "标准生成速度", "高级唇形同步", "个人使用许可"],
   },
   {
-    name: "Personal", priceMonthly: 24.99, priceYearly: 19.99, credits: 3000, popular: false,
+    id: "personal", name: "Personal", priceMonthly: 24.99, priceYearly: 19.99, credits: 3000, popular: false,
     color: "from-violet-500 to-purple-500",
     features: ["3,000 Credits / 月", "23+ 专业视频模型", "Seedance 2.0 全模态", "4K 分辨率", "高级运动控制", "图片 & 视频放大"],
   },
   {
-    name: "Creator", priceMonthly: 49.99, priceYearly: 39.99, credits: 7000, popular: true,
+    id: "creator", name: "Creator", priceMonthly: 49.99, priceYearly: 39.99, credits: 7000, popular: true,
     color: "from-brand to-accent-violet",
     features: ["7,000 Credits / 月", "全部 37 个模型", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
   },
@@ -52,7 +55,25 @@ const FAQS = [
 ];
 
 export default function PricingPage() {
+  const router = useRouter();
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
   const [yearly, setYearly] = useState(false);
+
+  const subscribe = async (planId: string) => {
+    setBusy(planId);
+    try {
+      const r = await checkout("plan", planId, yearly ? "yearly" : "monthly");
+      if (r.mode === "dev") {
+        toast.success("订阅成功", `+${r.credits_added} 积分已到账`);
+        router.push("/billing");
+      }
+    } catch (e: any) {
+      toast.error("订阅失败", e.message || "");
+    } finally {
+      setBusy(null);
+    }
+  };
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [maxIdx, setMaxIdx] = useState(1); // 默认 22.5k (yapper Best Value)
   const maxTier = MAX_TIERS[maxIdx];
@@ -114,10 +135,12 @@ export default function PricingPage() {
                 </li>
               ))}
             </ul>
-            <Link href="/create/image" className={`w-full py-2.5 rounded-xl text-sm font-semibold text-center transition-all active:scale-[0.98] ${
+            <button onClick={() => subscribe(plan.id)} disabled={!!busy}
+              className={`w-full py-2.5 rounded-xl text-sm font-semibold text-center transition-all active:scale-[0.98] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 ${
               plan.popular ? "bg-brand text-white hover:bg-brand-strong shadow-button-glow" : "bg-cosmic-subtle border border-cosmic-border text-text-primary hover:bg-cosmic-border"}`}>
+              {busy === plan.id && <Loader2 className="w-4 h-4 animate-spin" />}
               {plan.popular ? "立即开始" : `选择 ${plan.name}`}
-            </Link>
+            </button>
           </motion.div>
         ))}
 
@@ -149,9 +172,11 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <Link href="/create/image" className="w-full py-2.5 rounded-xl text-sm font-semibold text-center bg-amber-500/[0.06] border border-amber-500/30 text-amber-600 hover:bg-amber-500/[0.12] transition-all active:scale-[0.98]">
+          <button onClick={() => subscribe("pro")} disabled={!!busy}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold text-center bg-amber-500/[0.06] border border-amber-500/30 text-amber-600 hover:bg-amber-500/[0.12] transition-all active:scale-[0.98] inline-flex items-center justify-center gap-1.5 disabled:opacity-60">
+            {busy === "pro" && <Loader2 className="w-4 h-4 animate-spin" />}
             选择 Max
-          </Link>
+          </button>
         </motion.div>
 
         {/* 积分加购包（Max 专属） */}

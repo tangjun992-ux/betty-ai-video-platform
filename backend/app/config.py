@@ -74,6 +74,12 @@ class Settings(BaseSettings):
     S3_PUBLIC_BASE_URL: str = os.getenv("S3_PUBLIC_BASE_URL", "")
     S3_KEY_PREFIX: str = os.getenv("S3_KEY_PREFIX", "media")
 
+    # Billing — Stripe (optional). When STRIPE_API_KEY is set, checkout uses real
+    # Stripe Checkout; otherwise a dev-grant mode credits the account directly.
+    STRIPE_API_KEY: str = os.getenv("STRIPE_API_KEY", "")
+    STRIPE_SUCCESS_URL: str = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:3000/billing?status=success")
+    STRIPE_CANCEL_URL: str = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/pricing?status=cancel")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
