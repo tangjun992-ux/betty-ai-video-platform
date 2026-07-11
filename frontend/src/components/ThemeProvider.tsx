@@ -10,7 +10,7 @@ type ThemeContextValue = {
 };
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: "dark",
+  theme: "light",
   toggleTheme: () => {},
   setTheme: () => {},
 });
@@ -20,8 +20,8 @@ export function useTheme() {
 }
 
 function getSystemTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  // Light-first product (Aurora). Dark is an explicit opt-in via the toggle.
+  return "light";
 }
 
 function getStoredTheme(): Theme | null {
@@ -34,7 +34,7 @@ function getStoredTheme(): Theme | null {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>("light");
   const [mounted, setMounted] = useState(false);
 
   // On mount, determine initial theme
@@ -55,20 +55,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("betty-theme", theme);
     } catch {}
   }, [theme, mounted]);
-
-  // Listen for system preference changes (only if no user override)
-  useEffect(() => {
-    if (!mounted) return;
-    const mq = window.matchMedia("(prefers-color-scheme: light)");
-    const handler = (e: MediaQueryListEvent) => {
-      const stored = getStoredTheme();
-      if (!stored) {
-        setThemeState(e.matches ? "light" : "dark");
-      }
-    };
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, [mounted]);
 
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t);

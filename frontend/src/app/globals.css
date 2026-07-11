@@ -67,6 +67,29 @@
     --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
     --ease-spring: cubic-bezier(0.22, 1.2, 0.36, 1);
   }
+
+  /* ─── DARK THEME (对标 Runway/Krea 暗色创作台，令牌反相，组件零改动) ─── */
+  html.dark {
+    --cosmic-void: 240 16% 5%;            /* #0B0B10 最深 */
+    --cosmic-deep: 240 14% 7%;            /* #101016 页面底 */
+    --cosmic-surface: 240 12% 11%;        /* #191921 卡片/容器 */
+    --cosmic-elevated: 240 12% 14%;       /* #21212B 浮层 */
+    --cosmic-subtle: 240 11% 16%;         /* #24242E hover 底 */
+    --cosmic-border: 240 9% 22%;          /* #34343E 边框 */
+    --cosmic-border-hover: 252 30% 44%;   /* 悬停边框(微紫) */
+
+    --brand-soft: 252 40% 16%;            /* 暗底品牌浅底 */
+
+    --text-primary: 240 20% 96%;          /* #F2F2F7 主文字 */
+    --text-secondary: 240 8% 70%;         /* #A9A9B5 次文字 */
+    --text-tertiary: 240 8% 52%;          /* #7E7E8C 弱文字 */
+    --text-disabled: 240 8% 34%;          /* 禁用 */
+
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.30);
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.40), 0 1px 2px -1px rgb(0 0 0 / 0.35);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.35);
+    --shadow-lg: 0 12px 28px -6px rgb(0 0 0 / 0.55), 0 6px 12px -6px rgb(0 0 0 / 0.40);
+  }
 }
 
 

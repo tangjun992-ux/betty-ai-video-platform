@@ -15,8 +15,11 @@ import {
   LogIn,
   Search,
   Sparkles,
+  Sun,
+  Moon,
 } from "lucide-react";
 import { useUIStore, useAuthStore, useCmdKStore } from "@/lib/stores";
+import { useTheme } from "@/components/ThemeProvider";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
 import { JobsTray } from "@/components/JobsTray";
@@ -39,6 +42,7 @@ export function TopBar() {
   const { sidebarCollapsed, toggleSidebarCollapsed, setSidebarOpen } = useUIStore();
   const { user, logout } = useAuthStore();
   const { setOpen: setCmdKOpen } = useCmdKStore();
+  const { theme, toggleTheme } = useTheme();
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -140,6 +144,16 @@ export function TopBar() {
         >
           <Sparkles className="w-3.5 h-3.5" /> 立即创作
         </Link>
+
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className="inline-flex items-center justify-center w-9 h-9 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-cosmic-subtle transition-colors"
+          aria-label={theme === "dark" ? "切换到亮色" : "切换到暗色"}
+          title={theme === "dark" ? "亮色模式" : "暗色模式"}
+        >
+          {theme === "dark" ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
+        </button>
 
         {/* Jobs Tray */}
         <JobsTray />

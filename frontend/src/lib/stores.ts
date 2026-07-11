@@ -8,6 +8,7 @@ interface UIState {
   toggleSidebar: () => void;
   setSidebarOpen: (v: boolean) => void;
   toggleSidebarCollapsed: () => void;
+  setSidebarCollapsed: (v: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -18,6 +19,7 @@ export const useUIStore = create<UIState>()(
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       setSidebarOpen: (v) => set({ sidebarOpen: v }),
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
     }),
     { name: "ui-store" }
   )

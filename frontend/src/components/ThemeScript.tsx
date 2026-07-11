@@ -10,7 +10,7 @@ export function ThemeScript() {
           (function() {
             try {
               var stored = localStorage.getItem('betty-theme');
-              var theme = stored || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+              var theme = (stored === 'dark' || stored === 'light') ? stored : 'light';
               document.documentElement.classList.add(theme);
             } catch(e) {}
           })();
