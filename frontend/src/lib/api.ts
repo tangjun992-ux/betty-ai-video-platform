@@ -236,6 +236,31 @@ export async function editImageTool(params: {
   return res.json();
 }
 
+/** List content-library items (uploads + generated) */
+export async function listLibrary(params: { media_type?: string; source?: string; limit?: number } = {}): Promise<{ items: any[]; total: number; counts: any }> {
+  const q = new URLSearchParams();
+  if (params.media_type) q.set("media_type", params.media_type);
+  if (params.source) q.set("source", params.source);
+  q.set("limit", String(params.limit ?? 60));
+  const res = await fetch(`${API_BASE}/library/?${q.toString()}`);
+  if (!res.ok) throw new Error(`加载素材库失败: ${res.status}`);
+  return res.json();
+}
+
+/** Compose an ordered list of clips into one film (timeline editor) */
+export async function composeTimeline(clips: { url: string }[], opts: { narration_url?: string; with_audio?: boolean } = {}): Promise<{ url: string; thumbnail: string; clip_count: number }> {
+  const res = await fetch(`${API_BASE}/timeline/compose`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clips, narration_url: opts.narration_url ?? null, with_audio: opts.with_audio ?? true }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `合成失败: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Like (or undo) a gallery item — real persisted community reaction */
 export async function likeGalleryItem(itemId: string, undo = false): Promise<{ likes: number; liked: boolean }> {
   const res = await fetch(`${API_BASE}/gallery/${encodeURIComponent(itemId)}/like?undo=${undo}`, { method: "POST" });

@@ -2,408 +2,197 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
-import { Plus, Trash2, Play, Save, Layers, GripVertical, Film, CheckCircle, RefreshCw } from "lucide-react";
-import { useCreationStore } from "@/lib/stores";
+import {
+  Plus, Trash2, ChevronLeft, ChevronRight, Film, Loader2,
+  Sparkles, Download, Music, ImageIcon, Video as VideoIcon,
+} from "lucide-react";
+import { listLibrary, composeTimeline, API_BASE } from "@/lib/api";
+import { useToast } from "@/components/Toast";
+import { cn } from "@/lib/utils";
 
-import { API_BASE } from "@/lib/api";
+interface LibItem { id: string; url: string; thumbnail?: string | null; title: string; media_type: string; }
+interface Clip { key: string; url: string; thumbnail?: string | null; title: string; }
 
-interface Clip {
-  url: string;
-  start: number;
-  end: number;
-  transition: string;
-  label?: string;
+function resolveMedia(url: string): string {
+  if (!url) return url;
+  if (url.startsWith("http")) return url;
+  return `${API_BASE.replace(/\/api\/v1$/, "")}${url}`;
 }
 
-interface Project {
-  id: string;
-  name: string;
-  clips: Clip[];
-  created_at: string;
-  updated_at: string;
-}
-
-const TRANSITIONS = [
-  { id: "cut", label: "剪切" },
-  { id: "fade", label: "淡入淡出" },
-  { id: "dissolve", label: "溶解" },
-  { id: "slide", label: "滑动" },
-  { id: "zoom", label: "缩放" },
-];
-
-export default function TimelineEditorPage() {
-  const router = useRouter();
-
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProject, setActiveProject] = useState<Project | null>(null);
-  const [projectName, setProjectName] = useState("未命名项目");
-  const [clips, setClips] = useState<Clip[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [renderResult, setRenderResult] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export default function TimelinePage() {
+  const toast = useToast();
+  const [videos, setVideos] = useState<LibItem[]>([]);
+  const [audios, setAudios] = useState<LibItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [track, setTrack] = useState<Clip[]>([]);
+  const [narration, setNarration] = useState<LibItem | null>(null);
+  const [withAudio, setWithAudio] = useState(true);
+  const [composing, setComposing] = useState(false);
+  const [result, setResult] = useState<{ url: string; thumbnail: string } | null>(null);
 
-  // Load projects
   useEffect(() => {
-    fetch(`${API_BASE}/timeline/projects`)
-      .then((r) => r.json())
-      .then((data) => {
-        setProjects(data.projects || []);
+    (async () => {
+      try {
+        const [v, a] = await Promise.all([
+          listLibrary({ media_type: "video", limit: 60 }),
+          listLibrary({ media_type: "audio", limit: 30 }),
+        ]);
+        setVideos((v.items || []).filter((i: LibItem) => i.url));
+        setAudios((a.items || []).filter((i: LibItem) => i.url));
+      } catch (e: any) {
+        toast.error("加载素材库失败", e.message || "");
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
-
-  const selectProject = useCallback((project: Project) => {
-    setActiveProject(project);
-    setProjectName(project.name);
-    setClips([...project.clips]);
-    setError(null);
-    setRenderResult(null);
-  }, []);
-
-  const addClip = useCallback(() => {
-    setClips((prev) => [
-      ...prev,
-      { url: "", start: 0, end: 5, transition: "cut", label: `片段 ${prev.length + 1}` },
-    ]);
-  }, []);
-
-  const removeClip = useCallback((index: number) => {
-    setClips((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const updateClip = useCallback((index: number, field: string, value: any) => {
-    setClips((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
-  }, []);
-
-  const moveClip = useCallback((from: number, to: number) => {
-    if (to < 0 || to >= clips.length) return;
-    setClips((prev) => {
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  }, [clips.length]);
-
-  const saveProject = async () => {
-    setSubmitting(true);
-    setError(null);
-    try {
-      const body = {
-        id: activeProject?.id || undefined,
-        name: projectName,
-        clips: clips.filter((c) => c.url.trim()),
-      };
-      const res = await fetch(`${API_BASE}/timeline/projects`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error("保存失败");
-      const data = await res.json();
-
-      // Refresh projects
-      const projRes = await fetch(`${API_BASE}/timeline/projects`);
-      const projData = await projRes.json();
-      setProjects(projData.projects || []);
-      setActiveProject({ ...body, id: data.id, created_at: data.created_at, updated_at: data.updated_at } as any);
-    } catch (err: any) {
-      setError(err.message);
-    }
-    setSubmitting(false);
-  };
-
-  const renderTimeline = async () => {
-    if (!activeProject) return;
-    setSubmitting(true);
-    setProgress(0);
-    setError(null);
-    try {
-      const res = await fetch(`${API_BASE}/timeline/render`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: activeProject.id, quality: "balanced", format: "mp4" }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "渲染失败");
       }
-      const data = await res.json();
+    })();
+  }, []);
 
-      // Poll progress
-      const poll = setInterval(async () => {
-        try {
-          const tr = await fetch(`${API_BASE}/tasks/${data.task_id}`);
-          if (!tr.ok) return;
-          const td = await tr.json();
-          if (td.status === "completed") {
-            clearInterval(poll);
-            setProgress(100);
-            setRenderResult(td.result_url);
-            setSubmitting(false);
-          } else if (td.status === "failed") {
-            clearInterval(poll);
-            setError(td.error_message || "渲染失败");
-            setSubmitting(false);
-          } else {
-            const p = td.parameters?.progress;
-            if (p) setProgress(Math.min(99, p));
-          }
-        } catch {}
-      }, 2000);
-    } catch (err: any) {
-      setError(err.message);
-      setSubmitting(false);
-    }
+  const addClip = useCallback((item: LibItem) => {
+    setTrack((t) => [...t, { key: `${item.id}-${Date.now()}`, url: item.url, thumbnail: item.thumbnail, title: item.title }]);
+    setResult(null);
+  }, []);
+  const removeClip = (key: string) => { setTrack((t) => t.filter((c) => c.key !== key)); setResult(null); };
+  const move = (idx: number, dir: -1 | 1) => {
+    setTrack((t) => {
+      const n = [...t]; const j = idx + dir;
+      if (j < 0 || j >= n.length) return t;
+      [n[idx], n[j]] = [n[j], n[idx]];
+      return n;
+    });
+    setResult(null);
   };
 
-  const totalDuration = clips
-    .filter((c) => c.url.trim())
-    .reduce((sum, c) => sum + Math.max(0, c.end - c.start), 0);
-
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 w-48 bg-white/[0.05] rounded" />
-          <div className="h-96 bg-white/[0.02] rounded-2xl" />
-        </div>
-      </div>
-    );
-  }
+  const compose = async () => {
+    if (track.length < 1) { toast.error("请先添加片段", "从下方素材库添加视频到时间线"); return; }
+    setComposing(true);
+    setResult(null);
+    try {
+      const res = await composeTimeline(
+        track.map((c) => ({ url: c.url })),
+        { with_audio: withAudio, narration_url: narration?.url },
+      );
+      setResult({ url: resolveMedia(res.url), thumbnail: resolveMedia(res.thumbnail) });
+      toast.success("合成完成", `${res.clip_count} 个片段已合成为一条成片`);
+    } catch (e: any) {
+      toast.error("合成失败", e.message || "请稍后重试");
+    } finally {
+      setComposing(false);
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-bold mb-1 text-text-accent-cyan">时间轴编辑</h1>
-        <p className="text-text-secondary text-sm mb-8">
-          多片段编排，添加转场效果，渲染合成为完整视频
-        </p>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 mb-6">
+        <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-50 border border-cosmic-border text-2xl">🎞️</span>
+        <div>
+          <h1 className="text-2xl font-bold gradient-text-static">时间线编辑器</h1>
+          <p className="text-text-secondary text-sm">把多个片段按顺序排列，一键合成为成片（真实 ffmpeg 拼接）</p>
+        </div>
       </motion.div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Project List */}
-        <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="lg:col-span-1"
-        >
-          <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-text-accent-cyan">项目列表</h3>
-              <button
-                onClick={() => {
-                  setActiveProject(null);
-                  setProjectName("未命名项目");
-                  setClips([]);
-                  setRenderResult(null);
-                  setError(null);
-                }}
-                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-              >
-                <Plus className="w-3 h-3" />
-                新建
-              </button>
+      {/* Preview / result */}
+      <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface overflow-hidden mb-5">
+        <div className="aspect-video bg-black flex items-center justify-center">
+          {composing ? (
+            <div className="text-center text-white/80"><Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />正在合成成片…</div>
+          ) : result ? (
+            <video src={result.url} poster={result.thumbnail} controls autoPlay className="w-full h-full object-contain" />
+          ) : (
+            <div className="text-center text-text-tertiary/60">
+              <Film className="w-10 h-10 mx-auto mb-2" />
+              <p className="text-sm">成片预览将显示在这里</p>
             </div>
-            <div className="space-y-1 max-h-96 overflow-y-auto">
-              {projects.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => selectProject(p)}
-                  className={`w-full text-left p-3 rounded-xl transition-all ${
-                    activeProject?.id === p.id
-                      ? "bg-blue-500/10 border border-blue-500/20"
-                      : "hover:bg-white/[0.03] border border-transparent"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <Film className="w-4 h-4 text-text-secondary flex-shrink-0" />
-                    <span className="text-sm text-text-accent-cyan truncate">{p.name}</span>
-                  </div>
-                  <div className="text-xs text-text-secondary mt-1">
-                    {p.clips?.length || 0} 片段 · {p.clips?.reduce((s, c) => s + Math.max(0, c.end - c.start), 0).toFixed(0) || 0}s
-                  </div>
-                </button>
-              ))}
-              {projects.length === 0 && (
-                <p className="text-xs text-text-secondary text-center py-4">暂无项目，点击新建</p>
-              )}
-            </div>
-          </div>
-
-          {/* Render Result */}
-          {renderResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 p-4 rounded-2xl bg-green-500/5 border border-green-500/10"
-            >
-              <div className="flex items-center gap-2 text-green-400 mb-2">
-                <CheckCircle className="w-4 h-4" />
-                <span className="text-sm font-medium">渲染完成</span>
-              </div>
-              <video src={renderResult} controls className="w-full rounded-xl" />
-            </motion.div>
           )}
-        </motion.div>
+        </div>
+        {result && (
+          <div className="flex items-center justify-between px-4 py-2.5 border-t border-cosmic-border">
+            <span className="text-xs text-text-secondary">成片已生成 · {track.length} 镜</span>
+            <a href={result.url} download className="btn-secondary text-sm"><Download className="w-4 h-4" /> 下载成片</a>
+          </div>
+        )}
+      </div>
 
-        {/* Right: Timeline Editor */}
-        <motion.div
-          initial={{ opacity: 0, x: 10 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="lg:col-span-2"
-        >
-          <div className="rounded-2xl bg-white/[0.02] border border-white/[0.06] p-4">
-            {/* Project Name */}
-            <div className="flex items-center gap-3 mb-4">
-              <input
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                className="flex-1 bg-transparent text-lg font-semibold text-text-accent-cyan border-b border-white/[0.08] pb-1 focus:outline-none focus:border-blue-500/30"
-                placeholder="项目名称"
-              />
-              <button
-                onClick={saveProject}
-                disabled={submitting}
-                className="px-4 py-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-sm text-text-accent-cyan flex items-center gap-1.5 transition-all disabled:opacity-30"
-              >
-                <Save className="w-4 h-4" />
-                保存
-              </button>
-              <button
-                onClick={renderTimeline}
-                disabled={submitting || clips.filter((c) => c.url.trim()).length === 0}
-                className="px-4 py-2 rounded-xl bg-white text-black font-semibold text-sm hover:bg-white/90 flex items-center gap-1.5 transition-all active:scale-[0.98] disabled:opacity-30"
-              >
-                <Play className="w-4 h-4" />
-                渲染
-              </button>
-            </div>
+      {/* Timeline track */}
+      <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface p-4 mb-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-semibold text-text-primary flex items-center gap-2"><Film className="w-4 h-4 text-brand" /> 时间线 · {track.length} 镜</span>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
+              <input type="checkbox" checked={withAudio} onChange={(e) => setWithAudio(e.target.checked)} className="accent-brand" /> 混入音轨
+            </label>
+            <button onClick={compose} disabled={composing || track.length < 1} className="btn-primary h-9 px-4 text-sm">
+              {composing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} 合成成片
+            </button>
+          </div>
+        </div>
 
-            {/* Progress */}
-            {submitting && progress > 0 && (
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-text-secondary">渲染中</span>
-                  <span className="text-xs text-text-secondary">{Math.round(progress)}%</span>
+        {track.length === 0 ? (
+          <div className="h-24 rounded-xl border border-dashed border-cosmic-border flex items-center justify-center text-sm text-text-tertiary">
+            从下方素材库点击视频，加入时间线
+          </div>
+        ) : (
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {track.map((c, i) => (
+              <div key={c.key} className="relative flex-shrink-0 w-40 group">
+                <div className="aspect-video rounded-lg overflow-hidden ring-1 ring-cosmic-border bg-black">
+                  {c.thumbnail ? <img src={resolveMedia(c.thumbnail)} alt="" className="w-full h-full object-cover" />
+                    : <video src={resolveMedia(c.url)} muted className="w-full h-full object-cover" />}
                 </div>
-                <div className="h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
-                  <motion.div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500"
-                    animate={{ width: `${progress}%` }}
-                    transition={{ duration: 0.3 }}
-                  />
+                <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-[10px] text-white font-semibold">#{i + 1}</div>
+                <div className="absolute inset-x-0 bottom-1 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => move(i, -1)} disabled={i === 0} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => removeClip(c.key)} className="w-6 h-6 rounded bg-black/70 text-white hover:bg-red-500 flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => move(i, 1)} disabled={i === track.length - 1} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
-            )}
+            ))}
+          </div>
+        )}
 
-            {error && (
-              <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
-                {error}
-              </div>
-            )}
-
-            {/* Clips */}
-            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
-              {clips.map((clip, index) => (
-                <motion.div
-                  key={index}
-                  layout
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.05] group"
-                >
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => moveClip(index, index - 1)}
-                      disabled={index === 0}
-                      className="p-0.5 opacity-0 group-hover:opacity-100 disabled:opacity-20 transition-opacity"
-                    >
-                      <GripVertical className="w-3 h-3 text-text-secondary" />
-                    </button>
-                    <button
-                      onClick={() => moveClip(index, index + 1)}
-                      disabled={index === clips.length - 1}
-                      className="p-0.5 opacity-0 group-hover:opacity-100 disabled:opacity-20 transition-opacity"
-                    >
-                      <GripVertical className="w-3 h-3 text-text-secondary rotate-180" />
-                    </button>
-                  </div>
-
-                  <div className="flex-1 grid grid-cols-4 gap-2">
-                    <input
-                      value={clip.url}
-                      onChange={(e) => updateClip(index, "url", e.target.value)}
-                      placeholder="素材URL"
-                      className="col-span-2 bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-text-accent-cyan placeholder:text-text-secondary/40 focus:outline-none focus:border-blue-500/30"
-                    />
-                    <input
-                      type="number"
-                      value={clip.start}
-                      onChange={(e) => updateClip(index, "start", parseFloat(e.target.value) || 0)}
-                      placeholder="开始(s)"
-                      className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-text-accent-cyan placeholder:text-text-secondary/40 focus:outline-none focus:border-blue-500/30"
-                    />
-                    <input
-                      type="number"
-                      value={clip.end}
-                      onChange={(e) => updateClip(index, "end", parseFloat(e.target.value) || 5)}
-                      placeholder="结束(s)"
-                      className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-3 py-2 text-xs text-text-accent-cyan placeholder:text-text-secondary/40 focus:outline-none focus:border-blue-500/30"
-                    />
-                  </div>
-
-                  <select
-                    value={clip.transition}
-                    onChange={(e) => updateClip(index, "transition", e.target.value)}
-                    className="bg-white/[0.03] border border-white/[0.06] rounded-lg px-2 py-2 text-xs text-text-accent-cyan focus:outline-none"
-                  >
-                    {TRANSITIONS.map((t) => (
-                      <option key={t.id} value={t.id} className="bg-gray-900">{t.label}</option>
-                    ))}
-                  </select>
-
-                  <button
-                    onClick={() => removeClip(index)}
-                    className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/10 text-red-400 transition-all"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </motion.div>
+        {/* Narration picker */}
+        {audios.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-cosmic-border">
+            <div className="flex items-center gap-2 mb-2 text-xs text-text-secondary"><Music className="w-3.5 h-3.5" /> 旁白 / 配乐（可选，替换默认环境音）</div>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => setNarration(null)} className={cn("px-3 py-1.5 rounded-lg text-xs border transition-all", !narration ? "bg-brand/[0.08] text-brand border-brand/25" : "bg-cosmic-subtle border-cosmic-border text-text-secondary")}>无</button>
+              {audios.map((a) => (
+                <button key={a.id} onClick={() => setNarration(a)} className={cn("px-3 py-1.5 rounded-lg text-xs border transition-all max-w-[160px] truncate", narration?.id === a.id ? "bg-brand/[0.08] text-brand border-brand/25" : "bg-cosmic-subtle border-cosmic-border text-text-secondary hover:text-text-primary")}>{a.title}</button>
               ))}
             </div>
-
-            {/* Add Clip */}
-            <button
-              onClick={addClip}
-              className="mt-3 w-full py-3 rounded-xl border-2 border-dashed border-white/[0.06] hover:border-blue-400/20 text-text-secondary hover:text-blue-400 text-sm flex items-center justify-center gap-2 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              添加片段
-            </button>
-
-            {/* Stats */}
-            <div className="mt-4 flex items-center gap-4 text-xs text-text-secondary">
-              <span>{clips.filter((c) => c.url.trim()).length} 个片段</span>
-              <span>总时长 {totalDuration.toFixed(1)}s</span>
-            </div>
           </div>
+        )}
+      </div>
 
-          {/* Tips */}
-          <div className="mt-4 p-4 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
-            <h3 className="text-sm font-semibold text-text-accent-cyan mb-2">使用技巧</h3>
-            <ul className="space-y-1 text-xs text-text-secondary">
-              <li>拖拽片段上下可调整顺序</li>
-              <li>每个片段可独立设置入点、出点和转场效果</li>
-              <li>URL 支持视频和图片素材</li>
-              <li>渲染时间 ≈ 总时长 × 3</li>
-            </ul>
+      {/* Media library picker */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <VideoIcon className="w-4 h-4 text-brand" />
+          <span className="text-sm font-semibold text-text-primary">素材库 · 视频（{videos.length}）</span>
+          <span className="text-xs text-text-tertiary">点击加入时间线</span>
+        </div>
+        {loading ? (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            {[...Array(6)].map((_, i) => <div key={i} className="aspect-video rounded-lg skeleton" />)}
           </div>
-        </motion.div>
+        ) : videos.length === 0 ? (
+          <div className="h-28 rounded-xl border border-dashed border-cosmic-border flex flex-col items-center justify-center text-sm text-text-tertiary gap-2">
+            <ImageIcon className="w-6 h-6" />
+            素材库暂无视频。先去 <a href="/create/video" className="text-brand underline">视频创作</a> 或 <a href="/agent" className="text-brand underline">Agent</a> 生成一些片段。
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+            {videos.map((v) => (
+              <button key={v.id} onClick={() => addClip(v)} title={v.title}
+                className="group relative aspect-video rounded-lg overflow-hidden ring-1 ring-cosmic-border hover:ring-brand/50 transition-all">
+                {v.thumbnail ? <img src={resolveMedia(v.thumbnail)} alt="" className="w-full h-full object-cover" />
+                  : <video src={resolveMedia(v.url)} muted className="w-full h-full object-cover" />}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white text-black text-xs font-semibold"><Plus className="w-3.5 h-3.5" /> 加入</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
