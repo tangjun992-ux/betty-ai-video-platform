@@ -19,12 +19,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app.models.base import Base
 from app.models import (
     User, Task, TaskResult, Transaction, UserBalance, DirectorSession,
+    Asset, Project, PaymentOrder,
 )
 from app.collector.models import TrendingTopic, ViralSignal, TrendReport
 
 target_metadata = Base.metadata
 
 db_url = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+# Alembic runs DDL synchronously for SQLite — use sync driver, not aiosqlite.
+if db_url.startswith("sqlite+aiosqlite"):
+    db_url = db_url.replace("sqlite+aiosqlite", "sqlite")
 config.set_main_option("sqlalchemy.url", db_url)
 _IS_SQLITE = "sqlite" in db_url
 
