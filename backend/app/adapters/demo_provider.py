@@ -436,6 +436,35 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
     return (f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{out_name}", poster_url)
 
 
+def run_demo_image_tool(op: str, data: bytes, factor: str = "2", ratio: str = "16:9") -> str:
+    """Offline image-tool fallback (used only when no KIE key is configured).
+    upscale = Lanczos resize; bg-remove/edit/extend = pass-through re-encode."""
+    import io as _io
+    gen_dir = _generated_dir()
+    name = f"tool_{op}_{uuid.uuid4().hex[:10]}.png"
+    out = gen_dir / name
+    img = Image.open(_io.BytesIO(data)).convert("RGBA")
+    if op == "upscale":
+        try:
+            f = int(float(factor))
+        except Exception:
+            f = 2
+        f = max(1, min(f, 4))
+        img = img.resize((img.width * f, img.height * f), Image.LANCZOS)
+    elif op == "extend":
+        try:
+            rw, rh = (int(x) for x in ratio.split(":"))
+        except Exception:
+            rw, rh = 16, 9
+        target_w = max(img.width, int(img.height * rw / rh))
+        target_h = max(img.height, int(img.width * rh / rw))
+        canvas = Image.new("RGBA", (target_w, target_h), (20, 20, 30, 255))
+        canvas.paste(img, ((target_w - img.width) // 2, (target_h - img.height) // 2))
+        img = canvas
+    img.save(out, "PNG")
+    return f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{name}"
+
+
 def render_demo_speech(text: str) -> str:
     """Offline placeholder 'voiceover': a short soft tone whose length scales
     with the text (used only when no TTS provider key is configured)."""

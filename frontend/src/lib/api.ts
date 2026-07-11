@@ -212,6 +212,30 @@ export async function generateSpeech(
   return res.json();
 }
 
+/** Run an image tool (edit / upscale / bg-remove / extend) — real KIE models */
+export async function editImageTool(params: {
+  operation: "edit" | "upscale" | "bg-remove" | "extend";
+  file?: File | null;
+  imageUrl?: string;
+  prompt?: string;
+  factor?: string;
+  ratio?: string;
+}): Promise<{ url: string; source_url?: string; media_type: string; model: string; operation?: string; cost?: number }> {
+  const fd = new FormData();
+  fd.append("operation", params.operation);
+  if (params.file) fd.append("image_file", params.file);
+  if (params.imageUrl) fd.append("image_url", params.imageUrl);
+  if (params.prompt) fd.append("prompt", params.prompt);
+  if (params.factor) fd.append("factor", params.factor);
+  if (params.ratio) fd.append("ratio", params.ratio);
+  const res = await fetch(`${API_BASE}/generate/edit`, { method: "POST", body: fd });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `处理失败: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Analyze a prompt without submitting — accepts string or object */
 export async function analyzePrompt(input: string | { prompt: string; media_type?: string; quality?: string; model?: string }) {
   const body = typeof input === "string" ? { prompt: input } : input;

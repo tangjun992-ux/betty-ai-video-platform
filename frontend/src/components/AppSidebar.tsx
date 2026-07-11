@@ -32,6 +32,7 @@ import {
   User,
   Maximize2,
   Scissors,
+  Expand,
   AudioLines,
   ScanLine,
   ChevronLeft,
@@ -59,6 +60,7 @@ const toolNav = [
   { href: "/create/timeline", icon: Clock, label: "时间线" },
   { href: "/create/upscale", icon: Maximize2, label: "AI 放大" },
   { href: "/create/bg-remove", icon: Scissors, label: "去背景" },
+  { href: "/create/extend", icon: Expand, label: "AI 扩图" },
   { href: "/create/audio", icon: AudioLines, label: "AI 音频" },
   { href: "/create/extract", icon: ScanLine, label: "内容提取" },
 ];

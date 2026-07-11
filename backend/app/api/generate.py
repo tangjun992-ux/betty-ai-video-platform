@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -297,6 +297,88 @@ async def generate_speech(req: SpeechRequest):
     out = (await _a.to_thread(persist_results, [out]))[0]
     return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
             "media_type": "audio", "model": res.model, "cost": res.cost}
+
+
+@router.post("/edit", summary="AI 图像工具 (编辑/超分/抠图/扩图)")
+async def edit_image_tool(
+    operation: str = Form(..., description="edit | upscale | bg-remove | extend"),
+    image_file: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),
+    prompt: Optional[str] = Form(None),
+    factor: str = Form("2"),
+    ratio: str = Form("16:9"),
+):
+    """Unified image-tool endpoint (对标 yapper 编辑/放大/去背景/扩图).
+    Uploads the source to a public URL then runs the real KIE model."""
+    import asyncio as _a
+    op = (operation or "").strip().lower()
+    if op not in ("edit", "upscale", "bg-remove", "extend"):
+        raise HTTPException(status_code=400, detail=f"未知操作: {operation}")
+    if not image_file and not image_url:
+        raise HTTPException(status_code=400, detail="请提供图片 (image_file 或 image_url)")
+    if op in ("edit",) and not (prompt and prompt.strip()):
+        raise HTTPException(status_code=400, detail="编辑操作需要 prompt 指令")
+
+    # Resolve source bytes
+    from app.adapters.demo_provider import demo_mode_active, _local_media_path
+    if image_file:
+        data = await image_file.read()
+        ctype = image_file.content_type or "image/png"
+    else:
+        p = _local_media_path(image_url)
+        if p:
+            with open(p, "rb") as f:
+                data = f.read()
+            ctype = "image/png"
+        else:
+            import httpx
+            async with httpx.AsyncClient(timeout=60) as c:
+                r = await c.get(image_url)
+                r.raise_for_status()
+                data = r.content
+                ctype = r.headers.get("content-type", "image/png")
+
+    if demo_mode_active():
+        from app.adapters.demo_provider import run_demo_image_tool
+        url = await _a.to_thread(run_demo_image_tool, op, data, factor, ratio)
+        return {"url": url, "media_type": "image", "model": f"demo-{op}", "demo": True}
+
+    from app.adapters.kie_adapter import KieAdapter
+    from app.services.media_store import persist_results
+    adapter = KieAdapter()
+    pub = await adapter.upload_public_url(data, filename="src.png", content_type=ctype)
+
+    async def _run():
+        if op == "upscale":
+            return await adapter.upscale_image(image_url=pub, factor=factor)
+        if op == "bg-remove":
+            return await adapter.remove_background(image_url=pub)
+        if op == "extend":
+            return await adapter.extend_image(image_url=pub, target_ratio=ratio, prompt=prompt or "")
+        return await adapter.edit_image(image_urls=[pub], prompt=prompt,
+                                        image_size=ratio if ratio else "auto")
+
+    # KIE image tools are intermittently flaky ("internal error") — retry.
+    res = None
+    last_err = None
+    for attempt in range(3):
+        try:
+            res = await _run()
+            break
+        except Exception as e:
+            last_err = e
+            msg = str(e).lower()
+            logger.warning("[edit] %s attempt %d failed: %s", op, attempt + 1, e)
+            if "internal error" in msg or "try again" in msg:
+                await _a.sleep(4)
+                continue
+            raise HTTPException(status_code=502, detail=f"{op} 处理失败: {e}")
+    if res is None:
+        raise HTTPException(status_code=502, detail=f"{op} 处理失败: {last_err}")
+    out = {"type": "image", "url": res.media_url, "media_url": res.media_url, "model": res.model}
+    out = (await _a.to_thread(persist_results, [out]))[0]
+    return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
+            "media_type": "image", "model": res.model, "operation": op, "cost": res.cost}
 
 
 class EnhanceRequest(BaseModel):

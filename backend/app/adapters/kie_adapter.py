@@ -287,6 +287,62 @@ class KieAdapter(BaseModelAdapter):
             meta={"kie_task_id": result.get("taskId", ""), "resolution": size},
         )
 
+    # ── image tools: edit / upscale / bg-remove / extend ──────
+    async def edit_image(self, *, image_urls: list[str], prompt: str,
+                         image_size: str = "auto", output_format: str = "png",
+                         model_id: str = "google/nano-banana-edit") -> GenerationResult:
+        """Instruction-based image editing (nano-banana-edit)."""
+        logger.info("[KIE] edit → %r", prompt[:50])
+        payload = {"model": model_id, "prompt": prompt, "image_urls": image_urls,
+                   "image_size": image_size, "output_format": output_format}
+        result = await self._submit_and_poll(payload, media_type="image", timeout=240)
+        return GenerationResult(
+            media_url=_extract_url(result, "imageUrl"), media_type="image", model=model_id,
+            cost=_extract_kie_cost(result, "image"),
+            meta={"kie_task_id": result.get("taskId", ""), "op": "edit"})
+
+    async def upscale_image(self, *, image_url: str, factor: str = "2",
+                            model_id: str = "topaz/image-upscale") -> GenerationResult:
+        """AI super-resolution upscale (Topaz)."""
+        logger.info("[KIE] upscale x%s", factor)
+        payload = {"model": model_id, "image_url": image_url, "upscale_factor": str(factor)}
+        result = await self._submit_and_poll(payload, media_type="image", timeout=300)
+        return GenerationResult(
+            media_url=_extract_url(result, "imageUrl"), media_type="image", model=model_id,
+            cost=_extract_kie_cost(result, "image"),
+            meta={"kie_task_id": result.get("taskId", ""), "op": "upscale", "factor": factor})
+
+    async def remove_background(self, *, image_url: str,
+                                model_id: str = "recraft/remove-background") -> GenerationResult:
+        """Background removal (Recraft); falls back to instruction-based cutout
+        via nano-banana-edit when Recraft is unavailable."""
+        logger.info("[KIE] remove-bg")
+        try:
+            payload = {"model": model_id, "image": image_url}
+            result = await self._submit_and_poll(payload, media_type="image", timeout=180)
+            return GenerationResult(
+                media_url=_extract_url(result, "imageUrl"), media_type="image", model=model_id,
+                cost=_extract_kie_cost(result, "image"),
+                meta={"kie_task_id": result.get("taskId", ""), "op": "bg-remove"})
+        except Exception as e:
+            logger.warning("[KIE] recraft remove-bg failed (%s) → nano-banana-edit fallback", e)
+            res = await self.edit_image(
+                image_urls=[image_url],
+                prompt=("cut out the main subject and place it on a pure solid white "
+                        "background, remove all other background elements cleanly"),
+                image_size="auto")
+            res.meta["op"] = "bg-remove"
+            return res
+
+    async def extend_image(self, *, image_url: str, target_ratio: str = "16:9",
+                           prompt: str = "") -> GenerationResult:
+        """Outpaint / reframe by editing into a wider canvas (nano-banana-edit)."""
+        instruction = (prompt or "").strip() or (
+            "naturally extend and outpaint the scene to fill the wider frame, "
+            "keeping the original subject centered and consistent")
+        return await self.edit_image(image_urls=[image_url], prompt=instruction,
+                                     image_size=target_ratio, output_format="png")
+
     # ── video generation ─────────────────────────────────────
     async def generate_video(
         self,
