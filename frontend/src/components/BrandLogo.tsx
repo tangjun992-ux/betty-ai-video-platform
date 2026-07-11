@@ -7,10 +7,15 @@ import { cn } from "@/lib/utils";
    BrandLogo:  图形 + 文字组合
    ═══════════════════════════════════════════════════════ */
 
-// The "b" glyph geometry, shared by all variants (stem + bowl ring, counter = hole).
-const B_STEM = { x: 20, y: 13, w: 7.5, h: 38, rx: 3.75 };
+// The "b" glyph geometry, shared by all variants.
+//   stem = vertical ascender bar; bowl = filled disc that OVERLAPS the stem so
+//   the two merge into one solid shape; counter (hole) is offset to the RIGHT of
+//   the stem so the stem↔bowl junction stays solid (fixes the old "detached ring
+//   reads as o/io" craft issue). Rendered with fillRule=evenodd (disc minus hole).
+const B_STEM = { x: 19, y: 11, w: 8, h: 40, rx: 4 };
 const B_BOWL =
-  "M33.6 24C40.9 24 46.8 29.9 46.8 37.2C46.8 44.5 40.9 50.4 33.6 50.4C26.3 50.4 20.4 44.5 20.4 37.2C20.4 29.9 26.3 24 33.6 24ZM33.6 31.2C30.3 31.2 27.6 33.9 27.6 37.2C27.6 40.5 30.3 43.2 33.6 43.2C36.9 43.2 39.6 40.5 39.6 37.2C39.6 33.9 36.9 31.2 33.6 31.2Z";
+  "M21.8 38a13.2 13.2 0 1 0 26.4 0a13.2 13.2 0 1 0 -26.4 0Z" +   // outer bowl disc (cx35 cy38 r13.2)
+  "M29.8 38a6.2 6.2 0 1 0 12.4 0a6.2 6.2 0 1 0 -12.4 0Z";        // counter hole (cx36 cy38 r6.2, right of stem)
 
 type BrandVariant = "gradient" | "solid" | "mono";
 
