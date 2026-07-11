@@ -234,9 +234,9 @@ const FOOTER_SECTIONS = [
   {
     title: "法律",
     links: [
-      { label: "服务条款", href: "#" },
-      { label: "隐私政策", href: "#" },
-      { label: "Cookie 政策", href: "#" },
+      { label: "服务条款", href: "/terms" },
+      { label: "隐私政策", href: "/privacy" },
+      { label: "内容政策", href: "/content-policy" },
     ],
   },
 ];

@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { PageTransition } from "@/components/PageTransition";
 import { ScrollProgress } from "@/components/ScrollProgress";
 import { CommandPalette } from "@/components/CommandPalette";
+import { CookieConsent } from "@/components/CookieConsent";
 import { AppShell } from "@/components/AppShell";
 
 const queryClient = new QueryClient({
@@ -63,6 +64,8 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
             {/* ⌘K Command Palette — global */}
             <CommandPalette />
+            {/* Cookie consent — global */}
+            <CookieConsent />
           </SidebarWidthHandler>
         </TooltipProvider>
       </ThemeProvider>
