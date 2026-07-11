@@ -417,12 +417,12 @@ export default function AgentPage() {
             <p className="text-sm text-text-secondary">一句话说出你想要的，AI 自动拆分镜、智能选模型、逐镜生成、剪辑成片</p>
           </div>
 
-          {/* Input */}
-          <div className="bg-cosmic-surface/40 border border-cosmic-border/40 rounded-2xl p-3 focus-within:border-brand/30 transition-all mb-3">
+          {/* Input — 旗舰画布输入 */}
+          <div className="bg-cosmic-surface border border-cosmic-border rounded-2xl p-3 shadow-sm focus-within:border-brand/50 focus-within:shadow-[0_0_0_4px_hsl(var(--brand)/0.10)] transition-all mb-3">
             <textarea value={brief} onChange={(e) => setBrief(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); makePlan(); } }}
-              placeholder="例如：做一个30秒的咖啡产品宣传片，电影级画质，竖屏抖音..."
-              rows={2} className="w-full bg-transparent border-0 resize-none text-sm placeholder:text-text-secondary/50 focus:outline-none" />
+              placeholder="例如：做一个30秒的咖啡产品宣传片，电影级画质，竖屏抖音…（⌘/Ctrl + ⏎ 开始导演）"
+              rows={3} className="w-full bg-transparent border-0 resize-none text-[15px] leading-relaxed placeholder:text-text-tertiary focus:outline-none" />
             <div className="flex items-center justify-between mt-2 pt-2 border-t border-cosmic-border/30">
               <div className="flex items-center gap-2">
                 <input ref={fileRef} type="file" accept="image/*" className="hidden"

@@ -821,34 +821,36 @@ export default function HomePage() {
                 })}
               </div>
 
-              {/* Unified multimodal input */}
-              <div className="relative mb-4">
-                <div className="relative rounded-2xl bg-cosmic-surface/50 backdrop-blur-xl border border-cosmic-border/50 shadow-elevation-sm transition-all duration-300 hover:border-accent-cyan/20 focus-within:border-accent-cyan/30 focus-within:shadow-glow-subtle">
-                  <input
-                    type="text"
-                    value={heroInput}
-                    onChange={(e) => setHeroInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") heroGo(); }}
-                    placeholder={
-                      heroMode === "agent"
-                        ? "一句话说出想要的，Agent 自动规划并生成..."
-                        : heroMode === "video"
-                        ? "描述你想要的视频画面与运镜..."
-                        : "描述你想要创作的图像..."
-                    }
-                    className="w-full h-14 pl-5 pr-28 bg-transparent text-body text-text-primary placeholder:text-text-tertiary focus:outline-none rounded-2xl"
-                  />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                    <Link href="/create/image" className="p-2 rounded-lg text-text-tertiary hover:text-accent-cyan hover:bg-cosmic-subtle transition-colors" title="添加参考媒体">
-                      <ImageIcon className="w-5 h-5" />
+              {/* Unified multimodal canvas input (multi-line, 旗舰级) */}
+              <div className="input-canvas mb-4">
+                <textarea
+                  value={heroInput}
+                  onChange={(e) => setHeroInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); heroGo(); }
+                  }}
+                  rows={3}
+                  placeholder={
+                    heroMode === "agent"
+                      ? "一句话说出想要的，例如：做一个 30 秒的咖啡产品宣传片，电影级画质，竖屏抖音。Agent 会自动规划→生成→精修…"
+                      : heroMode === "video"
+                      ? "描述你想要的视频画面、运镜与时长…"
+                      : "描述你想要创作的图像，越具体越好…"
+                  }
+                />
+                <div className="flex items-center justify-between px-3 pb-3 pt-1">
+                  <div className="flex items-center gap-1.5">
+                    <Link href="/create/image" className="btn-icon" title="添加参考媒体">
+                      <ImageIcon className="w-[18px] h-[18px]" />
                     </Link>
-                    <button
-                      onClick={() => heroGo()}
-                      className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-r from-accent-cyan via-accent-blue to-accent-violet text-white shadow-button-glow hover:brightness-110 active:scale-[0.97] transition-all"
-                    >
-                      <Sparkles className="w-5 h-5" />
-                    </button>
+                    <span className="hidden sm:inline text-[11px] text-text-tertiary select-none">
+                      <kbd className="font-sans">⏎</kbd> 发送 · <kbd className="font-sans">⇧⏎</kbd> 换行
+                    </span>
                   </div>
+                  <button onClick={() => heroGo()} className="btn-primary h-10 px-5">
+                    <Sparkles className="w-4 h-4" />
+                    {heroMode === "agent" ? "开始导演" : "开始创作"}
+                  </button>
                 </div>
               </div>
 
