@@ -125,7 +125,10 @@ async def usage(days: int = 30, db: AsyncSession = Depends(get_db),
     computed from the user's consumption transactions + completed tasks."""
     from datetime import timedelta
     from app.models.task import Task
-    since = datetime.now(timezone.utc) - timedelta(days=max(1, min(days, 365)))
+    since = (datetime.now(timezone.utc) - timedelta(days=max(1, min(days, 365)))).replace(tzinfo=None)
+
+    def _naive(dt):
+        return dt.replace(tzinfo=None) if (dt and dt.tzinfo) else dt
 
     # Consumption transactions (credits spent)
     res = await db.execute(
@@ -134,7 +137,7 @@ async def usage(days: int = 30, db: AsyncSession = Depends(get_db),
             Transaction.type == TransactionType.CONSUMPTION.value,
         ).order_by(desc(Transaction.created_at)).limit(2000)
     )
-    txns = [t for t in res.scalars().all() if (t.created_at and t.created_at >= since.replace(tzinfo=None))]
+    txns = [t for t in res.scalars().all() if (t.created_at and _naive(t.created_at) >= since)]
     total_spent = sum(-t.amount for t in txns)
 
     by_model: dict = {}
@@ -152,7 +155,7 @@ async def usage(days: int = 30, db: AsyncSession = Depends(get_db),
     by_type: dict = {}
     task_count = 0
     for t in tres.scalars().all():
-        if t.created_at and t.created_at < since.replace(tzinfo=None):
+        if t.created_at and _naive(t.created_at) < since:
             continue
         task_count += 1
         by_type[t.media_type or "image"] = by_type.get(t.media_type or "image", 0) + 1

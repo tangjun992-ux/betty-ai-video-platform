@@ -106,7 +106,7 @@ export default function BillingPage() {
       </div>
 
       {/* Usage report */}
-      {usage && (usage.total_spent > 0 || (usage.by_model || []).length > 0) && (
+      {usage && (
         <div className="mb-10">
           <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2"><BarChart3 className="w-4.5 h-4.5 text-brand" /> 用量概览 · 近 {usage.period_days} 天</h2>
           <div className="grid md:grid-cols-3 gap-4">
