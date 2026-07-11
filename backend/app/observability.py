@@ -57,13 +57,27 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         start = time.monotonic()
         status = 500
         try:
+            from app import metrics as _m
+            _m.HTTP_IN_FLIGHT.inc()
+        except Exception:
+            _m = None
+        try:
             response = await call_next(request)
             status = response.status_code
             response.headers["X-Request-ID"] = rid
             return response
         finally:
-            dur_ms = int((time.monotonic() - start) * 1000)
+            dur = time.monotonic() - start
+            dur_ms = int(dur * 1000)
             path = request.url.path
+            if _m is not None and not path.startswith("/api/v1/media") and path != "/metrics":
+                try:
+                    npath = _m.normalize_path(path)
+                    _m.HTTP_REQUESTS.labels(request.method, npath, str(status)).inc()
+                    _m.HTTP_LATENCY.labels(request.method, npath).observe(dur)
+                    _m.HTTP_IN_FLIGHT.dec()
+                except Exception:
+                    pass
             # Skip noisy static media in access logs
             if not path.startswith("/api/v1/media"):
                 try:

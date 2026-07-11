@@ -81,8 +81,22 @@ async def _unhandled_exception_handler(request: Request, exc: Exception):
     import logging
     from fastapi.responses import JSONResponse
     rid = getattr(request.state, "request_id", "-")
+    try:
+        from app.metrics import HTTP_EXCEPTIONS
+        HTTP_EXCEPTIONS.inc()
+    except Exception:
+        pass
     logging.getLogger("betty.error").exception("unhandled error rid=%s path=%s", rid, request.url.path)
     return JSONResponse(status_code=500, content={"detail": "服务器内部错误，请稍后重试", "request_id": rid})
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics (HTTP counters/latency + live queue depth + task counts)."""
+    from fastapi.responses import Response
+    from app.metrics import render_metrics
+    body, content_type = await render_metrics()
+    return Response(content=body, media_type=content_type)
 
 # Register routers
 # Auth first
@@ -123,6 +137,50 @@ async def health_check():
     healthy = all(v == "ok" for v in checks.values())
     return {"status": "ok" if healthy else "degraded",
             "version": settings.APP_VERSION, "checks": checks}
+
+
+@app.get("/health/ready")
+async def readiness():
+    """Deep readiness probe: DB, Redis, Celery workers, and queue backlog.
+    Returns 503 when a hard dependency (DB/Redis) is down (for load-balancer
+    readiness gating)."""
+    from fastapi.responses import JSONResponse
+    checks = {}
+    hard_ok = True
+    # DB
+    try:
+        from sqlalchemy import text
+        from app.db import async_session
+        async with async_session() as s:
+            await s.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {str(e)[:60]}"; hard_ok = False
+    # Redis + Celery workers + queue backlog
+    try:
+        import redis as _redis
+        c = _redis.Redis.from_url(settings.CELERY_BROKER_URL, socket_timeout=2)
+        c.ping()
+        checks["redis"] = "ok"
+        depths = {}
+        for q in ("celery", "image_q", "video_q", "director_q"):
+            try:
+                depths[q] = c.llen(q)
+            except Exception:
+                depths[q] = None
+        checks["queue_depth"] = depths
+    except Exception as e:
+        checks["redis"] = f"error: {str(e)[:60]}"; hard_ok = False
+    # Celery workers (best-effort ping)
+    try:
+        from celery_app import app as celery_app
+        pong = celery_app.control.ping(timeout=1.0)
+        checks["celery_workers"] = len(pong)
+    except Exception:
+        checks["celery_workers"] = 0
+    body = {"status": "ready" if hard_ok else "not_ready",
+            "version": settings.APP_VERSION, "checks": checks}
+    return JSONResponse(status_code=200 if hard_ok else 503, content=body)
 
 @app.get("/")
 async def root():
