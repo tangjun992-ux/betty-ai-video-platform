@@ -289,7 +289,7 @@ export default function CreateImagePage() {
         addResult({ url: r.url, type: (r.type || "image") as "image" | "video",
           prompt: src.prompt, model: res.estimated_model || src.model, seed: (r as any).seed });
       }
-      toast.success(mode === "vary" ? "变体已生成" : "已复现", mode === "vary" ? "已生成 4 张变体" : `种子 ${src.seed}`);
+      toast.success(mode === "vary" ? "变体已生成" : "已复现", mode === "vary" ? "已按新种子生成变体" : `种子 ${src.seed}`);
     } catch (e: any) {
       setError(e.message || "生成失败"); toast.error("失败", e.message || "");
     } finally {
@@ -651,7 +651,7 @@ export default function CreateImagePage() {
                           onClick={() => iterate("vary", { prompt: item.prompt, model: item.model, seed: item.seed })}
                           disabled={submitting}
                           className="btn-icon bg-brand/[0.85] hover:bg-brand backdrop-blur-sm text-white disabled:opacity-50"
-                          title="生成变体（同提示词，新种子 ×4）"
+                          title="生成变体（同提示词，新随机种子）"
                         >
                           <Wand2 className="w-4 h-4" />
                         </button>
