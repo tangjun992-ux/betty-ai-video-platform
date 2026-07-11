@@ -227,6 +227,12 @@ export function TopBar() {
                   积分中心
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/developer" className="cursor-pointer">
+                  <User className="w-4 h-4 mr-2" />
+                  开发者 API
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={handleLogout}

@@ -272,6 +272,24 @@ export async function editImageTool(params: {
   return res.json();
 }
 
+// ─── Developer API keys ─────────────────────────────────
+export async function listApiKeys(): Promise<{ keys: any[] }> {
+  const res = await fetch(`${API_BASE}/developer/keys`);
+  if (!res.ok) throw new Error(`加载密钥失败: ${res.status}`);
+  return res.json();
+}
+export async function createApiKeyPlatform(name: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/developer/keys`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `创建失败: ${res.status}`); }
+  return res.json();
+}
+export async function revokeApiKey(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/developer/keys/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`吊销失败: ${res.status}`);
+}
+
 // ─── Billing (积分/套餐) ────────────────────────────────
 export async function getBillingSummary(): Promise<any> {
   const res = await fetch(`${API_BASE}/billing/summary`);
