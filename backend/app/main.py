@@ -21,6 +21,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if _settings.is_production:
             resp.headers.setdefault(
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        # Generated media is content-addressed (uuid filenames) → immutable; long
+        # cache makes it CDN/browser cacheable for cheap edge delivery.
+        if request.url.path.startswith("/api/v1/media/"):
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return resp
 
 @asynccontextmanager
