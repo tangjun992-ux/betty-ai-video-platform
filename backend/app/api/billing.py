@@ -113,8 +113,113 @@ async def transactions(limit: int = 50, db: AsyncSession = Depends(get_db),
         "description": t.description,
         "model_used": t.model_used,
         "amount_usd": t.amount_usd,
+        "payment_id": t.payment_id,
         "created_at": t.created_at.isoformat() if t.created_at else "",
     } for t in rows]}
+
+
+@router.get("/usage", summary="用量报表（按用户聚合）")
+async def usage(days: int = 30, db: AsyncSession = Depends(get_db),
+                user_id: int = Depends(resolve_user_id)):
+    """Per-user usage report: spend total, by-model, by-type, daily series —
+    computed from the user's consumption transactions + completed tasks."""
+    from datetime import timedelta
+    from app.models.task import Task
+    since = datetime.now(timezone.utc) - timedelta(days=max(1, min(days, 365)))
+
+    # Consumption transactions (credits spent)
+    res = await db.execute(
+        select(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.type == TransactionType.CONSUMPTION.value,
+        ).order_by(desc(Transaction.created_at)).limit(2000)
+    )
+    txns = [t for t in res.scalars().all() if (t.created_at and t.created_at >= since.replace(tzinfo=None))]
+    total_spent = sum(-t.amount for t in txns)
+
+    by_model: dict = {}
+    daily: dict = {}
+    for t in txns:
+        m = t.model_used or "unknown"
+        by_model[m] = by_model.get(m, 0) + (-t.amount)
+        day = t.created_at.strftime("%Y-%m-%d") if t.created_at else "?"
+        daily[day] = daily.get(day, 0) + (-t.amount)
+
+    # By media type from tasks
+    tres = await db.execute(
+        select(Task).where(Task.user_id == user_id, Task.status == "completed").limit(2000)
+    )
+    by_type: dict = {}
+    task_count = 0
+    for t in tres.scalars().all():
+        if t.created_at and t.created_at < since.replace(tzinfo=None):
+            continue
+        task_count += 1
+        by_type[t.media_type or "image"] = by_type.get(t.media_type or "image", 0) + 1
+
+    return {
+        "period_days": days,
+        "total_spent": total_spent,
+        "task_count": task_count,
+        "by_model": sorted([{"model": k, "credits": v} for k, v in by_model.items()], key=lambda x: -x["credits"]),
+        "by_type": [{"type": k, "count": v} for k, v in by_type.items()],
+        "daily": [{"day": k, "credits": v} for k, v in sorted(daily.items())],
+    }
+
+
+@router.post("/refund/{order_no}", summary="申请退款（返还积分并记流水）")
+async def refund(order_no: str, db: AsyncSession = Depends(get_db),
+                 user_id: int = Depends(resolve_user_id)):
+    """Refund a purchase order: reverse the granted credits (down to 0) and
+    record a REFUND transaction. Idempotent (rejects if already refunded)."""
+    res = await db.execute(select(PaymentOrder).where(
+        PaymentOrder.order_no == order_no, PaymentOrder.user_id == user_id))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.status != "paid" or not order.granted:
+        raise HTTPException(status_code=400, detail="该订单不可退款（未支付或未发放）")
+    prior = await db.execute(select(Transaction).where(
+        Transaction.payment_id == order_no, Transaction.type == TransactionType.REFUND.value))
+    if prior.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="该订单已退款")
+
+    bal = await _get_balance(db, user_id)
+    before = bal.credits + bal.daily_credits
+    reversible = min(order.credits, bal.credits)  # can't claw back already-spent credits
+    bal.credits -= reversible
+    after = bal.credits + bal.daily_credits
+    db.add(Transaction(
+        user_id=user_id, type=TransactionType.REFUND.value, amount=-reversible,
+        balance_before=before, balance_after=after, amount_usd=order.amount_usd,
+        payment_method=order.provider, payment_id=order_no,
+        description=f"退款：{order.label}（-{reversible} 积分，退回 ${order.amount_usd}）",
+    ))
+    await db.commit()
+    return {"order_no": order_no, "refunded_credits": reversible, "refunded_usd": order.amount_usd,
+            "new_balance": after, "message": "退款成功，款项将原路退回"}
+
+
+@router.get("/receipt/{order_no}", summary="购买收据")
+async def receipt(order_no: str, db: AsyncSession = Depends(get_db),
+                  user_id: int = Depends(resolve_user_id)):
+    res = await db.execute(select(PaymentOrder).where(
+        PaymentOrder.order_no == order_no, PaymentOrder.user_id == user_id))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    return {
+        "order_no": order.order_no,
+        "label": order.label,
+        "kind": order.kind,
+        "credits": order.credits,
+        "amount_usd": order.amount_usd,
+        "amount_cny": order.amount_cny,
+        "provider": order.provider,
+        "status": order.status,
+        "created_at": order.created_at.isoformat() if order.created_at else "",
+        "merchant": "betty AI",
+    }
 
 
 @router.post("/checkout", summary="结算（Stripe-ready，无 key 时 dev 直发）",

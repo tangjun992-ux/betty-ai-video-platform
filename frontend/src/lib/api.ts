@@ -306,6 +306,21 @@ export async function getTransactions(limit = 50): Promise<{ transactions: any[]
   if (!res.ok) throw new Error(`加载流水失败: ${res.status}`);
   return res.json();
 }
+export async function getUsage(days = 30): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/usage?days=${days}`);
+  if (!res.ok) throw new Error(`加载用量失败: ${res.status}`);
+  return res.json();
+}
+export async function refundOrder(orderNo: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/refund/${orderNo}`, { method: "POST" });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `退款失败: ${res.status}`); }
+  return res.json();
+}
+export async function getReceipt(orderNo: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/receipt/${orderNo}`);
+  if (!res.ok) throw new Error(`加载收据失败: ${res.status}`);
+  return res.json();
+}
 export async function checkout(kind: "plan" | "pack", id: string, cycle: "monthly" | "yearly" = "monthly"): Promise<any> {
   const res = await fetch(`${API_BASE}/billing/checkout`, {
     method: "POST", headers: { "Content-Type": "application/json" },

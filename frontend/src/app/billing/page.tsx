@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Zap, Loader2, Check, TrendingUp, TrendingDown, Gift, Sparkles } from "lucide-react";
-import { getBillingSummary, getCreditPacks, getTransactions } from "@/lib/api";
+import { Zap, Loader2, Check, TrendingUp, TrendingDown, Gift, Sparkles, BarChart3, Receipt, RotateCcw, X } from "lucide-react";
+import { getBillingSummary, getCreditPacks, getTransactions, getUsage, refundOrder, getReceipt } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { PayModal, type PayTarget } from "@/components/PayModal";
 import { cn } from "@/lib/utils";
@@ -24,17 +24,29 @@ export default function BillingPage() {
   const [txns, setTxns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
+  const [usage, setUsage] = useState<any>(null);
+  const [receipt, setReceipt] = useState<any>(null);
 
   const load = useCallback(async () => {
     try {
-      const [s, p, t] = await Promise.all([getBillingSummary(), getCreditPacks(), getTransactions(20)]);
-      setSummary(s); setPacks(p.packs || []); setTxns(t.transactions || []);
+      const [s, p, t, u] = await Promise.all([getBillingSummary(), getCreditPacks(), getTransactions(30), getUsage(30)]);
+      setSummary(s); setPacks(p.packs || []); setTxns(t.transactions || []); setUsage(u);
     } catch (e: any) { toast.error("加载失败", e.message || ""); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
   const buy = (packId: string) => setPayTarget({ kind: "pack", id: packId });
+
+  const doRefund = async (orderNo: string) => {
+    if (!confirm("确认申请退款？将返还本单积分（已消耗部分不可退）。")) return;
+    try { const r = await refundOrder(orderNo); toast.success("退款成功", `已退回 ${r.refunded_credits} 积分`); window.dispatchEvent(new Event("betty:credits")); await load(); }
+    catch (e: any) { toast.error("退款失败", e.message || ""); }
+  };
+  const showReceipt = async (orderNo: string) => {
+    try { setReceipt(await getReceipt(orderNo)); } catch (e: any) { toast.error("加载收据失败", e.message || ""); }
+  };
+  const maxDaily = Math.max(1, ...((usage?.daily || []).map((d: any) => d.credits)));
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -93,6 +105,50 @@ export default function BillingPage() {
         ))}
       </div>
 
+      {/* Usage report */}
+      {usage && (usage.total_spent > 0 || (usage.by_model || []).length > 0) && (
+        <div className="mb-10">
+          <h2 className="text-lg font-semibold text-text-primary mb-4 flex items-center gap-2"><BarChart3 className="w-4.5 h-4.5 text-brand" /> 用量概览 · 近 {usage.period_days} 天</h2>
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface p-4">
+              <div className="text-xs text-text-tertiary mb-1">消耗积分</div>
+              <div className="text-2xl font-bold text-text-primary">{usage.total_spent.toLocaleString()}</div>
+              <div className="text-xs text-text-tertiary mt-1">完成任务 {usage.task_count}</div>
+            </div>
+            <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface p-4 md:col-span-2">
+              <div className="text-xs text-text-tertiary mb-2">按模型</div>
+              <div className="space-y-1.5">
+                {(usage.by_model || []).slice(0, 5).map((m: any) => {
+                  const pct = usage.total_spent ? Math.round((m.credits / usage.total_spent) * 100) : 0;
+                  return (
+                    <div key={m.model} className="flex items-center gap-2">
+                      <span className="text-xs text-text-secondary w-32 truncate">{m.model}</span>
+                      <div className="flex-1 h-2 rounded-full bg-cosmic-subtle overflow-hidden">
+                        <div className="h-full bg-brand rounded-full" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-xs text-text-tertiary w-14 text-right">{m.credits}</span>
+                    </div>
+                  );
+                })}
+                {(usage.by_model || []).length === 0 && <div className="text-xs text-text-tertiary">暂无消耗</div>}
+              </div>
+            </div>
+          </div>
+          {(usage.daily || []).length > 1 && (
+            <div className="mt-4 rounded-2xl border border-cosmic-border bg-cosmic-surface p-4">
+              <div className="text-xs text-text-tertiary mb-2">每日消耗</div>
+              <div className="flex items-end gap-1 h-20">
+                {usage.daily.map((d: any) => (
+                  <div key={d.day} className="flex-1 group relative flex flex-col justify-end" title={`${d.day}: ${d.credits}`}>
+                    <div className="w-full bg-brand/70 group-hover:bg-brand rounded-t transition-colors" style={{ height: `${Math.max(4, (d.credits / maxDaily) * 100)}%` }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Transactions */}
       <h2 className="text-lg font-semibold text-text-primary mb-4">积分流水</h2>
       <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface overflow-hidden">
@@ -116,9 +172,17 @@ export default function BillingPage() {
                       <div className="text-[11px] text-text-tertiary">{meta.label} · {(t.created_at || "").slice(0, 19).replace("T", " ")}</div>
                     </div>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className={cn("text-sm font-semibold", positive ? "text-success" : "text-text-primary")}>{positive ? "+" : ""}{t.amount}</div>
-                    <div className="text-[11px] text-text-tertiary">余额 {t.balance_after}</div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {t.type === "purchase" && t.payment_id && (
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => showReceipt(t.payment_id)} title="收据" className="btn-icon w-7 h-7 text-text-tertiary hover:text-brand"><Receipt className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => doRefund(t.payment_id)} title="退款" className="btn-icon w-7 h-7 text-text-tertiary hover:text-destructive"><RotateCcw className="w-3.5 h-3.5" /></button>
+                      </div>
+                    )}
+                    <div className="text-right">
+                      <div className={cn("text-sm font-semibold", positive ? "text-success" : "text-text-primary")}>{positive ? "+" : ""}{t.amount}</div>
+                      <div className="text-[11px] text-text-tertiary">余额 {t.balance_after}</div>
+                    </div>
                   </div>
                 </div>
               );
@@ -128,6 +192,31 @@ export default function BillingPage() {
       </div>
 
       <PayModal target={payTarget} onClose={() => setPayTarget(null)} onPaid={() => load()} />
+
+      {/* Receipt modal */}
+      {receipt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setReceipt(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-cosmic-surface border border-cosmic-border overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-cosmic-border">
+              <span className="font-semibold text-text-primary flex items-center gap-2"><Receipt className="w-4 h-4 text-brand" /> 购买收据</span>
+              <button onClick={() => setReceipt(null)} className="btn-icon"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="p-5 space-y-2.5 text-sm">
+              <div className="text-center pb-3 border-b border-dashed border-cosmic-border">
+                <div className="font-bold text-text-primary">{receipt.merchant}</div>
+                <div className="text-xs text-text-tertiary">收据 · Receipt</div>
+              </div>
+              {[["商品", receipt.label], ["积分", `${receipt.credits}`], ["金额 (USD)", `$${receipt.amount_usd}`], ["金额 (CNY)", `¥${receipt.amount_cny}`], ["支付方式", receipt.provider], ["状态", receipt.status], ["订单号", receipt.order_no], ["日期", (receipt.created_at || "").slice(0, 19).replace("T", " ")]].map(([k, v]) => (
+                <div key={k as string} className="flex justify-between gap-3">
+                  <span className="text-text-tertiary">{k}</span>
+                  <span className="text-text-primary font-medium text-right break-all">{v as string}</span>
+                </div>
+              ))}
+              <button onClick={() => window.print()} className="btn-secondary w-full mt-3 text-sm">打印 / 保存 PDF</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
