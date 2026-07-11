@@ -64,7 +64,7 @@ async def register(
     db.add(balance)
     await db.flush()
 
-    token = create_access_token({"sub": user.id, "username": user.username})
+    token = create_access_token({"sub": str(user.id), "username": user.username})
 
     return AuthResponse(
         access_token=token,
@@ -93,7 +93,7 @@ async def login(
     if not user.is_active:
         raise HTTPException(status_code=403, detail="账户已停用")
 
-    token = create_access_token({"sub": user.id, "username": user.username})
+    token = create_access_token({"sub": str(user.id), "username": user.username})
 
     return AuthResponse(
         access_token=token,
