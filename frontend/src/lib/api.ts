@@ -270,6 +270,31 @@ export async function checkout(kind: "plan" | "pack", id: string, cycle: "monthl
   return data;
 }
 
+// ─── QR Payments (微信支付 / 支付宝) ────────────────────
+export async function getPayMethods(): Promise<{ methods: Record<string, { live: boolean }>; usd_to_cny: number }> {
+  const res = await fetch(`${API_BASE}/billing/pay/methods`);
+  if (!res.ok) throw new Error(`加载支付方式失败: ${res.status}`);
+  return res.json();
+}
+export async function createPayOrder(kind: "plan" | "pack", id: string, method: "wechat" | "alipay", cycle: "monthly" | "yearly" = "monthly"): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/pay/create`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, id, method, cycle }),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `下单失败: ${res.status}`); }
+  return res.json();
+}
+export async function getPayStatus(orderNo: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/pay/status/${orderNo}`);
+  if (!res.ok) throw new Error(`查询失败: ${res.status}`);
+  return res.json();
+}
+export async function mockConfirmPay(orderNo: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/pay/mock-confirm/${orderNo}`, { method: "POST" });
+  if (!res.ok) throw new Error(`确认失败: ${res.status}`);
+  return res.json();
+}
+
 // ─── Projects (作品集) ──────────────────────────────────
 export interface ProjectItemRef { item_id: string; url: string; thumbnail?: string | null; media_type: string; title?: string | null; }
 export interface ProjectDTO { id: string; name: string; description?: string | null; cover?: string | null; item_count: number; items: ProjectItemRef[]; created_at: string; updated_at: string; }

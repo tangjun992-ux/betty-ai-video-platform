@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Zap, Loader2, Check, TrendingUp, TrendingDown, Gift, Sparkles } from "lucide-react";
-import { getBillingSummary, getCreditPacks, getTransactions, checkout } from "@/lib/api";
+import { getBillingSummary, getCreditPacks, getTransactions } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { PayModal, type PayTarget } from "@/components/PayModal";
 import { cn } from "@/lib/utils";
 
 const TYPE_META: Record<string, { label: string; cls: string }> = {
@@ -22,7 +23,7 @@ export default function BillingPage() {
   const [packs, setPacks] = useState<any[]>([]);
   const [txns, setTxns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -33,15 +34,7 @@ export default function BillingPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const buy = async (packId: string) => {
-    setBusy(packId);
-    try {
-      const r = await checkout("pack", packId);
-      if (r.mode === "dev") toast.success("充值成功", `+${r.credits_added} 积分已到账`);
-      await load();
-    } catch (e: any) { toast.error("充值失败", e.message || ""); }
-    finally { setBusy(null); }
-  };
+  const buy = (packId: string) => setPayTarget({ kind: "pack", id: packId });
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -92,8 +85,8 @@ export default function BillingPage() {
               </div>
               {pk.bonus > 0 && <div className="inline-flex items-center gap-1 text-[11px] text-brand"><Gift className="w-3 h-3" /> 额外赠送 {pk.bonus}</div>}
               <div className="text-sm text-text-secondary">${pk.price_usd}</div>
-              <button onClick={() => buy(pk.id)} disabled={!!busy} className="btn-primary w-full mt-auto text-sm">
-                {busy === pk.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />} 购买
+              <button onClick={() => buy(pk.id)} className="btn-primary w-full mt-auto text-sm">
+                <Zap className="w-4 h-4" /> 购买
               </button>
             </div>
           ) : <div key={i} className="aspect-[3/4] rounded-2xl skeleton" />
@@ -133,6 +126,8 @@ export default function BillingPage() {
           </div>
         )}
       </div>
+
+      <PayModal target={payTarget} onClose={() => setPayTarget(null)} onPaid={() => load()} />
     </div>
   );
 }

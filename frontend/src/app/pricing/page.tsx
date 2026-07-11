@@ -5,8 +5,8 @@ import { Check, ChevronDown, Info, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { checkout } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { PayModal, type PayTarget } from "@/components/PayModal";
 
 // 前 3 档固定，对齐 yapper: Starter 1k / Personal 3k / Creator 7k(Most Popular)
 const PLANS = [
@@ -59,21 +59,10 @@ export default function PricingPage() {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [yearly, setYearly] = useState(false);
+  const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
 
-  const subscribe = async (planId: string) => {
-    setBusy(planId);
-    try {
-      const r = await checkout("plan", planId, yearly ? "yearly" : "monthly");
-      if (r.mode === "dev") {
-        toast.success("订阅成功", `+${r.credits_added} 积分已到账`);
-        router.push("/billing");
-      }
-    } catch (e: any) {
-      toast.error("订阅失败", e.message || "");
-    } finally {
-      setBusy(null);
-    }
-  };
+  const subscribe = (planId: string) =>
+    setPayTarget({ kind: "plan", id: planId, cycle: yearly ? "yearly" : "monthly" });
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [maxIdx, setMaxIdx] = useState(1); // 默认 22.5k (yapper Best Value)
   const maxTier = MAX_TIERS[maxIdx];
@@ -238,6 +227,12 @@ export default function PricingPage() {
           ))}
         </div>
       </motion.div>
+
+      <PayModal
+        target={payTarget}
+        onClose={() => setPayTarget(null)}
+        onPaid={() => { toast.success("订阅成功", "积分已到账"); setTimeout(() => router.push("/billing"), 1200); }}
+      />
     </div>
   );
 }

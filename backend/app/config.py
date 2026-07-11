@@ -80,6 +80,24 @@ class Settings(BaseSettings):
     STRIPE_SUCCESS_URL: str = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:3000/billing?status=success")
     STRIPE_CANCEL_URL: str = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/pricing?status=cancel")
 
+    # Public base URL for payment async callbacks (must be public HTTPS in prod).
+    PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000")
+    # USD→CNY rate for RMB payment display (packs/plans are priced in USD).
+    USD_TO_CNY: float = float(os.getenv("USD_TO_CNY", "7.2"))
+
+    # WeChat Pay (Native 扫码). Live when appid+mchid+key+cert are configured.
+    WECHAT_APPID: str = os.getenv("WECHAT_APPID", "")
+    WECHAT_MCHID: str = os.getenv("WECHAT_MCHID", "")
+    WECHAT_API_V3_KEY: str = os.getenv("WECHAT_API_V3_KEY", "")
+    WECHAT_CERT_SERIAL_NO: str = os.getenv("WECHAT_CERT_SERIAL_NO", "")
+    WECHAT_PRIVATE_KEY_PATH: str = os.getenv("WECHAT_PRIVATE_KEY_PATH", "")
+
+    # Alipay (当面付/precreate 扫码). Live when app_id + keys are configured.
+    ALIPAY_APP_ID: str = os.getenv("ALIPAY_APP_ID", "")
+    ALIPAY_APP_PRIVATE_KEY_PATH: str = os.getenv("ALIPAY_APP_PRIVATE_KEY_PATH", "")
+    ALIPAY_PUBLIC_KEY_PATH: str = os.getenv("ALIPAY_PUBLIC_KEY_PATH", "")
+    ALIPAY_SANDBOX: bool = os.getenv("ALIPAY_SANDBOX", "true").lower() == "true"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

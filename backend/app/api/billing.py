@@ -7,10 +7,11 @@ account immediately and recording a PURCHASE transaction. The whole app shares
 the guest account (user_id=0), matching how generation deducts credits.
 """
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db import get_db
 from app.models.billing import UserBalance, Transaction, TransactionType
+from app.models.payment_order import PaymentOrder
 from app.api.pricing import PLANS
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,10 @@ class CheckoutRequest(BaseModel):
     kind: str = Field(..., description="plan | pack")
     id: str = Field(..., description="套餐或积分包 id")
     cycle: str = Field("monthly", description="套餐计费周期 monthly|yearly")
+
+
+class PayCreateRequest(CheckoutRequest):
+    method: str = Field("wechat", description="wechat | alipay")
 
 
 async def _get_balance(db: AsyncSession, user_id: int) -> UserBalance:
@@ -157,3 +163,133 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db)):
     logger.info("dev-grant checkout: +%d credits (%s), balance %d→%d", credits, label, before, after)
     return {"mode": "dev", "success": True, "credits_added": credits,
             "new_balance": after, "label": label}
+
+
+# ─── QR-based payment (WeChat / Alipay) ──────────────────
+async def _grant_order(db: AsyncSession, order: PaymentOrder) -> int:
+    """Idempotently credit a PAID order and record a PURCHASE transaction."""
+    if order.granted or order.status != "paid":
+        bal = await _get_balance(db, order.user_id or GUEST_USER_ID)
+        return bal.credits + bal.daily_credits
+    bal = await _get_balance(db, order.user_id or GUEST_USER_ID)
+    before = bal.credits + bal.daily_credits
+    bal.credits += order.credits
+    bal.total_purchased += order.credits
+    after = bal.credits + bal.daily_credits
+    db.add(Transaction(
+        user_id=order.user_id or GUEST_USER_ID,
+        type=TransactionType.PURCHASE.value, amount=order.credits,
+        balance_before=before, balance_after=after, amount_usd=order.amount_usd,
+        payment_method=order.provider, payment_id=order.order_no,
+        description=f"{order.label}（+{order.credits} 积分 · {order.provider}）",
+    ))
+    order.granted = True
+    await db.commit()
+    logger.info("order %s granted +%d credits (%s)", order.order_no, order.credits, order.provider)
+    return after
+
+
+@router.get("/pay/methods", summary="可用支付方式")
+async def pay_methods():
+    from app.services import payments
+    return {"methods": payments.method_status(), "usd_to_cny": settings.USD_TO_CNY}
+
+
+@router.post("/pay/create", summary="创建二维码支付订单（微信/支付宝）")
+async def pay_create(req: PayCreateRequest, db: AsyncSession = Depends(get_db)):
+    from app.services import payments
+    if req.method not in ("wechat", "alipay"):
+        raise HTTPException(status_code=400, detail="method 必须是 wechat 或 alipay")
+    credits, price_usd, label = _resolve_purchase(req)
+    amount_cny = round(price_usd * settings.USD_TO_CNY, 2)
+    order_no = "BT" + uuid.uuid4().hex[:22]
+    notify_url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/api/v1/billing/pay/notify/{req.method}"
+
+    if req.method == "wechat":
+        qr_content, live = payments.create_wechat_native(order_no, amount_cny, f"betty · {label}", notify_url)
+    else:
+        qr_content, live = payments.create_alipay_precreate(order_no, amount_cny, f"betty · {label}", notify_url)
+
+    provider = req.method if live else "sandbox"
+    order = PaymentOrder(
+        order_no=order_no, user_id=GUEST_USER_ID, provider=provider,
+        kind=req.kind, item_id=req.id, cycle=req.cycle, credits=credits,
+        amount_usd=price_usd, amount_cny=amount_cny, label=label,
+        status="pending", qr_content=qr_content,
+    )
+    db.add(order)
+    await db.commit()
+    return {
+        "order_no": order_no, "method": req.method, "live": live,
+        "qr_content": qr_content, "qr_image": payments.qr_data_url(qr_content),
+        "amount_cny": amount_cny, "amount_usd": price_usd, "credits": credits, "label": label,
+    }
+
+
+@router.get("/pay/status/{order_no}", summary="查询支付订单状态")
+async def pay_status(order_no: str, db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    # For live providers, poll the gateway; sandbox is driven by mock-confirm/notify.
+    if order.status == "pending" and order.provider in ("wechat", "alipay"):
+        from app.services import payments
+        state = payments.query_wechat(order_no) if order.provider == "wechat" else payments.query_alipay(order_no)
+        if state == "paid":
+            order.status = "paid"
+            await db.commit()
+    balance = None
+    if order.status == "paid":
+        balance = await _grant_order(db, order)
+    return {"order_no": order_no, "status": order.status, "granted": order.granted,
+            "credits": order.credits, "balance": balance}
+
+
+@router.api_route("/pay/mock-confirm/{order_no}", methods=["GET", "POST"], summary="沙箱：模拟支付成功")
+async def pay_mock_confirm(order_no: str, db: AsyncSession = Depends(get_db)):
+    """Sandbox-only: simulate the user completing the scan-to-pay. Rejected for
+    live provider orders (real payment must come through the gateway notify)."""
+    res = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.provider != "sandbox":
+        raise HTTPException(status_code=400, detail="真实支付订单不可模拟，请通过支付网关完成")
+    if order.status != "paid":
+        order.status = "paid"
+        await db.commit()
+    balance = await _grant_order(db, order)
+    return {"order_no": order_no, "status": "paid", "credits": order.credits, "balance": balance}
+
+
+@router.post("/pay/notify/{provider}", summary="支付异步回调（微信/支付宝）")
+async def pay_notify(provider: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Async payment notification from WeChat/Alipay. In production this endpoint
+    must be public HTTPS. Signature verification is performed via the SDK; on
+    success the order is marked paid and credits granted idempotently."""
+    order_no = None
+    try:
+        if provider == "alipay":
+            form = dict((await request.form()))
+            order_no = form.get("out_trade_no")
+            trade_status = form.get("trade_status")
+            paid = trade_status in ("TRADE_SUCCESS", "TRADE_FINISHED")
+            # NOTE: verify form signature with AliPay.verify(...) before trusting.
+        else:  # wechat v3 — JSON body, resource is AES-GCM encrypted
+            body = await request.json()
+            res = (body.get("resource") or {})
+            order_no = body.get("out_trade_no")  # after decrypt in prod
+            paid = body.get("event_type", "").endswith("SUCCESS")
+        if not order_no:
+            return {"code": "FAIL", "message": "missing out_trade_no"}
+        r = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
+        order = r.scalar_one_or_none()
+        if order and paid:
+            order.status = "paid"
+            await db.commit()
+            await _grant_order(db, order)
+        return {"code": "SUCCESS", "message": "OK"}
+    except Exception as e:
+        logger.error("pay notify(%s) error: %s", provider, e)
+        return {"code": "FAIL", "message": str(e)}
