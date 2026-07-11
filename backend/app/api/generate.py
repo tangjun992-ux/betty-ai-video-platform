@@ -100,6 +100,7 @@ class GenerateRequest(BaseModel):
     webhook_url: Optional[str] = Field(default=None, description="回调地址")
     enhance_prompt: Optional[bool] = Field(default=True, description="是否自动增强提示词")
     image_url: Optional[str] = Field(default=None, description="参考图片URL（用于图转视频）")
+    seed: Optional[int] = Field(default=None, ge=0, le=2147483647, description="随机种子（复现同一结果；留空则随机）")
 
 
 class GenerateResponse(BaseModel):
@@ -133,6 +134,10 @@ class RouterAnalysisResponse(BaseModel):
 async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get_db),
                             user_id: int = Depends(resolve_user_id)):
     task_id = str(uuid.uuid4())
+    # Deterministic seed: reuse the caller's (reproduce) or roll a fresh one so
+    # every generation is reproducible and variations can be requested later.
+    import random as _random
+    seed = req.seed if req.seed is not None else _random.randint(1, 2_147_483_647)
 
     # Stage 1: Smart prompt analysis
     analysis = prompt_router.analyze(
@@ -205,6 +210,7 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
             "duration": req.duration,
             "count": req.count,
             "style": req.style,
+            "seed": seed,
             "original_prompt": req.prompt if enhanced_prompt != req.prompt else None,
             "routing_info": json.dumps(routing_info),
         },
@@ -241,6 +247,7 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
         "duration": req.duration or 5,
         "count": req.count,
         "style": req.style,
+        "seed": seed,
     }
     if req.image_url:
         celery_params["image_url"] = req.image_url

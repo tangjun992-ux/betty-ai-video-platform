@@ -134,6 +134,7 @@ def generate_image_task(
     size = params.get("size", params.get("resolution", "1024x1024"))
     style = params.get("style", "auto")
     count = params.get("count", 1)
+    seed = params.get("seed")
 
     self.update_state(state="PROGRESS", meta={"current_stage": "generating", "progress": 50})
     _update_task(db_task_id, progress=50)
@@ -141,7 +142,7 @@ def generate_image_task(
 
     try:
         result = _run_async(
-            adapter.generate_image(prompt=prompt, model_id=model, size=size, style=style, count=count)
+            adapter.generate_image(prompt=prompt, model_id=model, size=size, style=style, count=count, seed=seed)
         )
         # Adapt single GenerationResult to list for uniform processing
         results = [result] if not isinstance(result, list) else result
@@ -163,6 +164,7 @@ def generate_image_task(
                 "model": rd.get("model", model),
                 "resolution": rd.get("resolution", size),
                 "cost": rd.get("cost", 0),
+                "seed": seed,
             }
             if rd.get("error"):
                 has_error = True

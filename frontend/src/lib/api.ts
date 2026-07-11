@@ -130,6 +130,7 @@ export interface GenerateRequest {
   style?: string;
   enhance_prompt?: boolean;
   image_url?: string;
+  seed?: number;
 }
 
 export interface GenerateResponse {
@@ -159,7 +160,7 @@ export interface TaskResult {
   progress?: number;
   current_stage?: string;
   result_url?: string;
-  results?: Array<{ url: string; type: string; model?: string; thumbnail?: string }>;
+  results?: Array<{ url: string; type: string; model?: string; thumbnail?: string; seed?: number }>;
   cost_credits?: number;
   started_at?: string;
   completed_at?: string;
@@ -183,6 +184,7 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
       style: req.style || null,
       enhance_prompt: req.enhance_prompt ?? true,
       image_url: req.image_url || null,
+      ...(req.seed != null ? { seed: req.seed } : {}),
     }),
   });
   if (!res.ok) {

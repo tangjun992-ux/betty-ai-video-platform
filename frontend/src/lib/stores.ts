@@ -74,8 +74,8 @@ interface CreationState {
   addRecentPrompt: (p: string) => void;
 
   // Results
-  results: Array<{ url: string; type: "image" | "video"; prompt: string; model: string }>;
-  addResult: (r: { url: string; type: "image" | "video"; prompt: string; model: string }) => void;
+  results: Array<{ url: string; type: "image" | "video"; prompt: string; model: string; seed?: number }>;
+  addResult: (r: { url: string; type: "image" | "video"; prompt: string; model: string; seed?: number }) => void;
 
   // Reset
   resetCreation: () => void;

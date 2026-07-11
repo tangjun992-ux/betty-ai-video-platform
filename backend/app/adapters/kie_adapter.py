@@ -271,6 +271,11 @@ class KieAdapter(BaseModelAdapter):
         payload["aspectRatio"] = ratio
         payload["aspect_ratio"] = ratio
 
+        # Seed for reproducibility / variations (honored by models that support it).
+        seed = kwargs.get("seed")
+        if seed is not None:
+            payload["seed"] = int(seed)
+
         # Number of images (n varies by model)
         if count > 1:
             payload["n"] = count
