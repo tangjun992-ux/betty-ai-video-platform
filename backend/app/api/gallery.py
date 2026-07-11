@@ -3,15 +3,39 @@ Gallery/Explore API — community showcase from real completed tasks.
 """
 import json
 import zlib
-from fastapi import APIRouter, Query, Depends
+from fastapi import APIRouter, Query, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, text
 from typing import Optional
 from app.db import get_db
 from app.models.task import Task
 from app.models.billing import Transaction, TransactionType
 
 router = APIRouter()
+
+_LIKES_DDL = (
+    "CREATE TABLE IF NOT EXISTS gallery_likes "
+    "(item_key TEXT PRIMARY KEY, likes INTEGER NOT NULL DEFAULT 0)"
+)
+
+
+async def _ensure_likes_table(db: AsyncSession) -> None:
+    await db.execute(text(_LIKES_DDL))
+
+
+async def _stored_likes(db: AsyncSession) -> dict:
+    """Map of item_key → real (community) like count."""
+    try:
+        await _ensure_likes_table(db)
+        rows = await db.execute(text("SELECT item_key, likes FROM gallery_likes"))
+        return {k: int(v) for k, v in rows.all()}
+    except Exception:
+        return {}
+
+
+def _base_likes(task_id: str) -> int:
+    """Deterministic seed so counts are stable across restarts (pre-community)."""
+    return zlib.crc32(task_id.encode()) % 100
 
 
 def _safe_dict(value) -> dict:
@@ -114,6 +138,8 @@ async def explore_gallery(
     result = await db.execute(q)
     tasks = result.scalars().all()
 
+    likes_map = await _stored_likes(db)
+
     items = []
     filtered_count = 0
     for t in tasks:
@@ -154,8 +180,10 @@ async def explore_gallery(
                     continue
 
                 ts = t.completed_at or t.created_at
+                item_key = f"{t.task_id}_{len(items)}"
+                likes = _base_likes(t.task_id) + likes_map.get(item_key, 0)
                 items.append({
-                    "id": f"{t.task_id}_{len(items)}",
+                    "id": item_key,
                     "task_id": t.task_id,
                     "prompt": t.prompt,
                     "media_type": item_media,
@@ -170,8 +198,7 @@ async def explore_gallery(
                     "created_at": ts.isoformat() if ts else "",
                     "username": "AI 创作者",
                     "avatar": "🤖",
-                    # crc32 is deterministic across restarts (unlike salted hash())
-                    "likes": zlib.crc32(t.task_id.encode()) % 100,
+                    "likes": likes,
                     "views": zlib.crc32((t.task_id + "v").encode()) % 1000,
                 })
             except Exception:
@@ -188,6 +215,29 @@ async def explore_gallery(
     paged = items[offset:offset + limit]
 
     return {"items": paged, "total": total, "limit": limit, "offset": offset, "styles": STYLE_OPTIONS}
+
+
+@router.post("/{item_key}/like", summary="点赞作品")
+async def like_item(item_key: str, undo: bool = Query(default=False), db: AsyncSession = Depends(get_db)):
+    """Increment (or undo) a community like for a gallery item. Persisted in
+    gallery_likes so counts survive restarts (real reactions, not seeded)."""
+    if not item_key or "_" not in item_key:
+        raise HTTPException(status_code=400, detail="无效的作品 ID")
+    task_id = item_key.rsplit("_", 1)[0]
+    await _ensure_likes_table(db)
+    delta = -1 if undo else 1
+    # upsert with a floor of 0 on the stored delta
+    await db.execute(
+        text(
+            "INSERT INTO gallery_likes (item_key, likes) VALUES (:k, :d) "
+            "ON CONFLICT(item_key) DO UPDATE SET likes = MAX(0, likes + :d)"
+        ),
+        {"k": item_key, "d": delta},
+    )
+    await db.commit()
+    row = await db.execute(text("SELECT likes FROM gallery_likes WHERE item_key = :k"), {"k": item_key})
+    stored = int(row.scalar() or 0)
+    return {"item_key": item_key, "likes": _base_likes(task_id) + stored, "liked": not undo}
 
 
 @router.get("/stats", summary="画廊统计")

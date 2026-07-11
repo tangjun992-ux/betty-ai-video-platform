@@ -236,6 +236,13 @@ export async function editImageTool(params: {
   return res.json();
 }
 
+/** Like (or undo) a gallery item — real persisted community reaction */
+export async function likeGalleryItem(itemId: string, undo = false): Promise<{ likes: number; liked: boolean }> {
+  const res = await fetch(`${API_BASE}/gallery/${encodeURIComponent(itemId)}/like?undo=${undo}`, { method: "POST" });
+  if (!res.ok) throw new Error(`点赞失败: ${res.status}`);
+  return res.json();
+}
+
 /** Analyze a prompt without submitting — accepts string or object */
 export async function analyzePrompt(input: string | { prompt: string; media_type?: string; quality?: string; model?: string }) {
   const body = typeof input === "string" ? { prompt: input } : input;

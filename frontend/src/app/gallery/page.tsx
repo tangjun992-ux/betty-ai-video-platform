@@ -51,6 +51,31 @@ export default function GalleryPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [resFilter, setResFilter] = useState("all");
   const [durFilter, setDurFilter] = useState("all");
+  const [lightbox, setLightbox] = useState<GalleryItem | null>(null);
+  const [liked, setLiked] = useState<Record<string, boolean>>({});
+  const [likeDelta, setLikeDelta] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    try { setLiked(JSON.parse(localStorage.getItem("betty-liked") || "{}")); } catch {}
+  }, []);
+
+  const toggleLike = useCallback(async (item: GalleryItem) => {
+    const isLiked = !!liked[item.id];
+    const next = { ...liked, [item.id]: !isLiked };
+    setLiked(next);
+    setLikeDelta((d) => ({ ...d, [item.id]: (d[item.id] || 0) + (isLiked ? -1 : 1) }));
+    try { localStorage.setItem("betty-liked", JSON.stringify(next)); } catch {}
+    try {
+      const { likeGalleryItem } = await import("@/lib/api");
+      await likeGalleryItem(item.id, isLiked);
+    } catch {
+      // revert on failure
+      setLiked(liked);
+      setLikeDelta((d) => ({ ...d, [item.id]: (d[item.id] || 0) + (isLiked ? 1 : -1) }));
+    }
+  }, [liked]);
+
+  const likeCount = useCallback((item: GalleryItem) => item.likes + (likeDelta[item.id] || 0), [likeDelta]);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -280,7 +305,8 @@ export default function GalleryPage() {
                   onMouseEnter={() => setHoveredId(item.id)}
                   onMouseLeave={() => setHoveredId(null)}
                 >
-                  {/* Media — fills the card, yapper-style media-forward layout */}
+                  {/* Media — click opens the detail lightbox */}
+                  <button type="button" onClick={() => setLightbox(item)} className="block w-full cursor-zoom-in" aria-label="查看详情">
                   {item.media_type === "video" ? (
                     <video
                       src={item.url}
@@ -297,6 +323,7 @@ export default function GalleryPage() {
                       loading="lazy"
                     />
                   )}
+                  </button>
 
                   {/* Top badges */}
                   <div className="absolute top-2.5 left-2.5 flex gap-1.5">
@@ -324,7 +351,13 @@ export default function GalleryPage() {
                       </p>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 text-[11px] text-white/70">
-                          <span className="inline-flex items-center gap-1">❤️ {item.likes}</span>
+                          <button
+                            onClick={() => toggleLike(item)}
+                            title="点赞"
+                            className={cn("inline-flex items-center gap-1 transition-colors", liked[item.id] ? "text-rose-400" : "hover:text-rose-300")}
+                          >
+                            <span>{liked[item.id] ? "❤️" : "🤍"}</span> {likeCount(item)}
+                          </button>
                           <span className="inline-flex items-center gap-1">👁 {item.views}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -369,11 +402,70 @@ export default function GalleryPage() {
           className="fixed bottom-8 right-8 w-10 h-10 rounded-full bg-cosmic-surface border border-cosmic-border shadow-elevation-md backdrop-blur-xl flex items-center justify-center hover:bg-cosmic-subtle transition-all z-40"
           aria-label="返回顶部"
         >
-          <svg className="w-5 h-5 text-text-accent-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>
         </button>
       )}
+
+      {/* ── Detail Lightbox (对标 Midjourney/Yapper 作品详情) ── */}
+      <AnimatePresence>
+        {lightbox && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 bg-black/80 backdrop-blur-sm"
+            onClick={() => setLightbox(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.98, opacity: 0 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative flex flex-col lg:flex-row gap-0 max-w-5xl w-full max-h-[88vh] rounded-2xl overflow-hidden bg-cosmic-surface border border-cosmic-border shadow-elevation-xl"
+            >
+              {/* Media */}
+              <div className="lg:flex-1 bg-black flex items-center justify-center min-h-[240px] max-h-[88vh]">
+                {lightbox.media_type === "video" ? (
+                  <video src={lightbox.url} poster={lightbox.thumbnail} controls autoPlay loop className="max-w-full max-h-[88vh] object-contain" />
+                ) : (
+                  <img src={lightbox.url} alt={lightbox.prompt} className="max-w-full max-h-[88vh] object-contain" />
+                )}
+              </div>
+              {/* Info panel */}
+              <div className="lg:w-80 flex-shrink-0 flex flex-col p-5 gap-4 overflow-y-auto">
+                <div className="flex items-center justify-between">
+                  <span className="text-lg">{lightbox.avatar}</span>
+                  <button onClick={() => setLightbox(null)} className="btn-icon" aria-label="关闭">✕</button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="badge-cyan">{lightbox.model_used}</span>
+                  {lightbox.media_type === "video" && <span className="badge-violet">视频</span>}
+                  {lightbox.resolution && <span className="badge">{lightbox.resolution}</span>}
+                  <span className="badge-warning">⚡{lightbox.credits_cost}</span>
+                </div>
+                <p className="text-sm text-text-secondary leading-relaxed">{lightbox.prompt}</p>
+                <div className="flex items-center gap-4 text-xs text-text-tertiary">
+                  <button onClick={() => toggleLike(lightbox)} className={cn("inline-flex items-center gap-1", liked[lightbox.id] ? "text-rose-500" : "hover:text-rose-500")}>
+                    {liked[lightbox.id] ? "❤️" : "🤍"} {likeCount(lightbox)}
+                  </button>
+                  <span>👁 {lightbox.views}</span>
+                </div>
+                <div className="mt-auto flex flex-col gap-2">
+                  <a
+                    href={lightbox.media_type === "video"
+                      ? `/create/video?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}`
+                      : `/create/image?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}`}
+                    className="btn-primary w-full"
+                  >✨ 做同款</a>
+                  <div className="flex gap-2">
+                    <button onClick={() => navigator.clipboard.writeText(lightbox.prompt)} className="btn-secondary flex-1 text-sm">复制提示词</button>
+                    <a href={lightbox.url} download className="btn-secondary flex-1 text-sm text-center">下载</a>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
