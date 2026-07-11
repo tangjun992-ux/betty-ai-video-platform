@@ -27,6 +27,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 async def lifespan(app: FastAPI):
     from app.config import settings
     from app.db import init_db
+    from app.observability import configure_logging, init_sentry
+    configure_logging()
+    init_sentry()
     print(f"[LIFESPAN] Starting AI Video Platform v{settings.APP_VERSION}")
     print(f"[LIFESPAN] Environment: {settings.ENV}")
 
@@ -60,7 +63,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from app.observability import RequestContextMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.CORS_ORIGINS,
@@ -68,6 +73,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """Never leak stack traces; log with the request id and return a clean 500."""
+    import logging
+    from fastapi.responses import JSONResponse
+    rid = getattr(request.state, "request_id", "-")
+    logging.getLogger("betty.error").exception("unhandled error rid=%s path=%s", rid, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "服务器内部错误，请稍后重试", "request_id": rid})
 
 # Register routers
 # Auth first

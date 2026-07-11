@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     STRIPE_SUCCESS_URL: str = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:3000/billing?status=success")
     STRIPE_CANCEL_URL: str = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/pricing?status=cancel")
 
+    # Observability
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+
     # Public base URL for payment async callbacks (must be public HTTPS in prod).
     PUBLIC_BASE_URL: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:8000")
     # USD→CNY rate for RMB payment display (packs/plans are priced in USD).
