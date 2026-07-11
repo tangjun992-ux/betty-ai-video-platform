@@ -80,13 +80,13 @@ def localize_media_url(url: str, media_hint: str = "") -> Optional[str]:
             elif ext == ".bin" and media_hint == "video":
                 ext = ".mp4"
 
-            out_dir = Path(settings.STORAGE_LOCAL_PATH) / GENERATED_SUBDIR
-            out_dir.mkdir(parents=True, exist_ok=True)
+            from app.services.storage import get_storage
             name = f"{uuid.uuid4().hex[:12]}{ext}"
-            (out_dir / name).write_bytes(content)
-            local = f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{name}"
-            logger.info("media_store: localized %s -> %s", url[:120], local)
-            return local
+            public = get_storage().save_bytes(
+                f"{GENERATED_SUBDIR}/{name}", content,
+                (resp.headers.get("content-type") or "").split(";")[0].strip() or None)
+            logger.info("media_store: localized %s -> %s", url[:120], public)
+            return public
     except Exception as e:
         logger.warning("media_store: failed to localize %s: %s", url[:120], e)
         return None
@@ -108,16 +108,15 @@ async def store_upload(db, filename: str, content: bytes, content_type: Optional
         else "image"
     )
 
-    upload_dir = Path(settings.STORAGE_LOCAL_PATH) / "uploads"
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    from app.services.storage import get_storage
     asset_id = str(uuid.uuid4())
     safe_name = f"{asset_id[:8]}{ext}"
-    (upload_dir / safe_name).write_bytes(content)
+    public_url = get_storage().save_bytes(f"uploads/{safe_name}", content, content_type)
 
     asset = Asset(
         asset_id=asset_id,
         media_type=media_type,
-        url=f"{MEDIA_URL_PREFIX}/uploads/{safe_name}",
+        url=public_url,
         filename=filename or safe_name,
         size_bytes=len(content),
         content_type=content_type,
