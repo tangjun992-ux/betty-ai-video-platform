@@ -33,43 +33,17 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
+import { API_BASE } from "@/lib/api";
 
-// ─── Hero 演示轮播：真实创作示例（对应各模型可产出的画面）──
-const IMG = (id: string) =>
-  `https://images.unsplash.com/photo-${id}?w=900&q=75&auto=format&fit=crop`;
+// ─── Hero 演示轮播：由平台真实生成作品驱动（拉取 /gallery/，不用图库图）──
+type HeroCard = { prompt: string; model: string; type: "图片" | "视频"; image: string; video?: string };
 
-const DEMO_CARDS = [
-  {
-    prompt: "赛博朋克城市夜景，霓虹灯光，雨后街道",
-    model: "GPT Image 2",
-    type: "图片",
-    image: IMG("1493514789931-586cb221d7a7"),
-  },
-  {
-    prompt: "日式庭院，樱花飘落，柔光晨雾",
-    model: "Nano Banana 2",
-    type: "图片",
-    image: IMG("1522383225653-ed111181a951"),
-  },
-  {
-    prompt: "电影级科幻星云，宇宙深空运镜",
-    model: "Sora 2",
-    type: "视频",
-    image: IMG("1502134249126-9f3755a50d78"),
-  },
-  {
-    prompt: "产品摄影，极简白背景，柔和布光",
-    model: "Seedance 2.0",
-    type: "图片",
-    image: IMG("1523275335684-37898b6baf30"),
-  },
-  {
-    prompt: "专业商务写真，自然光影，浅景深",
-    model: "Kling 3.0",
-    type: "图片",
-    image: IMG("1507003211169-0a1dd7228f2d"),
-  },
-];
+function resolveMedia(url: string): string {
+  if (!url) return url;
+  if (url.startsWith("http")) return url;
+  const origin = API_BASE.replace(/\/api\/v1$/, "");
+  return `${origin}${url}`;
+}
 
 // ─── Stagger animation preset ──────────────────────────
 
@@ -189,22 +163,24 @@ const FEATURED_TOOLS = [
   },
 ];
 
+// 仅列平台实测可用（真实跑通）的模型，避免虚标点了就报错
 const MODELS = [
-  { name: "Kling 3.0", mono: "K", type: "视频", provider: "Kuaishou", badge: "Hot" },
   { name: "Seedance 2.0", mono: "S", type: "视频", provider: "ByteDance", badge: "Pro" },
   { name: "GPT Image 2", mono: "G", type: "图片", provider: "OpenAI", badge: "New" },
-  { name: "Runway Gen-3", mono: "R", type: "视频", provider: "Runway" },
-  { name: "Flux 1.1 Pro", mono: "F", type: "图片", provider: "Black Forest" },
-  { name: "Pixverse V6", mono: "P", type: "视频", provider: "Pixverse" },
-  { name: "Nano Banana", mono: "N", type: "图片", provider: "ByteDance" },
-  { name: "Veo 3", mono: "V", type: "视频", provider: "Google" },
+  { name: "Kling AI Avatar", mono: "K", type: "唇形", provider: "Kuaishou", badge: "Hot" },
+  { name: "Nano Banana 2", mono: "N", type: "图片", provider: "Google" },
+  { name: "Nano Banana Pro", mono: "P", type: "图片", provider: "Google" },
+  { name: "ElevenLabs", mono: "E", type: "配音", provider: "ElevenLabs" },
+  { name: "Topaz Upscale", mono: "T", type: "超分", provider: "Topaz" },
+  { name: "Recraft", mono: "R", type: "抠图", provider: "Recraft" },
 ];
 
+// 真实产品事实（非虚构增长数据）— 诚实且经得起推敲
 const STATS = [
-  { value: "2.4M+", label: "素材已生成", icon: Sparkles },
-  { value: "50K+", label: "活跃创作者", icon: Users },
-  { value: "15+", label: "AI 模型", icon: TrendingUp },
-  { value: "4.9", label: "用户评分", icon: Star },
+  { value: "15+", label: "顶级 AI 模型", icon: TrendingUp },
+  { value: "4K", label: "超高清输出", icon: Award },
+  { value: "秒级", label: "图片生成 · 分钟级出片", icon: Timer },
+  { value: "一句话", label: "Agent 自动成片", icon: Bot },
 ];
 
 const FEATURES = [
@@ -212,19 +188,19 @@ const FEATURES = [
     icon: Zap,
     title: "多模型路由",
     desc: "智能分发到最优 AI 模型，确保每次输出都是最佳质量，支持 15+ 主流模型一键切换",
-    color: "from-amber-400 to-orange-500",
+    color: "from-brand to-accent-violet",
   },
   {
     icon: Award,
     title: "专业品质",
     desc: "4K 超高清输出，专业色彩管理，商业授权可用，满足从社交媒体到印刷品的全场景需求",
-    color: "from-violet-400 to-purple-500",
+    color: "from-accent-violet to-accent-purple",
   },
   {
     icon: Timer,
     title: "极速生成",
     desc: "分布式 GPU 集群加速，图片秒级生成，视频分钟级交付，创作流程零等待",
-    color: "from-emerald-400 to-teal-500",
+    color: "from-brand-strong to-brand",
   },
 ];
 
@@ -289,10 +265,10 @@ function GridBg() {
             "radial-gradient(ellipse 80% 50% at 50% 0%, black 30%, transparent 70%)",
         }}
       />
-      {/* Blur orbs */}
-      <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-500/[0.06] rounded-full blur-[120px]" />
-      <div className="absolute top-1/3 right-0 w-[500px] h-[500px] bg-violet-500/[0.05] rounded-full blur-[120px]" />
-      <div className="absolute bottom-0 left-1/3 w-[400px] h-[400px] bg-accent-cyan/[0.04] rounded-full blur-[100px]" />
+      {/* Blur orbs — 品牌紫同源，去蓝紫混色 */}
+      <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-brand/[0.07] rounded-full blur-[120px]" />
+      <div className="absolute top-1/3 right-0 w-[500px] h-[500px] bg-accent-violet/[0.05] rounded-full blur-[120px]" />
+      <div className="absolute bottom-0 left-1/3 w-[400px] h-[400px] bg-accent-fuchsia/[0.03] rounded-full blur-[100px]" />
     </div>
   );
 }
@@ -429,14 +405,13 @@ function ToolGrid() {
                   </span>
                 )}
 
-                {/* Icon */}
+                {/* Icon — 统一品牌单色（去彩虹，对齐 Linear/Vercel 克制美学） */}
                 <div className={cn(
                   "w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 mb-4",
-                  "border border-cosmic-border/50 transition-all duration-300",
-                  "group-hover:scale-105 group-hover:shadow-sm",
-                  tool.iconBg
+                  "bg-brand/[0.06] border border-brand/10 transition-all duration-300",
+                  "group-hover:bg-brand/[0.12] group-hover:scale-105"
                 )}>
-                  <tool.icon className={cn("w-6 h-6", tool.iconColor)} />
+                  <tool.icon className="w-6 h-6 text-brand" />
                 </div>
 
                 {/* Text */}
@@ -467,7 +442,7 @@ function ToolGrid() {
 // ─── Models Section ────────────────────────────────────
 
 function ModelsSection() {
-  const spotlight = MODELS.filter(m => ["Seedance 2.0", "GPT Image 2", "Kling 3.0"].includes(m.name));
+  const spotlight = MODELS.filter(m => ["Seedance 2.0", "GPT Image 2", "Kling AI Avatar"].includes(m.name));
   const rest = MODELS.filter(m => !spotlight.includes(m));
 
   return (
@@ -527,7 +502,14 @@ function ModelsSection() {
               </div>
               {/* CTA */}
               <Link
-                href={m.type === "视频" ? "/create/video" : "/create/image"}
+                href={
+                  m.type === "视频" ? "/create/video"
+                  : m.type === "唇形" ? "/create/lipsync"
+                  : m.type === "配音" ? "/create/audio"
+                  : m.type === "超分" ? "/create/upscale"
+                  : m.type === "抠图" ? "/create/bg-remove"
+                  : "/create/image"
+                }
                 className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-brand hover:text-brand-strong transition-colors"
               >
                 开始创作 <span className="text-[10px]">→</span>
@@ -561,58 +543,67 @@ function ModelsSection() {
 }
 
 /* ═══════════════════════════════════════════════════════
-   Testimonials Section — 对标 yapper.so 创作者证言
+   Real Works Showcase — 平台真实产出瀑布流（替代虚构证言，诚实且更有说服力）
    ═══════════════════════════════════════════════════════ */
 
-const testimonials = [
-  { name: "@创作达人小陈", role: "AI 视频创作者", views: "2700万", followers: "8.9万", quote: "用 betty 的导演 Agent，一句话生成完整视频方案——从构思到出片不到 5 分钟，画面质感电影级别。" },
-  { name: "@品牌设计师Luna", role: "独立设计师", views: "1200万", followers: "5.2万", quote: "一站式切换 15+ 顶级模型，不用再在不同平台间导来导去。产品图渲染速度快到不敢信。" },
-  { name: "@科技博主阿杰", role: "内容创作者", views: "3500万", followers: "15.6万", quote: "唇形同步和运动控制让我的 AI 数字人频道两周涨粉 6 万，每月收入破 2000 美元。" },
-];
+function RealWorksSection() {
+  const [works, setWorks] = useState<HeroCard[]>([]);
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE}/gallery/?sort=popular&limit=12`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!active || !d) return;
+        const items = (Array.isArray(d) ? d : d.items || d.results || []) as any[];
+        const cards: HeroCard[] = items.map((it) => ({
+          prompt: it.prompt || "",
+          model: it.model_used || it.model || "",
+          type: it.media_type === "video" ? "视频" : "图片",
+          image: resolveMedia(it.thumbnail || it.url),
+          video: it.media_type === "video" ? resolveMedia(it.url) : undefined,
+        }));
+        if (cards.length) setWorks(cards);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
-function TestimonialsSection() {
+  if (works.length === 0) return null;
+
   return (
     <section className="px-4 pb-24">
       <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-12">
-          <p className="text-overline text-text-tertiary uppercase tracking-[0.2em] mb-3">CREDIBILITY</p>
-          <h2 className="text-2xl font-bold text-text-primary mb-2">创作者信赖</h2>
-          <p className="text-text-secondary">全球数万创作者正在用 betty 做出爆款内容</p>
+        <div className="flex items-end justify-between mb-8">
+          <div>
+            <p className="text-overline text-text-tertiary uppercase tracking-[0.2em] mb-2">SHOWCASE</p>
+            <h2 className="text-2xl font-bold text-text-primary mb-1">平台真实作品</h2>
+            <p className="text-text-secondary text-sm">全部由 betty 用真实模型生成 · 悬停查看模型与提示词</p>
+          </div>
+          <Link href="/explore" className="hidden sm:flex items-center gap-1 text-sm text-brand hover:text-brand-strong transition-colors">
+            探索全部 <ChevronRight className="w-4 h-4" />
+          </Link>
         </div>
-        <div className="grid md:grid-cols-3 gap-6">
-          {testimonials.map((t, i) => (
-            <motion.div
-              key={t.name}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1, duration: 0.5 }}
-              className="relative flex flex-col gap-4 p-6 rounded-2xl border border-cosmic-border bg-cosmic-surface"
+        <div className="columns-2 md:columns-3 lg:columns-4 gap-3 space-y-3">
+          {works.map((w, i) => (
+            <Link
+              key={w.image + i}
+              href="/explore"
+              className="group relative block rounded-xl overflow-hidden break-inside-avoid ring-1 ring-cosmic-border hover:ring-brand/40 transition-all"
             >
-              {/* Avatar + name */}
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-brand to-accent-fuchsia flex items-center justify-center text-white text-sm font-bold">
-                  {t.name.slice(1, 2)}
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-text-primary">{t.name}</div>
-                  <div className="text-xs text-text-tertiary">{t.role}</div>
-                </div>
+              {w.video ? (
+                <video src={w.video} poster={w.image} muted loop playsInline
+                  className="w-full object-cover align-middle"
+                  onMouseEnter={(e) => (e.currentTarget as HTMLVideoElement).play().catch(() => {})}
+                  onMouseLeave={(e) => (e.currentTarget as HTMLVideoElement).pause()} />
+              ) : (
+                <img src={w.image} alt={w.prompt} loading="lazy"
+                  className="w-full object-cover align-middle group-hover:scale-[1.03] transition-transform duration-500" />
+              )}
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-3">
+                <p className="text-[11px] text-white/95 line-clamp-2 mb-1">{w.prompt}</p>
+                {w.model && <span className="self-start text-[10px] text-white/80 px-1.5 py-0.5 rounded-full bg-white/15 backdrop-blur-sm">{w.model}</span>}
               </div>
-              {/* Stats */}
-              <div className="flex items-center gap-4 text-xs">
-                <span className="flex items-center gap-1 text-text-secondary">
-                  <span className="w-2 h-2 rounded-full bg-accent-fuchsia" /> {t.views} 播放
-                </span>
-                <span className="flex items-center gap-1 text-text-secondary">
-                  <span className="w-2 h-2 rounded-full bg-brand" /> {t.followers} 粉丝
-                </span>
-              </div>
-              {/* Quote */}
-              <p className="text-sm text-text-secondary leading-relaxed">&ldquo;{t.quote}&rdquo;</p>
-              {/* Stars */}
-              <div className="flex gap-0.5 text-brand text-sm">★★★★★</div>
-            </motion.div>
+            </Link>
           ))}
         </div>
       </div>
@@ -723,16 +714,37 @@ export default function HomePage() {
     router.push(heroInput.trim() ? `${path}?${key}=${encodeURIComponent(heroInput)}` : path);
   };
 
+  // Real generated works power the hero showcase (fetched from the gallery).
+  const [demoCards, setDemoCards] = useState<HeroCard[]>([]);
+  useEffect(() => {
+    let active = true;
+    fetch(`${API_BASE}/gallery/?sort=popular&limit=5`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!active || !d) return;
+        const items = (Array.isArray(d) ? d : d.items || d.results || []) as any[];
+        const cards: HeroCard[] = items.slice(0, 5).map((it) => ({
+          prompt: it.prompt || "AI 生成作品",
+          model: it.model_used || it.model || "",
+          type: it.media_type === "video" ? "视频" : "图片",
+          image: resolveMedia(it.thumbnail || it.url),
+          video: it.media_type === "video" ? resolveMedia(it.url) : undefined,
+        }));
+        if (cards.length) setDemoCards(cards);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   // Auto-advance demo carousel
   useEffect(() => {
+    if (demoCards.length < 2) return;
     const timer = setInterval(
-      () => setDemoVideoIdx((i) => (i + 1) % DEMO_CARDS.length),
+      () => setDemoVideoIdx((i) => (i + 1) % demoCards.length),
       4000
     );
     return () => clearInterval(timer);
-  }, []);
-
-  const demoCards = DEMO_CARDS;
+  }, [demoCards.length]);
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
@@ -901,39 +913,63 @@ export default function HomePage() {
                   </span>
                 </div>
 
-                {/* Demo content — real-work carousel */}
+                {/* Demo content — real-work carousel (platform-generated) */}
                 <div className="p-4 space-y-3">
+                  {demoCards.length === 0 ? (
+                    <>
+                      <div className="h-8 rounded-lg skeleton" />
+                      <div className="aspect-[16/10] rounded-xl skeleton" />
+                      <div className="flex gap-2">{[0,1,2,3,4].map((i) => <div key={i} className="flex-1 aspect-[4/3] rounded-lg skeleton" />)}</div>
+                    </>
+                  ) : (() => {
+                    const active = demoCards[demoVideoIdx] || demoCards[0];
+                    return (
+                  <>
                   {/* Prompt bar (the active prompt being generated) */}
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-cyan/[0.06] border border-accent-cyan/10">
-                    <div className="w-1.5 h-1.5 rounded-full bg-accent-cyan animate-glow-pulse flex-shrink-0" />
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-brand/[0.06] border border-brand/10">
+                    <div className="w-1.5 h-1.5 rounded-full bg-brand animate-glow-pulse flex-shrink-0" />
                     <AnimatePresence mode="wait">
                       <motion.span
-                        key={demoCards[demoVideoIdx].prompt}
+                        key={active.prompt}
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -4 }}
                         transition={{ duration: 0.3 }}
-                        className="text-caption text-accent-cyan font-medium truncate"
+                        className="text-caption text-brand font-medium truncate"
                       >
-                        {demoCards[demoVideoIdx].prompt}
+                        {active.prompt}
                       </motion.span>
                     </AnimatePresence>
                   </div>
 
-                  {/* Main preview — cross-fading real image */}
+                  {/* Main preview — cross-fading real image / video */}
                   <div className="relative aspect-[16/10] rounded-xl overflow-hidden bg-cosmic-subtle/50 border border-cosmic-border/40">
                     <AnimatePresence mode="popLayout">
-                      <motion.img
-                        key={demoCards[demoVideoIdx].image}
-                        src={demoCards[demoVideoIdx].image}
-                        alt={demoCards[demoVideoIdx].prompt}
-                        loading="eager"
-                        initial={{ opacity: 0, scale: 1.06 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 1.02 }}
-                        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-                        className="absolute inset-0 w-full h-full object-cover"
-                      />
+                      {active.video ? (
+                        <motion.video
+                          key={active.video}
+                          src={active.video}
+                          poster={active.image}
+                          muted loop playsInline autoPlay
+                          initial={{ opacity: 0, scale: 1.06 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 1.02 }}
+                          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      ) : (
+                        <motion.img
+                          key={active.image}
+                          src={active.image}
+                          alt={active.prompt}
+                          loading="eager"
+                          initial={{ opacity: 0, scale: 1.06 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 1.02 }}
+                          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      )}
                     </AnimatePresence>
 
                     {/* Bottom scrim + meta */}
@@ -941,23 +977,25 @@ export default function HomePage() {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
                         <span className="text-[11px] font-medium text-white/90 truncate">
-                          生成完成
+                          平台真实生成
                         </span>
                       </div>
-                      <span className="flex-shrink-0 text-[10px] font-semibold text-white/95 px-2 py-0.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20">
-                        {demoCards[demoVideoIdx].model}
-                      </span>
+                      {active.model && (
+                        <span className="flex-shrink-0 text-[10px] font-semibold text-white/95 px-2 py-0.5 rounded-full bg-white/15 backdrop-blur-sm border border-white/20">
+                          {active.model}
+                        </span>
+                      )}
                     </div>
 
                     {/* Type badge */}
                     <div className="absolute top-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/45 backdrop-blur-sm border border-white/10">
-                      {demoCards[demoVideoIdx].type === "视频" ? (
+                      {active.type === "视频" ? (
                         <Video className="w-3 h-3 text-white/90" />
                       ) : (
                         <ImageIcon className="w-3 h-3 text-white/90" />
                       )}
                       <span className="text-[10px] font-medium text-white/90">
-                        {demoCards[demoVideoIdx].type}
+                        {active.type}
                       </span>
                     </div>
                   </div>
@@ -966,13 +1004,13 @@ export default function HomePage() {
                   <div className="flex items-center gap-2">
                     {demoCards.map((card, i) => (
                       <button
-                        key={card.image}
+                        key={card.image + i}
                         onClick={() => setDemoVideoIdx(i)}
                         aria-label={card.prompt}
                         className={cn(
                           "relative flex-1 aspect-[4/3] rounded-lg overflow-hidden transition-all duration-300",
                           demoVideoIdx === i
-                            ? "ring-2 ring-accent-cyan ring-offset-1 ring-offset-cosmic-surface"
+                            ? "ring-2 ring-brand ring-offset-1 ring-offset-cosmic-surface"
                             : "opacity-50 hover:opacity-90"
                         )}
                       >
@@ -985,6 +1023,9 @@ export default function HomePage() {
                       </button>
                     ))}
                   </div>
+                  </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1130,8 +1171,8 @@ export default function HomePage() {
       {/* ═══ Models ═══ */}
       <ModelsSection />
 
-      {/* ═══ Testimonials ═══ */}
-      <TestimonialsSection />
+      {/* ═══ Real Works Showcase ═══ */}
+      <RealWorksSection />
 
       {/* ═══ CTA ═══ */}
       <CtaSection />
