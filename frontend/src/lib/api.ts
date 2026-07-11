@@ -236,6 +236,40 @@ export async function editImageTool(params: {
   return res.json();
 }
 
+// ─── Projects (作品集) ──────────────────────────────────
+export interface ProjectItemRef { item_id: string; url: string; thumbnail?: string | null; media_type: string; title?: string | null; }
+export interface ProjectDTO { id: string; name: string; description?: string | null; cover?: string | null; item_count: number; items: ProjectItemRef[]; created_at: string; updated_at: string; }
+
+export async function listProjects(): Promise<{ projects: ProjectDTO[] }> {
+  const res = await fetch(`${API_BASE}/projects/`);
+  if (!res.ok) throw new Error(`加载项目失败: ${res.status}`);
+  return res.json();
+}
+export async function createProject(name: string, description?: string): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description }) });
+  if (!res.ok) throw new Error(`创建项目失败: ${res.status}`);
+  return res.json();
+}
+export async function getProject(id: string): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/${id}`);
+  if (!res.ok) throw new Error(`项目不存在: ${res.status}`);
+  return res.json();
+}
+export async function addProjectItem(id: string, item: ProjectItemRef): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/${id}/items`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(item) });
+  if (!res.ok) throw new Error(`添加失败: ${res.status}`);
+  return res.json();
+}
+export async function removeProjectItem(id: string, itemId: string): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/${id}/items/${encodeURIComponent(itemId)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`移除失败: ${res.status}`);
+  return res.json();
+}
+export async function deleteProject(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/projects/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`删除失败: ${res.status}`);
+}
+
 /** List content-library items (uploads + generated) */
 export async function listLibrary(params: { media_type?: string; source?: string; limit?: number } = {}): Promise<{ items: any[]; total: number; counts: any }> {
   const q = new URLSearchParams();

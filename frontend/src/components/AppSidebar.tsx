@@ -22,6 +22,7 @@ import {
   Compass,
   Rss,
   Library,
+  FolderKanban,
   Bot,
   ImageIcon,
   Video,
@@ -47,6 +48,7 @@ const mainNav = [
   { href: "/explore", icon: Compass, label: "探索" },
   { href: "/feed", icon: Rss, label: "动态" },
   { href: "/library", icon: Library, label: "我的库" },
+  { href: "/projects", icon: FolderKanban, label: "项目" },
 ];
 
 const toolNav = [
