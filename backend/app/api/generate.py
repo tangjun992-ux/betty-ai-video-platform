@@ -19,6 +19,7 @@ from app.tasks.video_tasks import generate_video_task
 from app.tasks.pipeline_tasks import run_pipeline
 from app.router import router as prompt_router
 from app.prompt_enhancer import enhancer as prompt_enhancer
+from app.rate_limiter import rate_limit
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -126,6 +127,7 @@ class RouterAnalysisResponse(BaseModel):
     status_code=status.HTTP_202_ACCEPTED,
     summary="提交生成请求",
     description="根据提示词智能选择模型并生成图像或视频",
+    dependencies=[Depends(rate_limit("generate", rpm=10, rph=100))],
 )
 async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get_db)):
     task_id = str(uuid.uuid4())
@@ -279,7 +281,8 @@ class SpeechRequest(BaseModel):
     voice: str = Field(default="Rachel", description="音色")
 
 
-@router.post("/speech", summary="AI 配音 (TTS)")
+@router.post("/speech", summary="AI 配音 (TTS)",
+             dependencies=[Depends(rate_limit("speech", rpm=20, rph=150))])
 async def generate_speech(req: SpeechRequest):
     """Text-to-speech voiceover (对标 yapper Generate Audio). Real ElevenLabs via
     KIE when a key is configured; a short local tone otherwise."""
@@ -299,7 +302,8 @@ async def generate_speech(req: SpeechRequest):
             "media_type": "audio", "model": res.model, "cost": res.cost}
 
 
-@router.post("/edit", summary="AI 图像工具 (编辑/超分/抠图/扩图)")
+@router.post("/edit", summary="AI 图像工具 (编辑/超分/抠图/扩图)",
+             dependencies=[Depends(rate_limit("edit", rpm=15, rph=120))])
 async def edit_image_tool(
     operation: str = Form(..., description="edit | upscale | bg-remove | extend"),
     image_file: Optional[UploadFile] = File(None),

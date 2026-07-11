@@ -21,6 +21,7 @@ from app.db import get_db
 from app.models.billing import UserBalance, Transaction, TransactionType
 from app.models.payment_order import PaymentOrder
 from app.api.pricing import PLANS
+from app.rate_limiter import rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -114,7 +115,8 @@ async def transactions(limit: int = 50, db: AsyncSession = Depends(get_db)):
     } for t in rows]}
 
 
-@router.post("/checkout", summary="结算（Stripe-ready，无 key 时 dev 直发）")
+@router.post("/checkout", summary="结算（Stripe-ready，无 key 时 dev 直发）",
+             dependencies=[Depends(rate_limit("checkout", rpm=10, rph=60))])
 async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db)):
     credits, price_usd, label = _resolve_purchase(req)
 
@@ -195,7 +197,8 @@ async def pay_methods():
     return {"methods": payments.method_status(), "usd_to_cny": settings.USD_TO_CNY}
 
 
-@router.post("/pay/create", summary="创建二维码支付订单（微信/支付宝）")
+@router.post("/pay/create", summary="创建二维码支付订单（微信/支付宝）",
+             dependencies=[Depends(rate_limit("pay_create", rpm=10, rph=60))])
 async def pay_create(req: PayCreateRequest, db: AsyncSession = Depends(get_db)):
     from app.services import payments
     if req.method not in ("wechat", "alipay"):

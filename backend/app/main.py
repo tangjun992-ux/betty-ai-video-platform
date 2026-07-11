@@ -1,8 +1,27 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from contextlib import asynccontextmanager
 import os
+
+from app.config import settings as _settings
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Baseline security response headers for a public-facing service."""
+
+    async def dispatch(self, request: Request, call_next):
+        resp = await call_next(request)
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        resp.headers.setdefault("X-XSS-Protection", "0")
+        resp.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        if _settings.is_production:
+            resp.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return resp
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,14 +53,17 @@ app = FastAPI(
     title="AI Video Platform",
     description="AI 短视频自动生成平台 — 支持多模型智能路由",
     version="0.1.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
+    # API docs are disabled in production to reduce attack surface.
+    docs_url=None if _settings.is_production else "/api/docs",
+    redoc_url=None if _settings.is_production else "/api/redoc",
+    openapi_url=None if _settings.is_production else "/api/openapi.json",
     lifespan=lifespan,
 )
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3200", "http://127.0.0.1:3200", "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_origins=_settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,7 +86,28 @@ if settings.STORAGE_TYPE == "local":
 
 @app.get("/health")
 async def health_check():
-    return {"status": "ok", "version": settings.APP_VERSION}
+    """Liveness + dependency readiness probe (DB, Redis)."""
+    checks = {}
+    # DB
+    try:
+        from sqlalchemy import text
+        from app.db import async_session
+        async with async_session() as s:
+            await s.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {str(e)[:80]}"
+    # Redis (best-effort)
+    try:
+        import redis as _redis
+        c = _redis.Redis.from_url(settings.CELERY_BROKER_URL, socket_timeout=2)
+        c.ping()
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {str(e)[:80]}"
+    healthy = all(v == "ok" for v in checks.values())
+    return {"status": "ok" if healthy else "degraded",
+            "version": settings.APP_VERSION, "checks": checks}
 
 @app.get("/")
 async def root():

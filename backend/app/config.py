@@ -24,8 +24,17 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = 24
 
-    # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    # CORS — comma-separated origins via env (prod), defaults to local dev.
+    CORS_ORIGINS: list[str] = [
+        o.strip() for o in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
+        ).split(",") if o.strip()
+    ]
+
+    @property
+    def is_production(self) -> bool:
+        return (self.ENV or "").lower() in ("production", "prod")
 
     # KIE.ai Unified API
     KIE_API_KEY: str = os.getenv("KIE_API_KEY", "")
