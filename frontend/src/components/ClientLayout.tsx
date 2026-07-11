@@ -11,6 +11,7 @@ import { PageTransition } from "@/components/PageTransition";
 import { ScrollProgress } from "@/components/ScrollProgress";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CookieConsent } from "@/components/CookieConsent";
+import { PWARegister } from "@/components/PWARegister";
 import { AppShell } from "@/components/AppShell";
 
 const queryClient = new QueryClient({
@@ -66,6 +67,8 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
             <CommandPalette />
             {/* Cookie consent — global */}
             <CookieConsent />
+            {/* PWA service worker registration */}
+            <PWARegister />
           </SidebarWidthHandler>
         </TooltipProvider>
       </ThemeProvider>

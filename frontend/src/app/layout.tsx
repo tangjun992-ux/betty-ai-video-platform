@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import dynamic from "next/dynamic";
 import { Inter } from "next/font/google";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,12 @@ export const metadata: Metadata = {
   icons: {
     icon: [{ url: "/favicon.png", type: "image/png" }],
     shortcut: ["/favicon.png"],
-    apple: [{ url: "/favicon.png" }],
+    apple: [{ url: "/icons/apple-touch-icon.png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "betty",
   },
   robots: {
     index: true,
@@ -67,6 +72,13 @@ export const metadata: Metadata = {
     images: [`${baseUrl}/brand/og-image.png`],
     creator: "@betty_ai",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#6C5CE7",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 // Dynamically import heavy client components with code-splitting
