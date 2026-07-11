@@ -48,16 +48,29 @@ class StepRerunRequest(BaseModel):
     dry_run: bool | None = None
 
 
+def _moderate_brief(brief: str | None):
+    """Pre-generation content gate for the director brief."""
+    if not brief:
+        return
+    from app.services.moderation import check_prompt
+    m = check_prompt(brief)
+    if not m.allowed:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=m.reason)
+
+
 def _resolve_plan(req: RunRequest):
     """Use the (edited) client plan when provided, else auto-plan from the brief."""
     if req.plan and req.plan.get("steps"):
         return plan_from_dict(req.plan)
+    _moderate_brief(req.brief)
     return DirectorPlanner().plan(req.brief, has_ref_image=req.has_ref_image,
                                   duration=req.duration, ref_image_url=req.ref_image_url)
 
 
 @router.post("/plan", summary="生成导演式创作计划")
 async def make_plan(req: PlanRequest):
+    _moderate_brief(req.brief)
     plan = planner.plan(req.brief, has_ref_image=req.has_ref_image,
                         duration=req.duration, ref_image_url=req.ref_image_url)
     return plan.to_dict()

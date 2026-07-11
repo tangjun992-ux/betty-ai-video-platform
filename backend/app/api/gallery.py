@@ -17,6 +17,13 @@ _LIKES_DDL = (
     "CREATE TABLE IF NOT EXISTS gallery_likes "
     "(item_key TEXT PRIMARY KEY, likes INTEGER NOT NULL DEFAULT 0)"
 )
+_MOD_DDL = (
+    "CREATE TABLE IF NOT EXISTS gallery_moderation "
+    "(item_key TEXT PRIMARY KEY, reports INTEGER NOT NULL DEFAULT 0, "
+    "hidden INTEGER NOT NULL DEFAULT 0, reason TEXT)"
+)
+# Auto-hide a gallery item once community reports reach this threshold.
+_REPORT_HIDE_THRESHOLD = 3
 
 
 async def _ensure_likes_table(db: AsyncSession) -> None:
@@ -36,6 +43,16 @@ async def _stored_likes(db: AsyncSession) -> dict:
 def _base_likes(task_id: str) -> int:
     """Deterministic seed so counts are stable across restarts (pre-community)."""
     return zlib.crc32(task_id.encode()) % 100
+
+
+async def _hidden_keys(db: AsyncSession) -> set:
+    """Item keys hidden by moderation/takedown — excluded from the gallery."""
+    try:
+        await db.execute(text(_MOD_DDL))
+        rows = await db.execute(text("SELECT item_key FROM gallery_moderation WHERE hidden = 1"))
+        return {r[0] for r in rows.all()}
+    except Exception:
+        return set()
 
 
 def _safe_dict(value) -> dict:
@@ -139,6 +156,7 @@ async def explore_gallery(
     tasks = result.scalars().all()
 
     likes_map = await _stored_likes(db)
+    hidden = await _hidden_keys(db)
 
     items = []
     filtered_count = 0
@@ -174,13 +192,16 @@ async def explore_gallery(
                 if style != "all" and style not in styles_list:
                     continue
 
-                # Content safety filter
-                if not _is_safe(t.prompt or ""):
+                # Content safety filter (shared moderation policy)
+                from app.services.moderation import is_safe as _mod_safe
+                if not (_is_safe(t.prompt or "") and _mod_safe(t.prompt or "")):
                     filtered_count += 1
                     continue
 
                 ts = t.completed_at or t.created_at
                 item_key = f"{t.task_id}_{len(items)}"
+                if item_key in hidden:
+                    continue
                 likes = _base_likes(t.task_id) + likes_map.get(item_key, 0)
                 items.append({
                     "id": item_key,
@@ -238,6 +259,29 @@ async def like_item(item_key: str, undo: bool = Query(default=False), db: AsyncS
     row = await db.execute(text("SELECT likes FROM gallery_likes WHERE item_key = :k"), {"k": item_key})
     stored = int(row.scalar() or 0)
     return {"item_key": item_key, "likes": _base_likes(task_id) + stored, "liked": not undo}
+
+
+@router.post("/{item_key}/report", summary="举报作品")
+async def report_item(item_key: str, db: AsyncSession = Depends(get_db)):
+    """Community report. Increments the report count and auto-hides the item
+    once it reaches the threshold (takedown). Idempotent-ish per call."""
+    if not item_key or "_" not in item_key:
+        raise HTTPException(status_code=400, detail="无效的作品 ID")
+    await db.execute(text(_MOD_DDL))
+    await db.execute(
+        text("INSERT INTO gallery_moderation (item_key, reports, hidden) VALUES (:k, 1, 0) "
+             "ON CONFLICT(item_key) DO UPDATE SET reports = reports + 1"),
+        {"k": item_key},
+    )
+    await db.execute(
+        text("UPDATE gallery_moderation SET hidden = 1 WHERE item_key = :k AND reports >= :th"),
+        {"k": item_key, "th": _REPORT_HIDE_THRESHOLD},
+    )
+    await db.commit()
+    row = await db.execute(text("SELECT reports, hidden FROM gallery_moderation WHERE item_key = :k"), {"k": item_key})
+    reports, hidden = row.first() or (1, 0)
+    return {"item_key": item_key, "reports": int(reports), "hidden": bool(hidden),
+            "message": "感谢举报，我们会尽快复核" if not hidden else "内容已达举报阈值，已自动下架"}
 
 
 @router.get("/stats", summary="画廊统计")

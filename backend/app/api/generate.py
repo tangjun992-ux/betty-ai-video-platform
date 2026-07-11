@@ -153,9 +153,10 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
         enhanced_prompt = enhancement.enhanced
 
     # Stage 1c: Content safety pre-check (fast keyword filter)
-    safety_issue = _check_content_safety(enhanced_prompt)
-    if safety_issue:
-        raise HTTPException(status_code=400, detail=safety_issue)
+    from app.services.moderation import check_prompt
+    mod = check_prompt(f"{req.prompt}\n{enhanced_prompt}")
+    if not mod.allowed:
+        raise HTTPException(status_code=400, detail=mod.reason)
 
     # Stage 2: Smart model selection via router
     model_selection = prompt_router.select_model(
@@ -320,6 +321,11 @@ async def edit_image_tool(
     op = (operation or "").strip().lower()
     if op not in ("edit", "upscale", "bg-remove", "extend"):
         raise HTTPException(status_code=400, detail=f"未知操作: {operation}")
+    if prompt:
+        from app.services.moderation import check_prompt
+        _m = check_prompt(prompt)
+        if not _m.allowed:
+            raise HTTPException(status_code=400, detail=_m.reason)
     if not image_file and not image_url:
         raise HTTPException(status_code=400, detail="请提供图片 (image_file 或 image_url)")
     if op in ("edit",) and not (prompt and prompt.strip()):

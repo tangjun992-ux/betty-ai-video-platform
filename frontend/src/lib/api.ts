@@ -397,6 +397,13 @@ export async function likeGalleryItem(itemId: string, undo = false): Promise<{ l
   return res.json();
 }
 
+/** Report a gallery item (community moderation) */
+export async function reportGalleryItem(itemId: string): Promise<{ reports: number; hidden: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/gallery/${encodeURIComponent(itemId)}/report`, { method: "POST" });
+  if (!res.ok) throw new Error(`举报失败: ${res.status}`);
+  return res.json();
+}
+
 /** Analyze a prompt without submitting — accepts string or object */
 export async function analyzePrompt(input: string | { prompt: string; media_type?: string; quality?: string; model?: string }) {
   const body = typeof input === "string" ? { prompt: input } : input;

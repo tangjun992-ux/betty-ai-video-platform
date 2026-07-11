@@ -448,6 +448,20 @@ export default function GalleryPage() {
                     {liked[lightbox.id] ? "❤️" : "🤍"} {likeCount(lightbox)}
                   </button>
                   <span>👁 {lightbox.views}</span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const { reportGalleryItem } = await import("@/lib/api");
+                        const r = await reportGalleryItem(lightbox.id);
+                        if (r.hidden) { setItems((prev) => prev.filter((it) => it.id !== lightbox.id)); setLightbox(null); }
+                        alert(r.message);
+                      } catch { alert("举报失败，请稍后再试"); }
+                    }}
+                    className="ml-auto inline-flex items-center gap-1 hover:text-destructive"
+                    title="举报此内容"
+                  >
+                    ⚑ 举报
+                  </button>
                 </div>
                 <div className="mt-auto flex flex-col gap-2">
                   <a
