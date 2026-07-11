@@ -4,6 +4,42 @@
 const _raw = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/+$/, "");
 export const API_BASE = _raw.endsWith("/api/v1") ? _raw : `${_raw}/api/v1`;
 
+/** Read the persisted JWT from the zustand auth-store (localStorage). */
+export function authToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("auth-store");
+    if (!raw) return null;
+    return JSON.parse(raw)?.state?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Install a one-time global fetch interceptor that attaches the bearer token
+ *  to same-API requests, so every call site (api.ts + components) is scoped to
+ *  the logged-in user without editing each fetch. */
+export function installAuthFetch() {
+  if (typeof window === "undefined") return;
+  if ((window as any).__betty_auth_fetch) return;
+  const orig = window.fetch.bind(window);
+  (window as any).__betty_auth_fetch = true;
+  window.fetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
+    try {
+      const url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as Request).url);
+      if (url && url.includes("/api/v1/")) {
+        const token = authToken();
+        if (token) {
+          const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+          if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+          init = { ...init, headers };
+        }
+      }
+    } catch {}
+    return orig(input as any, init);
+  };
+}
+
 const FETCH_TIMEOUT_MS = 15000; // 15s per request
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {

@@ -20,6 +20,7 @@ from app.tasks.pipeline_tasks import run_pipeline
 from app.router import router as prompt_router
 from app.prompt_enhancer import enhancer as prompt_enhancer
 from app.rate_limiter import rate_limit
+from app.auth import resolve_user_id
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -129,7 +130,8 @@ class RouterAnalysisResponse(BaseModel):
     description="根据提示词智能选择模型并生成图像或视频",
     dependencies=[Depends(rate_limit("generate", rpm=10, rph=100))],
 )
-async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get_db)):
+async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get_db),
+                            user_id: int = Depends(resolve_user_id)):
     task_id = str(uuid.uuid4())
 
     # Stage 1: Smart prompt analysis
@@ -190,7 +192,7 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
     # Create Task record
     task = Task(
         task_id=task_id,
-        user_id=0,
+        user_id=user_id,
         prompt=enhanced_prompt,  # use enhanced prompt
         media_type=effective_media,
         quality=req.quality,
@@ -214,7 +216,7 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
 
     # Check and deduct credits
     credits_ok = await _check_and_deduct_credits(
-        db=db, user_id=0, cost=estimated_cost,
+        db=db, user_id=user_id, cost=estimated_cost,
         task_id=task_id, model=estimated_model,
     )
     if not credits_ok:

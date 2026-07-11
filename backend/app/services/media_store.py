@@ -92,7 +92,8 @@ def localize_media_url(url: str, media_hint: str = "") -> Optional[str]:
         return None
 
 
-async def store_upload(db, filename: str, content: bytes, content_type: Optional[str] = None):
+async def store_upload(db, filename: str, content: bytes, content_type: Optional[str] = None,
+                       user_id: int = 0):
     """
     Save an uploaded file into STORAGE_LOCAL_PATH/uploads and register it as
     an Asset so every upload across the platform shows up in the library.
@@ -115,6 +116,7 @@ async def store_upload(db, filename: str, content: bytes, content_type: Optional
 
     asset = Asset(
         asset_id=asset_id,
+        user_id=user_id,
         media_type=media_type,
         url=public_url,
         filename=filename or safe_name,

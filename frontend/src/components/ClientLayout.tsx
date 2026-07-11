@@ -36,6 +36,12 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuth = pathname.startsWith("/auth");
 
+  // Attach the bearer token to all API requests so data is scoped to the
+  // logged-in user (guest falls back to the shared account server-side).
+  useEffect(() => {
+    import("@/lib/api").then((m) => m.installAuthFetch()).catch(() => {});
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>

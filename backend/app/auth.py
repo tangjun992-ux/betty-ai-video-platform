@@ -57,10 +57,12 @@ async def get_current_user(
     )
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-        user_id: int = payload.get("sub")
-        if user_id is None:
+        sub = payload.get("sub")
+        if sub is None:
             raise credentials_exception
-    except JWTError:
+        # `sub` is stored as a string per JWT spec (jose rejects non-string sub).
+        user_id = int(sub)
+    except (JWTError, ValueError, TypeError):
         raise credentials_exception
 
     user = await db.execute(select(User).where(User.id == user_id))
@@ -83,6 +85,24 @@ async def get_optional_user(
         return await get_current_user(credentials, db)
     except HTTPException:
         return None
+
+
+# Shared guest account id — used for anonymous (not-logged-in) usage so the app
+# stays usable without an account, while logged-in users get isolated data.
+GUEST_USER_ID = 0
+
+
+async def resolve_user_id(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+        HTTPBearer(auto_error=False)
+    ),
+    db: AsyncSession = Depends(get_db),
+) -> int:
+    """Resolve the effective account id: the authenticated user's id when a valid
+    bearer token is present, otherwise the shared guest account. This is the
+    single source of truth for per-user data scoping across the API."""
+    user = await get_optional_user(credentials, db)
+    return user.id if user else GUEST_USER_ID
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:

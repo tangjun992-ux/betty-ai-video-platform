@@ -14,6 +14,7 @@ from app.models.task import Task, TaskStatus
 from app.models.user import User
 from app.models.billing import UserBalance
 from app.config import settings
+from app.auth import resolve_user_id
 
 router = APIRouter()
 
@@ -70,14 +71,11 @@ AVAILABLE_MODELS = [
 async def get_dashboard(
     limit: int = Query(10, ge=1, le=50),
     db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
 ):
-    """Aggregated dashboard data: stats, recent items, available models.
-
-    Uses user_id=0 — the single anonymous/local user that the whole app
-    (generate, gallery, library, pricing) writes to and reads from — so the
-    dashboard reflects the same real generations shown elsewhere.
-    """
-    user_id = 0
+    """Aggregated dashboard data scoped to the effective account: logged-in
+    users see their own stats/recent items; anonymous usage falls back to the
+    shared guest account (0)."""
 
     # ─── Stats ──────────────────────────────────────────
     # Credit balance

@@ -22,6 +22,7 @@ from app.models.billing import UserBalance, Transaction, TransactionType
 from app.models.payment_order import PaymentOrder
 from app.api.pricing import PLANS
 from app.rate_limiter import rate_limit
+from app.auth import resolve_user_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -81,8 +82,8 @@ async def credit_packs():
 
 
 @router.get("/summary", summary="账户余额与消费概览")
-async def billing_summary(db: AsyncSession = Depends(get_db)):
-    bal = await _get_balance(db, GUEST_USER_ID)
+async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Depends(resolve_user_id)):
+    bal = await _get_balance(db, user_id)
     await db.commit()
     return {
         "credits": bal.credits + bal.daily_credits,
@@ -97,9 +98,10 @@ async def billing_summary(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/transactions", summary="积分流水")
-async def transactions(limit: int = 50, db: AsyncSession = Depends(get_db)):
+async def transactions(limit: int = 50, db: AsyncSession = Depends(get_db),
+                       user_id: int = Depends(resolve_user_id)):
     res = await db.execute(
-        select(Transaction).where(Transaction.user_id == GUEST_USER_ID)
+        select(Transaction).where(Transaction.user_id == user_id)
         .order_by(desc(Transaction.created_at)).limit(min(limit, 200))
     )
     rows = res.scalars().all()
@@ -117,7 +119,8 @@ async def transactions(limit: int = 50, db: AsyncSession = Depends(get_db)):
 
 @router.post("/checkout", summary="结算（Stripe-ready，无 key 时 dev 直发）",
              dependencies=[Depends(rate_limit("checkout", rpm=10, rph=60))])
-async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db)):
+async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
+                   user_id: int = Depends(resolve_user_id)):
     credits, price_usd, label = _resolve_purchase(req)
 
     # Stripe-ready branch (activated when a key is configured).
@@ -145,13 +148,13 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db)):
             raise HTTPException(status_code=502, detail=f"支付网关错误: {e}")
 
     # Dev-grant mode — credit immediately + record a real transaction.
-    bal = await _get_balance(db, GUEST_USER_ID)
+    bal = await _get_balance(db, user_id)
     before = bal.credits + bal.daily_credits
     bal.credits += credits
     bal.total_purchased += credits
     after = bal.credits + bal.daily_credits
     txn = Transaction(
-        user_id=GUEST_USER_ID,
+        user_id=user_id,
         type=TransactionType.PURCHASE.value,
         amount=credits,
         balance_before=before,
@@ -199,7 +202,8 @@ async def pay_methods():
 
 @router.post("/pay/create", summary="创建二维码支付订单（微信/支付宝）",
              dependencies=[Depends(rate_limit("pay_create", rpm=10, rph=60))])
-async def pay_create(req: PayCreateRequest, db: AsyncSession = Depends(get_db)):
+async def pay_create(req: PayCreateRequest, db: AsyncSession = Depends(get_db),
+                     user_id: int = Depends(resolve_user_id)):
     from app.services import payments
     if req.method not in ("wechat", "alipay"):
         raise HTTPException(status_code=400, detail="method 必须是 wechat 或 alipay")
@@ -215,7 +219,7 @@ async def pay_create(req: PayCreateRequest, db: AsyncSession = Depends(get_db)):
 
     provider = req.method if live else "sandbox"
     order = PaymentOrder(
-        order_no=order_no, user_id=GUEST_USER_ID, provider=provider,
+        order_no=order_no, user_id=user_id, provider=provider,
         kind=req.kind, item_id=req.id, cycle=req.cycle, credits=credits,
         amount_usd=price_usd, amount_cny=amount_cny, label=label,
         status="pending", qr_content=qr_content,
