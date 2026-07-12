@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,6 +19,8 @@ from app.tasks.video_tasks import generate_video_task
 from app.tasks.pipeline_tasks import run_pipeline
 from app.router import router as prompt_router
 from app.prompt_enhancer import enhancer as prompt_enhancer
+from app.rate_limiter import rate_limit
+from app.auth import resolve_user_id
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -98,6 +100,7 @@ class GenerateRequest(BaseModel):
     webhook_url: Optional[str] = Field(default=None, description="回调地址")
     enhance_prompt: Optional[bool] = Field(default=True, description="是否自动增强提示词")
     image_url: Optional[str] = Field(default=None, description="参考图片URL（用于图转视频）")
+    seed: Optional[int] = Field(default=None, ge=0, le=2147483647, description="随机种子（复现同一结果；留空则随机）")
 
 
 class GenerateResponse(BaseModel):
@@ -126,9 +129,15 @@ class RouterAnalysisResponse(BaseModel):
     status_code=status.HTTP_202_ACCEPTED,
     summary="提交生成请求",
     description="根据提示词智能选择模型并生成图像或视频",
+    dependencies=[Depends(rate_limit("generate", rpm=10, rph=100))],
 )
-async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get_db)):
+async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get_db),
+                            user_id: int = Depends(resolve_user_id)):
     task_id = str(uuid.uuid4())
+    # Deterministic seed: reuse the caller's (reproduce) or roll a fresh one so
+    # every generation is reproducible and variations can be requested later.
+    import random as _random
+    seed = req.seed if req.seed is not None else _random.randint(1, 2_147_483_647)
 
     # Stage 1: Smart prompt analysis
     analysis = prompt_router.analyze(
@@ -149,9 +158,10 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
         enhanced_prompt = enhancement.enhanced
 
     # Stage 1c: Content safety pre-check (fast keyword filter)
-    safety_issue = _check_content_safety(enhanced_prompt)
-    if safety_issue:
-        raise HTTPException(status_code=400, detail=safety_issue)
+    from app.services.moderation import check_prompt
+    mod = check_prompt(f"{req.prompt}\n{enhanced_prompt}")
+    if not mod.allowed:
+        raise HTTPException(status_code=400, detail=mod.reason)
 
     # Stage 2: Smart model selection via router
     model_selection = prompt_router.select_model(
@@ -188,7 +198,7 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
     # Create Task record
     task = Task(
         task_id=task_id,
-        user_id=0,
+        user_id=user_id,
         prompt=enhanced_prompt,  # use enhanced prompt
         media_type=effective_media,
         quality=req.quality,
@@ -200,6 +210,7 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
             "duration": req.duration,
             "count": req.count,
             "style": req.style,
+            "seed": seed,
             "original_prompt": req.prompt if enhanced_prompt != req.prompt else None,
             "routing_info": json.dumps(routing_info),
         },
@@ -212,7 +223,7 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
 
     # Check and deduct credits
     credits_ok = await _check_and_deduct_credits(
-        db=db, user_id=0, cost=estimated_cost,
+        db=db, user_id=user_id, cost=estimated_cost,
         task_id=task_id, model=estimated_model,
     )
     if not credits_ok:
@@ -236,6 +247,7 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
         "duration": req.duration or 5,
         "count": req.count,
         "style": req.style,
+        "seed": seed,
     }
     if req.image_url:
         celery_params["image_url"] = req.image_url
@@ -271,6 +283,150 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
         routing_info=routing_info,
         model_scores=[{"model": s.model_id, "score": s.score, "reasons": s.reasons}
                       for s in all_scores],
+    )
+
+
+class SpeechRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=5000, description="要配音的文本/脚本")
+    voice: str = Field(default="Rachel", description="音色")
+
+
+@router.post("/speech", summary="AI 配音 (TTS)",
+             dependencies=[Depends(rate_limit("speech", rpm=20, rph=150))])
+async def generate_speech(req: SpeechRequest):
+    """Text-to-speech voiceover (对标 yapper Generate Audio). Real ElevenLabs via
+    KIE when a key is configured; a short local tone otherwise."""
+    from app.adapters.demo_provider import demo_mode_active
+    if demo_mode_active():
+        from app.adapters.demo_provider import render_demo_speech
+        import asyncio as _a
+        url = await _a.to_thread(render_demo_speech, req.text)
+        return {"url": url, "media_type": "audio", "model": "demo-tts", "demo": True}
+    from app.adapters.kie_adapter import KieAdapter
+    from app.services.media_store import persist_results
+    res = await KieAdapter().generate_speech(req.text, voice=req.voice)
+    out = {"type": "audio", "url": res.media_url, "media_url": res.media_url, "model": res.model}
+    import asyncio as _a
+    out = (await _a.to_thread(persist_results, [out]))[0]
+    return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
+            "media_type": "audio", "model": res.model, "cost": res.cost}
+
+
+@router.post("/edit", summary="AI 图像工具 (编辑/超分/抠图/扩图)",
+             dependencies=[Depends(rate_limit("edit", rpm=15, rph=120))])
+async def edit_image_tool(
+    operation: str = Form(..., description="edit | upscale | bg-remove | extend"),
+    image_file: Optional[UploadFile] = File(None),
+    image_url: Optional[str] = Form(None),
+    prompt: Optional[str] = Form(None),
+    factor: str = Form("2"),
+    ratio: str = Form("16:9"),
+):
+    """Unified image-tool endpoint (对标 yapper 编辑/放大/去背景/扩图).
+    Uploads the source to a public URL then runs the real KIE model."""
+    import asyncio as _a
+    op = (operation or "").strip().lower()
+    if op not in ("edit", "upscale", "bg-remove", "extend"):
+        raise HTTPException(status_code=400, detail=f"未知操作: {operation}")
+    if prompt:
+        from app.services.moderation import check_prompt
+        _m = check_prompt(prompt)
+        if not _m.allowed:
+            raise HTTPException(status_code=400, detail=_m.reason)
+    if not image_file and not image_url:
+        raise HTTPException(status_code=400, detail="请提供图片 (image_file 或 image_url)")
+    if op in ("edit",) and not (prompt and prompt.strip()):
+        raise HTTPException(status_code=400, detail="编辑操作需要 prompt 指令")
+
+    # Resolve source bytes
+    from app.adapters.demo_provider import demo_mode_active, _local_media_path
+    if image_file:
+        data = await image_file.read()
+        ctype = image_file.content_type or "image/png"
+    else:
+        p = _local_media_path(image_url)
+        if p:
+            with open(p, "rb") as f:
+                data = f.read()
+            ctype = "image/png"
+        else:
+            import httpx
+            async with httpx.AsyncClient(timeout=60) as c:
+                r = await c.get(image_url)
+                r.raise_for_status()
+                data = r.content
+                ctype = r.headers.get("content-type", "image/png")
+
+    if demo_mode_active():
+        from app.adapters.demo_provider import run_demo_image_tool
+        url = await _a.to_thread(run_demo_image_tool, op, data, factor, ratio)
+        return {"url": url, "media_type": "image", "model": f"demo-{op}", "demo": True}
+
+    from app.adapters.kie_adapter import KieAdapter
+    from app.services.media_store import persist_results
+    adapter = KieAdapter()
+    pub = await adapter.upload_public_url(data, filename="src.png", content_type=ctype)
+
+    async def _run():
+        if op == "upscale":
+            return await adapter.upscale_image(image_url=pub, factor=factor)
+        if op == "bg-remove":
+            return await adapter.remove_background(image_url=pub)
+        if op == "extend":
+            return await adapter.extend_image(image_url=pub, target_ratio=ratio, prompt=prompt or "")
+        return await adapter.edit_image(image_urls=[pub], prompt=prompt,
+                                        image_size=ratio if ratio else "auto")
+
+    # KIE image tools are intermittently flaky ("internal error") — retry.
+    res = None
+    last_err = None
+    for attempt in range(3):
+        try:
+            res = await _run()
+            break
+        except Exception as e:
+            last_err = e
+            msg = str(e).lower()
+            logger.warning("[edit] %s attempt %d failed: %s", op, attempt + 1, e)
+            if "internal error" in msg or "try again" in msg:
+                await _a.sleep(4)
+                continue
+            raise HTTPException(status_code=502, detail=f"{op} 处理失败: {e}")
+    if res is None:
+        raise HTTPException(status_code=502, detail=f"{op} 处理失败: {last_err}")
+    out = {"type": "image", "url": res.media_url, "media_url": res.media_url, "model": res.model}
+    out = (await _a.to_thread(persist_results, [out]))[0]
+    return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
+            "media_type": "image", "model": res.model, "operation": op, "cost": res.cost}
+
+
+class EnhanceRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=5000)
+    media_type: str = Field(default="auto")
+    style: Optional[str] = Field(default=None)
+
+
+class EnhanceResponse(BaseModel):
+    original: str
+    enhanced: str
+    additions: list[str] = []
+    changed: bool = False
+
+
+@router.post("/enhance", response_model=EnhanceResponse, summary="AI 优化提示词")
+async def enhance_prompt_endpoint(req: EnhanceRequest):
+    """Expand a casual prompt into a richer, professional one (for 'Ask AI to improve')."""
+    result = prompt_enhancer.enhance(
+        prompt=req.prompt,
+        media_type=req.media_type or "auto",
+        style=req.style or "auto",
+        quality="high",  # always enhance regardless of speed preference
+    )
+    return EnhanceResponse(
+        original=result.original,
+        enhanced=result.enhanced,
+        additions=getattr(result, "additions", []) or [],
+        changed=result.enhanced.strip() != result.original.strip(),
     )
 
 

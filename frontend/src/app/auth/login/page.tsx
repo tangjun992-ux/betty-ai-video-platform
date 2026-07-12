@@ -4,10 +4,11 @@ import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, Eye, EyeOff, LogIn, Sparkles } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, LogIn } from "lucide-react";
 import { useAuthStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
 import { login } from "@/lib/api";
+import { BrandMark } from "@/components/BrandLogo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -81,9 +82,7 @@ export default function LoginPage() {
             transition={{ delay: 0.1 }}
             className="text-center mb-8"
           >
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-accent-cyan to-accent-violet mb-4 shadow-button-glow">
-              <Sparkles className="w-7 h-7 text-white" />
-            </div>
+            <BrandMark className="w-14 h-14 mx-auto mb-4 shadow-button-glow rounded-2xl" />
             <h1 className="text-2xl font-bold text-text-primary mb-1">欢迎回来</h1>
             <p className="text-sm text-text-secondary">登录你的 betty 账户继续创作</p>
           </motion.div>
@@ -194,7 +193,7 @@ export default function LoginPage() {
             还没有账号？{" "}
             <Link
               href="/auth/register"
-              className="text-accent-cyan hover:text-accent-cyan-hover font-medium transition-colors"
+              className="text-brand hover:text-brand-strong font-medium transition-colors"
             >
               注册
             </Link>

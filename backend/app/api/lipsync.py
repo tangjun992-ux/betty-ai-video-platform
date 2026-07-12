@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.user import User
-from app.auth import get_current_user
+from app.auth import get_optional_user
 from celery_app import app as celery_app
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ async def submit_lipsync(
     model: str = Form("auto"),
     image_file: Optional[UploadFile] = File(None),
     audio_file: Optional[UploadFile] = File(None),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -94,7 +94,7 @@ async def submit_lipsync(
         """),
         {
             "tid": task_id,
-            "uid": current_user.id,
+            "uid": current_user.id if current_user else 0,
             "model": model,
             "meta": json.dumps({
                 "image_url": uploaded_image_url,

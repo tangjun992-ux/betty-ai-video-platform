@@ -15,9 +15,9 @@ import { BatchPromptInput } from "@/components/BatchPromptInput";
 import { CosmicPromptCard } from "@/components/cosmic/CosmicPromptCard";
 import { CosmicParamPanel, CosmicSlider, CosmicSelect } from "@/components/cosmic/CosmicParamPanel";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
-import { useCreationStore } from "@/lib/stores";
+import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { submitGeneration, getTaskStatus, type GenerateResponse, type TaskResult } from "@/lib/api";
+import { submitGeneration, getTaskStatus, trackOnboarding, type GenerateResponse, type TaskResult } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ═══════════════════════════════════════════════════════════
@@ -50,6 +50,8 @@ const PROMPT_TABS = [
 export default function CreateImagePage() {
   const router = useRouter();
   const toast = useToast();
+  const user = useAuthStore((s) => s.user);
+  const completeOnboarding = useOnboardingStore((s) => s.completeFor);
 
   // ── Store ────────────────────────────────────────────
   const {
@@ -184,6 +186,7 @@ export default function CreateImagePage() {
       });
 
       setTaskId(res.task_id);
+      if (user?.id) trackOnboarding("generation_submitted");
       setEstimatedSeconds(res.estimated_time_seconds || 30);
       setProgress(5);
       setProgressStage("模型推理中...");
@@ -228,6 +231,7 @@ export default function CreateImagePage() {
             type: (r.type || "image") as "image" | "video",
             prompt: prompt,
             model: res.estimated_model || selectedModel,
+            seed: (r as any).seed,
           });
         }
       }
@@ -236,6 +240,10 @@ export default function CreateImagePage() {
 
       // Success toast
       toast.success("生成完成", `已生成 ${resultCount} 张图片`);
+      if (resultCount > 0 && user?.id) {
+        completeOnboarding(String(user.id));
+        trackOnboarding("first_work_completed");
+      }
 
     } catch (err: any) {
       const message = err.message || "生成失败，请重试";
@@ -252,7 +260,50 @@ export default function CreateImagePage() {
   }, [
     prompt, selectedModel, quality, resolution, aspectRatio, count,
     style, creativity, submitting, addRecentPrompt, addResult, toast,
+    user?.id, completeOnboarding,
   ]);
+
+  // 单资产迭代：变体(同 prompt/model，新种子×4) 或 复现(同种子)
+  const iterate = useCallback(async (
+    mode: "vary" | "reproduce",
+    src: { prompt: string; model: string; seed?: number },
+  ) => {
+    if (submitting) return;
+    if (mode === "reproduce" && src.seed == null) { toast.error("无法复现", "该结果缺少种子信息"); return; }
+    setSubmitting(true); setError(null); setProgress(5);
+    setProgressStage(mode === "vary" ? "生成变体中..." : "按种子复现中...");
+    try {
+      const res = await submitGeneration({
+        prompt: src.prompt, media_type: "image",
+        model: src.model && src.model !== "auto" ? src.model : undefined,
+        quality, count: mode === "vary" ? 4 : 1, enhance_prompt: false,
+        ...(mode === "reproduce" ? { seed: src.seed } : {}),
+      });
+      setTaskId(res.task_id);
+      let polls = 0;
+      const poll = async (): Promise<TaskResult> => {
+        if (polls++ > 150) throw new Error("生成超时");
+        const s = await getTaskStatus(res.task_id);
+        if ("progress" in s && typeof s.progress === "number") setProgress(Math.min(s.progress, 99));
+        if ("current_stage" in s && s.current_stage) setProgressStage(s.current_stage);
+        if (s.status === "completed" || s.status === "failed") return s as TaskResult;
+        await new Promise((r) => setTimeout(r, 2000));
+        return poll();
+      };
+      const result = await poll();
+      setProgress(100);
+      if (result.status === "failed") throw new Error(result.error_message || "生成失败");
+      for (const r of (result.results || [])) {
+        addResult({ url: r.url, type: (r.type || "image") as "image" | "video",
+          prompt: src.prompt, model: res.estimated_model || src.model, seed: (r as any).seed });
+      }
+      toast.success(mode === "vary" ? "变体已生成" : "已复现", mode === "vary" ? "已按新种子生成变体" : `种子 ${src.seed}`);
+    } catch (e: any) {
+      setError(e.message || "生成失败"); toast.error("失败", e.message || "");
+    } finally {
+      setSubmitting(false); setTaskId(null); setProgress(0); setProgressStage("");
+    }
+  }, [submitting, quality, addResult, toast]);
 
   const handleRetry = useCallback(() => {
     setError(null);
@@ -594,9 +645,33 @@ export default function CreateImagePage() {
                         <ImageIcon className="w-3 h-3" />
                         <span>{item.model}</span>
                       </div>
+                      {/* Seed Badge */}
+                      {item.seed != null && (
+                        <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-[10px] text-white/70 font-mono" title="随机种子">
+                          🌱 {item.seed}
+                        </div>
+                      )}
 
                       {/* Actions Overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center gap-2 p-3">
+                        {/* 变体 (variations) */}
+                        <button
+                          onClick={() => iterate("vary", { prompt: item.prompt, model: item.model, seed: item.seed })}
+                          disabled={submitting}
+                          className="btn-icon bg-brand/[0.85] hover:bg-brand backdrop-blur-sm text-white disabled:opacity-50"
+                          title="生成变体（同提示词，新随机种子）"
+                        >
+                          <Wand2 className="w-4 h-4" />
+                        </button>
+                        {/* 复现 (reproduce same seed) */}
+                        <button
+                          onClick={() => iterate("reproduce", { prompt: item.prompt, model: item.model, seed: item.seed })}
+                          disabled={submitting || item.seed == null}
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan disabled:opacity-40"
+                          title={item.seed != null ? `按种子复现 (${item.seed})` : "无种子信息"}
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
                         {/* Download - btn-icon */}
                         <a
                           href={item.url}

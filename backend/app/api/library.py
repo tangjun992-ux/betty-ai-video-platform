@@ -19,6 +19,7 @@ from app.config import settings
 from app.db import get_db
 from app.models.asset import Asset
 from app.models.task import Task
+from app.auth import resolve_user_id
 
 router = APIRouter()
 
@@ -115,11 +116,22 @@ async def list_library(
     limit: int = Query(default=48, le=200),
     offset: int = Query(default=0),
     db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
 ):
     items: list = []
 
+    # Per-user isolation: logged-in users see only their own assets; the guest
+    # account (0) also sees legacy rows with NULL user_id.
+    def _own(col):
+        if user_id == 0:
+            return (col == 0) | (col.is_(None))
+        return col == user_id
+
     if source in ("all", "upload"):
-        res = await db.execute(select(Asset).order_by(Asset.created_at.desc()).limit(1000))
+        res = await db.execute(
+            select(Asset).where(_own(Asset.user_id))
+            .order_by(Asset.created_at.desc()).limit(1000)
+        )
         for a in res.scalars().all():
             try:
                 items.append(_asset_item(a))
@@ -128,7 +140,7 @@ async def list_library(
 
     if source in ("all", "generated"):
         res = await db.execute(
-            select(Task).where(Task.status == "completed")
+            select(Task).where(Task.status == "completed", _own(Task.user_id))
             .order_by(Task.created_at.desc()).limit(1000)
         )
         for t in res.scalars().all():
@@ -175,6 +187,7 @@ async def list_library(
 async def upload_to_library(
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
 ):
     ext = os.path.splitext(file.filename or "")[1].lower()
     media_type = _ext_media_type(ext)
@@ -193,7 +206,7 @@ async def upload_to_library(
         )
 
     from app.services.media_store import store_upload
-    asset = await store_upload(db, file.filename or "", content, file.content_type)
+    asset = await store_upload(db, file.filename or "", content, file.content_type, user_id=user_id)
     return _asset_item(asset)
 
 

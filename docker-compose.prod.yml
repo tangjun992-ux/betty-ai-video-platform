@@ -54,13 +54,26 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - KIE_API_KEY=${KIE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SEEDANCE_API_KEY=${SEEDANCE_API_KEY}
       - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
       - KLING_SECRET_KEY=${KLING_SECRET_KEY}
       - STORAGE_TYPE=${STORAGE_TYPE:-local}
       - STORAGE_PATH=/app/storage
-      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000"]}
+      - MEDIA_CDN_BASE_URL=${MEDIA_CDN_BASE_URL:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-}
+      - AWS_S3_ENDPOINT_URL=${AWS_S3_ENDPOINT_URL:-}
+      - S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
+      - STRIPE_API_KEY=${STRIPE_API_KEY:-}
+      - WECHAT_APPID=${WECHAT_APPID:-}
+      - WECHAT_MCHID=${WECHAT_MCHID:-}
+      - ALIPAY_APP_ID=${ALIPAY_APP_ID:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
     depends_on:
       db:
         condition: service_healthy
@@ -69,23 +82,38 @@ services:
     volumes:
       - media_storage:/app/storage
     restart: unless-stopped
+    # Horizontal scale: stateless API behind a load balancer (rate-limit + auth
+    # are Redis/JWT backed, so replicas are safe). Scale with `--scale api=N`.
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
 
   worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: celery -A celery_app worker --loglevel=info --concurrency=4 -Q image_q,video_q,pipeline_q
+    command: celery -A celery_app worker --loglevel=info --concurrency=4 -Q celery,image_q,video_q,director_q,pipeline_q,collector_q
     environment:
       - ENV=production
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - KIE_API_KEY=${KIE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SEEDANCE_API_KEY=${SEEDANCE_API_KEY}
       - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
       - KLING_SECRET_KEY=${KLING_SECRET_KEY}
       - STORAGE_TYPE=${STORAGE_TYPE:-local}
       - STORAGE_PATH=/app/storage
+      - MEDIA_CDN_BASE_URL=${MEDIA_CDN_BASE_URL:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-}
+      - S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
     volumes:
       - media_storage:/app/storage
     depends_on:
@@ -94,6 +122,9 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    # Scale workers horizontally for generation throughput: `--scale worker=N`.
+    deploy:
+      replicas: ${WORKER_REPLICAS:-2}
 
   beat:
     build:

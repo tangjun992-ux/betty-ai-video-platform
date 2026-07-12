@@ -4,6 +4,52 @@
 const _raw = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/+$/, "");
 export const API_BASE = _raw.endsWith("/api/v1") ? _raw : `${_raw}/api/v1`;
 
+export function trackOnboarding(event: string): void {
+  if (typeof window === "undefined") return;
+  fetch(`${API_BASE}/events/onboarding`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+/** Read the persisted JWT from the zustand auth-store (localStorage). */
+export function authToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("auth-store");
+    if (!raw) return null;
+    return JSON.parse(raw)?.state?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Install a one-time global fetch interceptor that attaches the bearer token
+ *  to same-API requests, so every call site (api.ts + components) is scoped to
+ *  the logged-in user without editing each fetch. */
+export function installAuthFetch() {
+  if (typeof window === "undefined") return;
+  if ((window as any).__betty_auth_fetch) return;
+  const orig = window.fetch.bind(window);
+  (window as any).__betty_auth_fetch = true;
+  window.fetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
+    try {
+      const url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as Request).url);
+      if (url && url.includes("/api/v1/")) {
+        const token = authToken();
+        if (token) {
+          const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+          if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+          init = { ...init, headers };
+        }
+      }
+    } catch {}
+    return orig(input as any, init);
+  };
+}
+
 const FETCH_TIMEOUT_MS = 15000; // 15s per request
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
@@ -94,6 +140,7 @@ export interface GenerateRequest {
   style?: string;
   enhance_prompt?: boolean;
   image_url?: string;
+  seed?: number;
 }
 
 export interface GenerateResponse {
@@ -123,7 +170,7 @@ export interface TaskResult {
   progress?: number;
   current_stage?: string;
   result_url?: string;
-  results?: Array<{ url: string; type: string; model?: string; thumbnail?: string }>;
+  results?: Array<{ url: string; type: string; model?: string; thumbnail?: string; seed?: number }>;
   cost_credits?: number;
   started_at?: string;
   completed_at?: string;
@@ -147,6 +194,7 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
       style: req.style || null,
       enhance_prompt: req.enhance_prompt ?? true,
       image_url: req.image_url || null,
+      ...(req.seed != null ? { seed: req.seed } : {}),
     }),
   });
   if (!res.ok) {
@@ -177,6 +225,227 @@ export async function uploadImage(file: File): Promise<{ url: string }> {
   if (!res.ok) {
     throw new Error(`上传失败: ${res.status}`);
   }
+  return res.json();
+}
+
+/** Enhance a prompt into a richer professional version */
+export async function enhancePrompt(
+  prompt: string,
+  mediaType: string = "auto",
+  style?: string
+): Promise<{ original: string; enhanced: string; additions: string[]; changed: boolean }> {
+  const res = await fetch(`${API_BASE}/generate/enhance`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt, media_type: mediaType, style: style || null }),
+  });
+  if (!res.ok) throw new Error(`优化失败: ${res.status}`);
+  return res.json();
+}
+
+/** Generate a voiceover (TTS) from text — real ElevenLabs via KIE */
+export async function generateSpeech(
+  text: string,
+  voice: string = "Rachel"
+): Promise<{ url: string; media_type: string; model: string; cost?: number }> {
+  const res = await fetch(`${API_BASE}/generate/speech`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, voice }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `配音失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Run an image tool (edit / upscale / bg-remove / extend) — real KIE models */
+export async function editImageTool(params: {
+  operation: "edit" | "upscale" | "bg-remove" | "extend";
+  file?: File | null;
+  imageUrl?: string;
+  prompt?: string;
+  factor?: string;
+  ratio?: string;
+}): Promise<{ url: string; source_url?: string; media_type: string; model: string; operation?: string; cost?: number }> {
+  const fd = new FormData();
+  fd.append("operation", params.operation);
+  if (params.file) fd.append("image_file", params.file);
+  if (params.imageUrl) fd.append("image_url", params.imageUrl);
+  if (params.prompt) fd.append("prompt", params.prompt);
+  if (params.factor) fd.append("factor", params.factor);
+  if (params.ratio) fd.append("ratio", params.ratio);
+  const res = await fetch(`${API_BASE}/generate/edit`, { method: "POST", body: fd });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `处理失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+// ─── Developer API keys ─────────────────────────────────
+export async function listApiKeys(): Promise<{ keys: any[] }> {
+  const res = await fetch(`${API_BASE}/developer/keys`);
+  if (!res.ok) throw new Error(`加载密钥失败: ${res.status}`);
+  return res.json();
+}
+export async function createApiKeyPlatform(name: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/developer/keys`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `创建失败: ${res.status}`); }
+  return res.json();
+}
+export async function revokeApiKey(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/developer/keys/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`吊销失败: ${res.status}`);
+}
+
+// ─── Billing (积分/套餐) ────────────────────────────────
+export async function getBillingSummary(): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/summary`);
+  if (!res.ok) throw new Error(`加载余额失败: ${res.status}`);
+  return res.json();
+}
+export async function getCreditPacks(): Promise<{ packs: any[] }> {
+  const res = await fetch(`${API_BASE}/billing/credit-packs`);
+  if (!res.ok) throw new Error(`加载积分包失败: ${res.status}`);
+  return res.json();
+}
+export async function getTransactions(limit = 50): Promise<{ transactions: any[] }> {
+  const res = await fetch(`${API_BASE}/billing/transactions?limit=${limit}`);
+  if (!res.ok) throw new Error(`加载流水失败: ${res.status}`);
+  return res.json();
+}
+export async function getUsage(days = 30): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/usage?days=${days}`);
+  if (!res.ok) throw new Error(`加载用量失败: ${res.status}`);
+  return res.json();
+}
+export async function refundOrder(orderNo: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/refund/${orderNo}`, { method: "POST" });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `退款失败: ${res.status}`); }
+  return res.json();
+}
+export async function getReceipt(orderNo: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/receipt/${orderNo}`);
+  if (!res.ok) throw new Error(`加载收据失败: ${res.status}`);
+  return res.json();
+}
+export async function checkout(kind: "plan" | "pack", id: string, cycle: "monthly" | "yearly" = "monthly"): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/checkout`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, id, cycle }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `结算失败: ${res.status}`);
+  }
+  const data = await res.json();
+  if (data.mode === "stripe" && data.checkout_url) {
+    window.location.href = data.checkout_url;
+  } else {
+    try { window.dispatchEvent(new Event("betty:credits")); } catch {}
+  }
+  return data;
+}
+
+// ─── QR Payments (微信支付 / 支付宝) ────────────────────
+export async function getPayMethods(): Promise<{ methods: Record<string, { live: boolean }>; usd_to_cny: number }> {
+  const res = await fetch(`${API_BASE}/billing/pay/methods`);
+  if (!res.ok) throw new Error(`加载支付方式失败: ${res.status}`);
+  return res.json();
+}
+export async function createPayOrder(kind: "plan" | "pack", id: string, method: "wechat" | "alipay", cycle: "monthly" | "yearly" = "monthly"): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/pay/create`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, id, method, cycle }),
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `下单失败: ${res.status}`); }
+  return res.json();
+}
+export async function getPayStatus(orderNo: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/pay/status/${orderNo}`);
+  if (!res.ok) throw new Error(`查询失败: ${res.status}`);
+  return res.json();
+}
+export async function mockConfirmPay(orderNo: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/billing/pay/mock-confirm/${orderNo}`, { method: "POST" });
+  if (!res.ok) throw new Error(`确认失败: ${res.status}`);
+  return res.json();
+}
+
+// ─── Projects (作品集) ──────────────────────────────────
+export interface ProjectItemRef { item_id: string; url: string; thumbnail?: string | null; media_type: string; title?: string | null; }
+export interface ProjectDTO { id: string; name: string; description?: string | null; cover?: string | null; item_count: number; items: ProjectItemRef[]; created_at: string; updated_at: string; }
+
+export async function listProjects(): Promise<{ projects: ProjectDTO[] }> {
+  const res = await fetch(`${API_BASE}/projects/`);
+  if (!res.ok) throw new Error(`加载项目失败: ${res.status}`);
+  return res.json();
+}
+export async function createProject(name: string, description?: string): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description }) });
+  if (!res.ok) throw new Error(`创建项目失败: ${res.status}`);
+  return res.json();
+}
+export async function getProject(id: string): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/${id}`);
+  if (!res.ok) throw new Error(`项目不存在: ${res.status}`);
+  return res.json();
+}
+export async function addProjectItem(id: string, item: ProjectItemRef): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/${id}/items`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(item) });
+  if (!res.ok) throw new Error(`添加失败: ${res.status}`);
+  return res.json();
+}
+export async function removeProjectItem(id: string, itemId: string): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/${id}/items/${encodeURIComponent(itemId)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`移除失败: ${res.status}`);
+  return res.json();
+}
+export async function deleteProject(id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/projects/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`删除失败: ${res.status}`);
+}
+
+/** List content-library items (uploads + generated) */
+export async function listLibrary(params: { media_type?: string; source?: string; limit?: number } = {}): Promise<{ items: any[]; total: number; counts: any }> {
+  const q = new URLSearchParams();
+  if (params.media_type) q.set("media_type", params.media_type);
+  if (params.source) q.set("source", params.source);
+  q.set("limit", String(params.limit ?? 60));
+  const res = await fetch(`${API_BASE}/library/?${q.toString()}`);
+  if (!res.ok) throw new Error(`加载素材库失败: ${res.status}`);
+  return res.json();
+}
+
+/** Compose an ordered list of clips into one film (timeline editor) */
+export async function composeTimeline(clips: { url: string }[], opts: { narration_url?: string; with_audio?: boolean } = {}): Promise<{ url: string; thumbnail: string; clip_count: number }> {
+  const res = await fetch(`${API_BASE}/timeline/compose`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clips, narration_url: opts.narration_url ?? null, with_audio: opts.with_audio ?? true }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `合成失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Like (or undo) a gallery item — real persisted community reaction */
+export async function likeGalleryItem(itemId: string, undo = false): Promise<{ likes: number; liked: boolean }> {
+  const res = await fetch(`${API_BASE}/gallery/${encodeURIComponent(itemId)}/like?undo=${undo}`, { method: "POST" });
+  if (!res.ok) throw new Error(`点赞失败: ${res.status}`);
+  return res.json();
+}
+
+/** Report a gallery item (community moderation) */
+export async function reportGalleryItem(itemId: string): Promise<{ reports: number; hidden: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/gallery/${encodeURIComponent(itemId)}/report`, { method: "POST" });
+  if (!res.ok) throw new Error(`举报失败: ${res.status}`);
   return res.json();
 }
 

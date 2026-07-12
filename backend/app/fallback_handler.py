@@ -64,6 +64,9 @@ RETRYABLE_ERRORS = [
     "GPU 资源",
     "try again",
     "请稍后重试",
+    "no results",
+    "missing media url",
+    "invalid result",
     "API key",  # will NOT retry — this is a config issue (overridden by FATAL_ERRORS)
 ]
 

@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 
 from celery_app import app
@@ -12,6 +13,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.services.media_store import persist_results
+from app.services.model_health import model_health, validate_generation_results
 
 logger = logging.getLogger(__name__)
 
@@ -115,18 +117,23 @@ def generate_video_task(
     _update_task(db_task_id, progress=30, current_stage="generating")
     _broadcast_progress(db_task_id, 30, "generating", "视频模型已启动，开始生成...")
 
-    get_adapter = _load_adapters()
-    adapter = get_adapter(model)
-    if not adapter:
-        from app.fallback_handler import get_fallback
-        fallback_id = get_fallback(model)
-        if fallback_id:
-            adapter = get_adapter(fallback_id)
-            model = fallback_id
-            _update_task(db_task_id, selected_model=model, current_stage="fallback_used")
+    # Demo mode: render locally when no provider key is configured.
+    from app.adapters.demo_provider import demo_mode_active, DemoAdapter
+    if demo_mode_active():
+        adapter = DemoAdapter(model_label=model)
+    else:
+        get_adapter = _load_adapters()
+        adapter = get_adapter(model)
+        if not adapter:
+            from app.fallback_handler import get_fallback
+            fallback_id = get_fallback(model)
+            if fallback_id:
+                adapter = get_adapter(fallback_id)
+                model = fallback_id
+                _update_task(db_task_id, selected_model=model, current_stage="fallback_used")
 
-    if not adapter:
-        return _mark_failed(db_task_id, f"No adapter for model or fallback: {model}")
+        if not adapter:
+            return _mark_failed(db_task_id, f"No adapter for model or fallback: {model}")
 
     duration = params.get("duration", 5)
     resolution = params.get("resolution", "1080p")
@@ -135,13 +142,17 @@ def generate_video_task(
     _update_task(db_task_id, progress=50)
     _broadcast_progress(db_task_id, 50, "generating", "视频渲染中，请耐心等待...")
 
+    started = time.monotonic()
     try:
         result = _run_async(
             adapter.generate_video(
-                prompt=prompt, image_url=image_url,
+                prompt=prompt, model_id=model, image_url=image_url,
                 duration=duration, resolution=resolution,
             )
         )
+        quality_ok, quality_error = validate_generation_results(result, "video")
+        if not quality_ok:
+            raise RuntimeError(quality_error)
 
         self.update_state(state="PROGRESS", meta={"current_stage": "uploading", "progress": 85})
         _update_task(db_task_id, progress=85, current_stage="uploading")
@@ -168,12 +179,17 @@ def generate_video_task(
             completed_at=datetime.now(timezone.utc),
             results=json.dumps(output), actual_cost=cost,
         )
+        model_health.record_success(model, int((time.monotonic() - started) * 1000))
         _broadcast_progress(db_task_id, 100, "completed", "视频生成完成！")
         return {"status": "completed", "results": output, "cost": cost}
 
     except RuntimeError as e:
+        from app.fallback_handler import is_retryable_error
+        model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
         return _handle_retryable(self, db_task_id, model, str(e), prompt, image_url, duration, resolution)
     except Exception as e:
+        from app.fallback_handler import is_retryable_error
+        model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
         return _mark_failed(db_task_id, str(e))
 
 
@@ -195,14 +211,18 @@ def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duratio
     if not fb:
         return _mark_failed(db_task_id, f"Fallback not found: {fallback_id}")
 
+    started = time.monotonic()
     try:
         result = _run_async(
             fb.generate_video(
-                prompt=prompt, image_url=image_url,
+                prompt=prompt, model_id=fallback_id, image_url=image_url,
                 duration=duration, resolution=resolution,
             )
         )
         rd = result.to_dict() if hasattr(result, "to_dict") else result
+        quality_ok, quality_error = validate_generation_results(result, "video")
+        if not quality_ok:
+            raise RuntimeError(quality_error)
         if rd.get("error"):
             return _mark_failed(db_task_id, f"Fallback also failed: {rd['error']}")
 
@@ -221,8 +241,11 @@ def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duratio
             completed_at=datetime.now(timezone.utc),
             results=json.dumps(output), actual_cost=cost,
         )
+        model_health.record_success(fallback_id, int((time.monotonic() - started) * 1000))
         return {"status": "completed_fallback", "results": output, "cost": cost}
     except Exception as fe:
+        from app.fallback_handler import is_retryable_error
+        model_health.record_failure(fallback_id, str(fe), retryable=is_retryable_error(str(fe)))
         return _mark_failed(db_task_id, f"Fallback also failed: {fe}. Original: {error}")
 
 

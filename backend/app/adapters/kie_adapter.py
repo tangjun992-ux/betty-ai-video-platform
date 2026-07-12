@@ -28,14 +28,20 @@ logger = logging.getLogger(__name__)
 # Image models use flat names; video models use provider/model format
 KIE_MODEL_IDS = {
     # ─── Image models (15) internal → KIE API model ID ───
+    # ✅ verified working against the live KIE gateway (unified createTask)
     "gpt-image-2": "gpt-image-2-text-to-image",
     "dall-e-3": "gpt-image-2-text-to-image",
     "nano-banana": "nano-banana-2",
-    "nano-banana-pro": "nano-banana-2-pro",
+    "nano-banana-2": "nano-banana-2",
+    "nano-banana-pro": "nano-banana-pro",
+    "nano-banana-basic": "google/nano-banana",
+    "imagen-4": "google/imagen4",
+    "imagen-4-fast": "google/imagen4-fast",
+    "imagen-4-ultra": "google/imagen4-ultra",
+    # ── unverified guesses (kept for manual selection; may 422) ──
     "flux-1.1-pro": "black-forest/flux-1.1-pro",
     "flux-1-dev": "black-forest/flux-1-dev",
     "flux-kontext": "black-forest/flux-kontext",
-    "imagen-4": "google/imagen-4",
     "ideogram-v3": "ideogram/ideogram-v3",
     "recraft-v3": "recraft/recraft-v3",
     "seedream-3": "bytedance/seedream-3",
@@ -57,9 +63,12 @@ KIE_MODEL_IDS = {
     "veo-3": "veo3/veo-3",
     "sora-2": "sora/sora-2",
     "sora-2-pro": "sora/sora-2-pro",
-    "kling-2.5-turbo": "kling/kling-v2.5-turbo",
-    "kling-2.1-master": "kling/kling-v2.1-master",
-    "kling-2.1-pro": "kling/kling-v2.1-pro",
+    # Kling — verified-recognised IDs on the live gateway
+    "kling-3.0": "kling-3.0/video",
+    "kling-2.6": "kling-2.6/text-to-video",
+    "kling-2.5-turbo": "kling/v2-5-turbo-text-to-video-pro",
+    "kling-2.1-master": "kling/v2-1-master-text-to-video",
+    "kling-2.1-pro": "kling/v2-1-pro",
     "kling-1.6": "kling/kling-v1.6",
     "wan-2.5": "wan/wan-2.5",
     "wan-2.2": "wan/wan-2.2",
@@ -256,15 +265,22 @@ class KieAdapter(BaseModelAdapter):
             "prompt": prompt,
         }
 
-        # Aspect ratio
+        # Aspect ratio — model families disagree on the key name, so send the
+        # verified-compatible superset (camel + snake). KIE ignores unknown keys.
         ratio = _size_to_ratio(size)
         payload["aspectRatio"] = ratio
+        payload["aspect_ratio"] = ratio
+
+        # Seed for reproducibility / variations (honored by models that support it).
+        seed = kwargs.get("seed")
+        if seed is not None:
+            payload["seed"] = int(seed)
 
         # Number of images (n varies by model)
         if count > 1:
             payload["n"] = count
 
-        result = await self._submit_and_poll(payload, media_type="image", timeout=120)
+        result = await self._submit_and_poll(payload, media_type="image", timeout=180)
 
         cost = _extract_kie_cost(result, "image")
 
@@ -275,6 +291,62 @@ class KieAdapter(BaseModelAdapter):
             cost=cost,
             meta={"kie_task_id": result.get("taskId", ""), "resolution": size},
         )
+
+    # ── image tools: edit / upscale / bg-remove / extend ──────
+    async def edit_image(self, *, image_urls: list[str], prompt: str,
+                         image_size: str = "auto", output_format: str = "png",
+                         model_id: str = "google/nano-banana-edit") -> GenerationResult:
+        """Instruction-based image editing (nano-banana-edit)."""
+        logger.info("[KIE] edit → %r", prompt[:50])
+        payload = {"model": model_id, "prompt": prompt, "image_urls": image_urls,
+                   "image_size": image_size, "output_format": output_format}
+        result = await self._submit_and_poll(payload, media_type="image", timeout=240)
+        return GenerationResult(
+            media_url=_extract_url(result, "imageUrl"), media_type="image", model=model_id,
+            cost=_extract_kie_cost(result, "image"),
+            meta={"kie_task_id": result.get("taskId", ""), "op": "edit"})
+
+    async def upscale_image(self, *, image_url: str, factor: str = "2",
+                            model_id: str = "topaz/image-upscale") -> GenerationResult:
+        """AI super-resolution upscale (Topaz)."""
+        logger.info("[KIE] upscale x%s", factor)
+        payload = {"model": model_id, "image_url": image_url, "upscale_factor": str(factor)}
+        result = await self._submit_and_poll(payload, media_type="image", timeout=300)
+        return GenerationResult(
+            media_url=_extract_url(result, "imageUrl"), media_type="image", model=model_id,
+            cost=_extract_kie_cost(result, "image"),
+            meta={"kie_task_id": result.get("taskId", ""), "op": "upscale", "factor": factor})
+
+    async def remove_background(self, *, image_url: str,
+                                model_id: str = "recraft/remove-background") -> GenerationResult:
+        """Background removal (Recraft); falls back to instruction-based cutout
+        via nano-banana-edit when Recraft is unavailable."""
+        logger.info("[KIE] remove-bg")
+        try:
+            payload = {"model": model_id, "image": image_url}
+            result = await self._submit_and_poll(payload, media_type="image", timeout=180)
+            return GenerationResult(
+                media_url=_extract_url(result, "imageUrl"), media_type="image", model=model_id,
+                cost=_extract_kie_cost(result, "image"),
+                meta={"kie_task_id": result.get("taskId", ""), "op": "bg-remove"})
+        except Exception as e:
+            logger.warning("[KIE] recraft remove-bg failed (%s) → nano-banana-edit fallback", e)
+            res = await self.edit_image(
+                image_urls=[image_url],
+                prompt=("cut out the main subject and place it on a pure solid white "
+                        "background, remove all other background elements cleanly"),
+                image_size="auto")
+            res.meta["op"] = "bg-remove"
+            return res
+
+    async def extend_image(self, *, image_url: str, target_ratio: str = "16:9",
+                           prompt: str = "") -> GenerationResult:
+        """Outpaint / reframe by editing into a wider canvas (nano-banana-edit)."""
+        instruction = (prompt or "").strip() or (
+            "naturally extend and outpaint the scene to fill the wider frame, "
+            "keeping the original subject centered and consistent")
+        return await self.edit_image(image_urls=[image_url], prompt=instruction,
+                                     image_size=target_ratio, output_format="png")
 
     # ── video generation ─────────────────────────────────────
     async def generate_video(
@@ -305,7 +377,30 @@ class KieAdapter(BaseModelAdapter):
         if image_url:
             payload["imageUrl"] = image_url
 
-        result = await self._submit_and_poll(payload, media_type="video", timeout=600)
+        # Not every model accepts every resolution token (e.g. seedance-2-fast
+        # rejects 1080p). Retry down a safe ladder on "invalid resolution" (422)
+        # so a valid request is never lost to a resolution mismatch.
+        res_ladder = [r for r in (kie_res, "720p", "480p") if r]
+        seen = set()
+        result = None
+        last_err: Optional[Exception] = None
+        for res_try in res_ladder:
+            if res_try in seen:
+                continue
+            seen.add(res_try)
+            payload["resolution"] = res_try
+            try:
+                result = await self._submit_and_poll(payload, media_type="video", timeout=600)
+                break
+            except RuntimeError as e:
+                msg = str(e).lower()
+                if "resolution" in msg and ("422" in msg or "invalid" in msg):
+                    logger.warning("[KIE] resolution %s rejected for %s, retrying lower", res_try, kie_id)
+                    last_err = e
+                    continue
+                raise
+        if result is None:
+            raise last_err or RuntimeError("KIE video generation failed: no valid resolution")
 
         url = _extract_url(result, "videoUrl")
         cover = _extract_url(result, "coverUrl") or url
@@ -323,6 +418,92 @@ class KieAdapter(BaseModelAdapter):
                 "duration": duration,
             },
         )
+
+    # ── file upload: local bytes → public KIE URL (3-day TTL) ─
+    async def upload_public_url(self, data: bytes, *, filename: str = "upload.png",
+                                content_type: str = "image/png",
+                                upload_path: str = "betty/uploads") -> str:
+        """Upload raw bytes to KIE and return a publicly-fetchable URL.
+        Needed so KIE models (lip-sync, i2v) can reach user-uploaded assets."""
+        import base64 as _b64
+        if not self._api_key:
+            raise RuntimeError("KIE_API_KEY not configured")
+        data_url = f"data:{content_type};base64," + _b64.b64encode(data).decode()
+        headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=90) as client:
+            resp = await client.post(
+                "https://kieai.redpandaai.co/api/file-base64-upload",
+                headers=headers,
+                json={"base64Data": data_url, "uploadPath": upload_path, "fileName": filename},
+            )
+            resp.raise_for_status()
+            body = resp.json()
+        data_obj = body.get("data") or {}
+        url = (data_obj.get("downloadUrl") or data_obj.get("fileUrl")
+               or data_obj.get("url") or "")
+        if not url:
+            raise RuntimeError(f"KIE upload returned no URL: {body}")
+        return url
+
+    # ── audio: text-to-speech ────────────────────────────────
+    async def generate_speech(self, text: str, *, voice: str = "Rachel",
+                              model_id: str = "elevenlabs/text-to-speech-multilingual-v2",
+                              **kwargs) -> GenerationResult:
+        """Generate a voiceover (TTS) → returns an audio GenerationResult."""
+        logger.info("[KIE] tts → %r voice=%s", text[:40], voice)
+        payload = {"model": model_id, "text": text, "voice": voice}
+        for k in ("stability", "similarity_boost", "style", "speed", "language_code"):
+            if k in kwargs and kwargs[k] is not None:
+                payload[k] = kwargs[k]
+        result = await self._submit_and_poll(payload, media_type="audio", timeout=180)
+        url = _extract_url(result, "audioUrl")
+        return GenerationResult(
+            media_url=url, media_type="audio", model=model_id,
+            cost=_extract_kie_cost(result, "audio"),
+            meta={"kie_task_id": result.get("taskId", ""), "voice": voice},
+        )
+
+    # ── lip-sync / talking avatar (image + audio → video) ─────
+    async def generate_lipsync(self, *, image_url: str, audio_url: str,
+                               prompt: str = "a person talking naturally on camera",
+                               model_id: str = "kling/ai-avatar-pro",
+                               resolution: str = "480p", **kwargs) -> GenerationResult:
+        """Drive a portrait image with an audio track → talking video.
+
+        Primary model is kling/ai-avatar-pro (fast, reliable, ~3min). infinitalk
+        is kept as a fallback. KIE lip-sync models are intermittently flaky
+        ("internal error") and infinitalk can queue for many minutes, so we
+        retry on transient errors and fall back across models."""
+        # Try primary model then fallback; retry each on transient errors.
+        candidates = [model_id]
+        if "infinitalk/from-audio" not in candidates:
+            candidates.append("infinitalk/from-audio")
+        last_err: Exception | None = None
+        for mid in candidates:
+            for attempt in range(2):
+                payload = {"model": mid, "image_url": image_url,
+                           "audio_url": audio_url, "prompt": prompt}
+                if mid.startswith("infinitalk"):
+                    payload["resolution"] = resolution
+                try:
+                    logger.info("[KIE] lipsync → model=%s attempt=%d", mid, attempt + 1)
+                    result = await self._submit_and_poll(payload, media_type="video", timeout=1200)
+                    return GenerationResult(
+                        media_url=_extract_url(result, "videoUrl"),
+                        thumbnail_url=_extract_url(result, "coverUrl") or "",
+                        media_type="video", model=mid,
+                        cost=_extract_kie_cost(result, "video"),
+                        meta={"kie_task_id": result.get("taskId", ""), "lipsync": True},
+                    )
+                except Exception as e:  # transient internal error → retry / fall back
+                    last_err = e
+                    msg = str(e).lower()
+                    logger.warning("[KIE] lipsync %s attempt %d failed: %s", mid, attempt + 1, e)
+                    if "internal error" in msg or "try again" in msg:
+                        await asyncio.sleep(4)
+                        continue
+                    break  # non-transient → try next model
+        raise RuntimeError(f"lip-sync failed on all models: {last_err}")
 
     # ── core: submit + poll ─────────────────────────────────
     async def _submit_and_poll(
@@ -362,7 +543,7 @@ class KieAdapter(BaseModelAdapter):
 
         # Step 2: Poll
         poll_interval = 6 if media_type == "video" else 3
-        max_waiting_seconds = 600 if media_type == "video" else 120
+        max_waiting_seconds = 600 if media_type == "video" else 160
 
         async with httpx.AsyncClient(timeout=30) as client:
             started_at = time.monotonic()

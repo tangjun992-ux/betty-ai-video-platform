@@ -4,14 +4,16 @@ import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, User, Eye, EyeOff, UserPlus, Sparkles } from "lucide-react";
-import { useAuthStore } from "@/lib/stores";
+import { Mail, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
+import { useAuthStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { register } from "@/lib/api";
+import { register, trackOnboarding } from "@/lib/api";
+import { BrandMark } from "@/components/BrandLogo";
 
 export default function RegisterPage() {
   const router = useRouter();
   const { setUser, setToken } = useAuthStore();
+  const startOnboarding = useOnboardingStore((s) => s.startFor);
   const toast = useToast();
 
   const [username, setUsername] = useState("");
@@ -50,8 +52,11 @@ export default function RegisterPage() {
       const res = await register(username.trim(), email.trim(), password);
       setToken(res.access_token);
       setUser(res.user);
+      startOnboarding(String(res.user.id));
+      trackOnboarding("started");
       toast.success("注册成功", `欢迎加入 betty，${res.user.name || username}`);
-      router.push("/dashboard");
+      const firstPrompt = "一杯精品咖啡放在大理石桌面，清晨柔光，商业产品摄影，电影级质感";
+      router.push(`/create/image?onboard=1&prompt=${encodeURIComponent(firstPrompt)}`);
     } catch (err: any) {
       toast.error("注册失败", err.message || "请稍后重试");
     } finally {
@@ -92,9 +97,7 @@ export default function RegisterPage() {
             transition={{ delay: 0.1 }}
             className="text-center mb-8"
           >
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-accent-violet to-accent-cyan mb-4 shadow-button-glow">
-              <Sparkles className="w-7 h-7 text-white" />
-            </div>
+            <BrandMark className="w-14 h-14 mx-auto mb-4 shadow-button-glow rounded-2xl" />
             <h1 className="text-2xl font-bold text-text-primary mb-1">创建账户</h1>
             <p className="text-sm text-text-secondary">开始你的 AI 创作之旅</p>
           </motion.div>
@@ -266,7 +269,7 @@ export default function RegisterPage() {
             已有账号？{" "}
             <Link
               href="/auth/login"
-              className="text-accent-cyan hover:text-accent-cyan-hover font-medium transition-colors"
+              className="text-brand hover:text-brand-strong font-medium transition-colors"
             >
               登录
             </Link>

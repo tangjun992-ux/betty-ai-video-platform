@@ -1,11 +1,17 @@
 """
 Rate limiter — sliding window rate limiting for API endpoints.
+
+Primary backend is Redis (shared across workers). If Redis is unavailable the
+limiter falls back to an in-process sliding window so limits STILL apply (fail
+-closed to protection rather than silently disabling all limits).
 """
+import threading
 import time
 import redis
+from collections import defaultdict, deque
 from typing import Optional
 from functools import wraps
-from fastapi import Request, HTTPException
+from fastapi import Request, HTTPException, Depends
 
 from app.config import settings
 
@@ -15,6 +21,31 @@ DEFAULT_LIMITS = {
     "upload": {"rpm": 5, "rph": 30},
     "default": {"rpm": 60, "rph": 500},
 }
+
+
+class _MemoryWindow:
+    """Per-process sliding-window fallback used when Redis is unavailable."""
+
+    def __init__(self):
+        self._hits: dict[str, deque] = defaultdict(deque)
+        self._lock = threading.Lock()
+
+    def check(self, key: str, rpm: int, rph: int) -> dict:
+        now = time.time()
+        with self._lock:
+            dq = self._hits[key]
+            while dq and dq[0] < now - 3600:
+                dq.popleft()
+            minute = sum(1 for t in dq if t >= now - 60)
+            if minute >= rpm:
+                return {"allowed": False, "retry_after": 60, "limit_key": "rpm"}
+            if len(dq) >= rph:
+                return {"allowed": False, "retry_after": 3600, "limit_key": "rph"}
+            dq.append(now)
+            return {"allowed": True}
+
+
+_memory = _MemoryWindow()
 
 
 class RateLimiter:
@@ -75,9 +106,34 @@ class RateLimiter:
 
             return {"allowed": True}
 
-        except Exception as e:
-            # If Redis fails, don't block
-            return {"allowed": True, "error": str(e)}
+        except Exception:
+            # Redis unavailable → fall back to in-process limiting (still enforced)
+            return _memory.check(key, requests_per_minute, requests_per_hour)
 
 
 rate_limiter = RateLimiter()
+
+
+def _client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def rate_limit(bucket: str, rpm: int = 60, rph: int = 500):
+    """FastAPI dependency factory — throttle a route by client IP (+ bearer sub
+    when present). Raises 429 with Retry-After when exceeded."""
+    async def _dep(request: Request):
+        subject = _client_ip(request)
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer "):
+            subject = "u:" + auth[7:][:24]  # coarse per-token bucket
+        res = rate_limiter.is_rate_limited(f"{bucket}:{subject}", rpm, rph)
+        if not res.get("allowed", True):
+            raise HTTPException(
+                status_code=429,
+                detail="请求过于频繁，请稍后再试",
+                headers={"Retry-After": str(res.get("retry_after", 60))},
+            )
+    return _dep

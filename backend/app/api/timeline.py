@@ -201,6 +201,39 @@ async def get_project(project_id: str):
     return project
 
 
+class ComposeClip(BaseModel):
+    url: str = Field(..., description="片段 URL（本地 /api/v1/media 视频）")
+
+
+class ComposeRequest(BaseModel):
+    clips: List[ComposeClip] = Field(..., min_length=1, description="按顺序排列的视频片段")
+    narration_url: Optional[str] = Field(None, description="可选旁白/配乐音轨 URL")
+    with_audio: bool = Field(True, description="是否混入音轨")
+
+
+@router.post("/timeline/compose", summary="合成时间线为成片（同步）")
+async def compose_timeline(req: ComposeRequest):
+    """Stitch the ordered clips into one film using the proven ffmpeg composer.
+    Synchronous (a few short clips finish in seconds); returns the local video."""
+    import asyncio as _a
+    urls = [c.url for c in req.clips if c.url]
+    if not urls:
+        raise HTTPException(status_code=400, detail="没有可合成的片段")
+    from app.adapters.demo_provider import compose_final_video, _local_media_path
+    missing = [u for u in urls if not _local_media_path(u)]
+    if missing:
+        raise HTTPException(status_code=400,
+                            detail=f"{len(missing)} 个片段不是可访问的本地视频，无法合成")
+    try:
+        final_url, poster = await _a.to_thread(
+            compose_final_video, urls, None, req.with_audio, req.narration_url)
+    except Exception as e:
+        logger.error("timeline compose failed: %s", e)
+        raise HTTPException(status_code=500, detail=f"合成失败: {e}")
+    return {"url": final_url, "thumbnail": poster, "clip_count": len(urls),
+            "media_type": "video"}
+
+
 @router.post(
     "/timeline/render",
     response_model=RenderResponse,

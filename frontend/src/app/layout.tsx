@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import dynamic from "next/dynamic";
 import { Inter } from "next/font/google";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 import { ThemeScript } from "@/components/ThemeScript";
+import { LocaleScript } from "@/i18n/LocaleScript";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -25,6 +26,16 @@ export const metadata: Metadata = {
   authors: [{ name: "betty", url: baseUrl }],
   creator: "betty",
   publisher: "betty",
+  icons: {
+    icon: [{ url: "/favicon.png", type: "image/png" }],
+    shortcut: ["/favicon.png"],
+    apple: [{ url: "/icons/apple-touch-icon.png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "betty",
+  },
   robots: {
     index: true,
     follow: true,
@@ -64,6 +75,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  themeColor: "#6C5CE7",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 // Dynamically import heavy client components with code-splitting
 const ClientLayout = dynamic(
   () => import("@/components/ClientLayout").then((mod) => ({ default: mod.ClientLayout })),
@@ -85,6 +103,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <ThemeScript />
+        <LocaleScript />
       </head>
       <body className={cn("min-h-screen bg-cosmic-deep antialiased", inter.variable, "font-sans")}>
         <ClientLayout>{children}</ClientLayout>

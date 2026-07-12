@@ -51,6 +51,31 @@ export default function GalleryPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [resFilter, setResFilter] = useState("all");
   const [durFilter, setDurFilter] = useState("all");
+  const [lightbox, setLightbox] = useState<GalleryItem | null>(null);
+  const [liked, setLiked] = useState<Record<string, boolean>>({});
+  const [likeDelta, setLikeDelta] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    try { setLiked(JSON.parse(localStorage.getItem("betty-liked") || "{}")); } catch {}
+  }, []);
+
+  const toggleLike = useCallback(async (item: GalleryItem) => {
+    const isLiked = !!liked[item.id];
+    const next = { ...liked, [item.id]: !isLiked };
+    setLiked(next);
+    setLikeDelta((d) => ({ ...d, [item.id]: (d[item.id] || 0) + (isLiked ? -1 : 1) }));
+    try { localStorage.setItem("betty-liked", JSON.stringify(next)); } catch {}
+    try {
+      const { likeGalleryItem } = await import("@/lib/api");
+      await likeGalleryItem(item.id, isLiked);
+    } catch {
+      // revert on failure
+      setLiked(liked);
+      setLikeDelta((d) => ({ ...d, [item.id]: (d[item.id] || 0) + (isLiked ? 1 : -1) }));
+    }
+  }, [liked]);
+
+  const likeCount = useCallback((item: GalleryItem) => item.likes + (likeDelta[item.id] || 0), [likeDelta]);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -174,7 +199,7 @@ export default function GalleryPage() {
         {/* Style chips */}
         {styleOptions.length > 0 && (
           <div className="flex flex-wrap justify-center gap-2">
-            {[{ key: "all", label: "全部风格" } as StyleOption, ...styleOptions.slice(0, 15)].map((s) => (
+            {[{ key: "all", label: "全部风格" } as StyleOption, ...styleOptions.filter((s) => s.key !== "all").slice(0, 15)].map((s) => (
               <button
                 key={s.key}
                 onClick={() => setStyle(s.key)}
@@ -263,109 +288,100 @@ export default function GalleryPage() {
             key={`${mediaFilter}-${style}-${sort}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4"
+            className="columns-2 md:columns-3 xl:columns-4 2xl:columns-5 gap-3 space-y-3"
           >
-            {filtered.map((item) => (
-              <div
-                key={item.id}
-                className="group relative bg-cosmic-surface border border-cosmic-border rounded-2xl overflow-hidden break-inside-avoid hover:border-cosmic-border-hover hover:shadow-card hover:-translate-y-0.5 transition-all duration-300"
-                onMouseEnter={() => setHoveredId(item.id)}
-                onMouseLeave={() => setHoveredId(null)}
-              >
-                {/* Media */}
-                <div className="relative bg-cosmic-deep overflow-hidden">
+            {filtered.map((item) => {
+              const remixHref = (() => {
+                const p = encodeURIComponent(item.prompt || "");
+                const m = encodeURIComponent(item.model_used || "");
+                return item.media_type === "video"
+                  ? `/create/video?prompt=${p}&model=${m}`
+                  : `/create/image?prompt=${p}&model=${m}`;
+              })();
+              return (
+                <div
+                  key={item.id}
+                  className="group relative rounded-xl overflow-hidden break-inside-avoid bg-cosmic-deep ring-1 ring-cosmic-border hover:ring-brand/40 hover:shadow-card transition-all duration-300"
+                  onMouseEnter={() => setHoveredId(item.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                >
+                  {/* Media — click opens the detail lightbox */}
+                  <button type="button" onClick={() => setLightbox(item)} className="block w-full cursor-zoom-in" aria-label="查看详情">
                   {item.media_type === "video" ? (
-                    <div className="relative">
-                      <video
-                        src={item.url}
-                        className="w-full object-cover"
-                        muted loop playsInline
-                        autoPlay={hoveredId === item.id}
-                        poster={item.thumbnail}
-                      />
-                      {hoveredId !== item.id && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
-                          <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center group-hover:scale-110 transition-transform">
-                            <svg className="w-6 h-6 text-text-accent-cyan ml-1" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M8 5v14l11-7z"/>
-                            </svg>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <video
+                      src={item.url}
+                      className="w-full object-cover align-middle"
+                      muted loop playsInline
+                      autoPlay={hoveredId === item.id}
+                      poster={item.thumbnail}
+                    />
                   ) : (
                     <img
                       src={item.url}
                       alt={item.prompt}
-                      className="w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="w-full object-cover align-middle group-hover:scale-[1.03] transition-transform duration-500"
                       loading="lazy"
                     />
                   )}
+                  </button>
 
                   {/* Top badges */}
-                  <div className="absolute top-3 left-3 flex gap-2">
-                    <span className="px-2 py-1 bg-black/60 backdrop-blur-md rounded-full text-[11px] text-white font-medium">
+                  <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+                    {item.media_type === "video" && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-full text-[10px] text-white font-medium">
+                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                        视频
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 bg-black/55 backdrop-blur-md rounded-full text-[10px] text-white/90 font-medium">
                       {item.model_used}
                     </span>
                   </div>
-                  <div className="absolute top-3 right-3">
-                    <span className="px-2 py-1 bg-warning-muted backdrop-blur-md rounded-full text-[11px] text-warning border border-warning/20">
-                      ⚡ {item.credits_cost}cr
+                  <div className="absolute top-2.5 right-2.5">
+                    <span className="px-2 py-0.5 bg-black/55 backdrop-blur-md rounded-full text-[10px] text-warning font-medium">
+                      ⚡{item.credits_cost}
                     </span>
                   </div>
-                </div>
 
-                {/* Info */}
-                <div className="p-4">
-                  <p className="text-sm text-text-accent-cyan/80 line-clamp-2 leading-relaxed mb-2">
-                    {item.prompt}
-                  </p>
-
-                  {item.styles.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {item.styles.slice(0, 3).map((s) => (
-                        <span key={s} className="px-2 py-0.5 rounded-full text-[10px] bg-cosmic-subtle text-text-secondary border border-cosmic-border">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base">{item.avatar}</span>
-                      <span className="text-xs text-text-secondary">{item.username}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-text-secondary">
-                      <span>❤️ {item.likes}</span>
-                      <span>👁 {item.views}</span>
+                  {/* Hover overlay — prompt + actions rise from the bottom */}
+                  <div className="absolute inset-0 flex flex-col justify-end opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-t from-black/85 via-black/25 to-transparent pointer-events-none">
+                    <div className="p-3 pointer-events-auto">
+                      <p className="text-[13px] text-white/95 line-clamp-2 leading-snug mb-2.5">
+                        {item.prompt}
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 text-[11px] text-white/70">
+                          <button
+                            onClick={() => toggleLike(item)}
+                            title="点赞"
+                            className={cn("inline-flex items-center gap-1 transition-colors", liked[item.id] ? "text-rose-400" : "hover:text-rose-300")}
+                          >
+                            <span>{liked[item.id] ? "❤️" : "🤍"}</span> {likeCount(item)}
+                          </button>
+                          <span className="inline-flex items-center gap-1">👁 {item.views}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => navigator.clipboard.writeText(item.prompt)}
+                            title="复制 Prompt"
+                            className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 backdrop-blur-md flex items-center justify-center text-white transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          </button>
+                          <a
+                            href={remixHref}
+                            className="inline-flex items-center gap-1 px-2.5 h-7 rounded-lg bg-white text-black text-[11px] font-semibold hover:bg-white/90 transition-colors"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            做同款
+                          </a>
+                        </div>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => navigator.clipboard.writeText(item.prompt)}
-                      className="flex-1 py-1.5 rounded-lg text-xs bg-cosmic-subtle hover:bg-cosmic-border text-text-secondary hover:text-brand transition-all flex items-center justify-center gap-1 border border-cosmic-border hover:border-cosmic-border-hover"
-                    >
-                      📋 复制 Prompt
-                    </button>
-                    <a
-                      href={(() => {
-                        const p = encodeURIComponent(item.prompt || "");
-                        const m = encodeURIComponent(item.model_used || "");
-                        return item.media_type === "video"
-                          ? `/create/video?prompt=${p}&model=${m}`
-                          : `/create/image?prompt=${p}&model=${m}`;
-                      })()}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand/[0.08] text-brand text-xs font-medium border border-brand/20 hover:bg-brand/[0.15] transition-colors"
-                    >
-                      🔄 做同款
-                    </a>
-                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </motion.div>
         )}
       </AnimatePresence>
@@ -386,11 +402,84 @@ export default function GalleryPage() {
           className="fixed bottom-8 right-8 w-10 h-10 rounded-full bg-cosmic-surface border border-cosmic-border shadow-elevation-md backdrop-blur-xl flex items-center justify-center hover:bg-cosmic-subtle transition-all z-40"
           aria-label="返回顶部"
         >
-          <svg className="w-5 h-5 text-text-accent-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 text-brand" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
           </svg>
         </button>
       )}
+
+      {/* ── Detail Lightbox (对标 Midjourney/Yapper 作品详情) ── */}
+      <AnimatePresence>
+        {lightbox && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 bg-black/80 backdrop-blur-sm"
+            onClick={() => setLightbox(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.98, opacity: 0 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative flex flex-col lg:flex-row gap-0 max-w-5xl w-full max-h-[88vh] rounded-2xl overflow-hidden bg-cosmic-surface border border-cosmic-border shadow-elevation-xl"
+            >
+              {/* Media */}
+              <div className="lg:flex-1 bg-black flex items-center justify-center min-h-[240px] max-h-[88vh]">
+                {lightbox.media_type === "video" ? (
+                  <video src={lightbox.url} poster={lightbox.thumbnail} controls autoPlay loop className="max-w-full max-h-[88vh] object-contain" />
+                ) : (
+                  <img src={lightbox.url} alt={lightbox.prompt} className="max-w-full max-h-[88vh] object-contain" />
+                )}
+              </div>
+              {/* Info panel */}
+              <div className="lg:w-80 flex-shrink-0 flex flex-col p-5 gap-4 overflow-y-auto">
+                <div className="flex items-center justify-between">
+                  <span className="text-lg">{lightbox.avatar}</span>
+                  <button onClick={() => setLightbox(null)} className="btn-icon" aria-label="关闭">✕</button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="badge-cyan">{lightbox.model_used}</span>
+                  {lightbox.media_type === "video" && <span className="badge-violet">视频</span>}
+                  {lightbox.resolution && <span className="badge">{lightbox.resolution}</span>}
+                  <span className="badge-warning">⚡{lightbox.credits_cost}</span>
+                </div>
+                <p className="text-sm text-text-secondary leading-relaxed">{lightbox.prompt}</p>
+                <div className="flex items-center gap-4 text-xs text-text-tertiary">
+                  <button onClick={() => toggleLike(lightbox)} className={cn("inline-flex items-center gap-1", liked[lightbox.id] ? "text-rose-500" : "hover:text-rose-500")}>
+                    {liked[lightbox.id] ? "❤️" : "🤍"} {likeCount(lightbox)}
+                  </button>
+                  <span>👁 {lightbox.views}</span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const { reportGalleryItem } = await import("@/lib/api");
+                        const r = await reportGalleryItem(lightbox.id);
+                        if (r.hidden) { setItems((prev) => prev.filter((it) => it.id !== lightbox.id)); setLightbox(null); }
+                        alert(r.message);
+                      } catch { alert("举报失败，请稍后再试"); }
+                    }}
+                    className="ml-auto inline-flex items-center gap-1 hover:text-destructive"
+                    title="举报此内容"
+                  >
+                    ⚑ 举报
+                  </button>
+                </div>
+                <div className="mt-auto flex flex-col gap-2">
+                  <a
+                    href={lightbox.media_type === "video"
+                      ? `/create/video?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}`
+                      : `/create/image?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}`}
+                    className="btn-primary w-full"
+                  >✨ 做同款</a>
+                  <div className="flex gap-2">
+                    <button onClick={() => navigator.clipboard.writeText(lightbox.prompt)} className="btn-secondary flex-1 text-sm">复制提示词</button>
+                    <a href={lightbox.url} download className="btn-secondary flex-1 text-sm text-center">下载</a>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
