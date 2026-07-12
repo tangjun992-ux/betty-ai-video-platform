@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api";
+import { useLocale } from "@/i18n/LocaleProvider";
 
 const MEDIA_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
 const resolveMedia = (u?: string) => (!u ? "" : u.startsWith("/") ? `${MEDIA_ORIGIN}${u}` : u);
@@ -69,6 +70,7 @@ const isMediaStep = (a: string) => ["image", "video", "lipsync"].includes(a);
 const isSkippable = (a: string) => ["audio", "subtitle"].includes(a);
 
 export default function AgentPage() {
+  const { t } = useLocale();
   const [sessions, setSessions] = useState<Session[]>([{ id: "1", title: "新导演会话", lastMessage: "不写提示词，只做导演" }]);
   const [activeSession, setActiveSession] = useState("1");
   const [brief, setBrief] = useState("");
@@ -93,6 +95,22 @@ export default function AgentPage() {
   const pollStop = useRef(false);
   const [stepTimes, setStepTimes] = useState<Record<string, number>>({});
   const [totalMs, setTotalMs] = useState<number | null>(null);
+  const [realAvailable, setRealAvailable] = useState<boolean | null>(null);
+  const [modeLabel, setModeLabel] = useState<string>("");
+
+  // ── director mode (real vs preview) ──
+  useEffect(() => {
+    fetch(`${API_BASE}/director/mode`)
+      .then((r) => r.json())
+      .then((d) => {
+        setRealAvailable(!!d.real_available);
+        setModeLabel(d.real_available ? "真实生成可用" : "预览模式（本地/未配置 Key）");
+      })
+      .catch(() => {
+        setRealAvailable(false);
+        setModeLabel("预览模式（本地/未配置 Key）");
+      });
+  }, []);
 
   // ── models catalog (for per-step model swap) ──
   useEffect(() => {
@@ -109,11 +127,13 @@ export default function AgentPage() {
 
   const loadSessions = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/director/sessions?user_id=0`);
+      // Auth bearer is injected by ClientLayout installAuthFetch — sessions are user-scoped.
+      const res = await fetch(`${API_BASE}/director/sessions`);
       if (res.ok) {
         const d = await res.json();
         if (Array.isArray(d.sessions) && d.sessions.length)
           setSessions(d.sessions.map((s: any) => ({ id: s.session_uid, title: s.title, lastMessage: s.brief || "导演会话" })));
+        else setSessions([]);
       }
     } catch {}
   }, []);
@@ -143,7 +163,7 @@ export default function AgentPage() {
       if (!uid) {
         const res = await fetch(`${API_BASE}/director/sessions`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: (p.brief || "新会话").slice(0, 30), brief: p.brief, user_id: 0 }),
+          body: JSON.stringify({ title: (p.brief || "新会话").slice(0, 30), brief: p.brief }),
         });
         if (res.ok) { uid = (await res.json()).session_uid; setActiveUid(uid); }
       }
@@ -410,10 +430,23 @@ export default function AgentPage() {
         <div className="max-w-3xl w-full mx-auto px-4 py-8 flex-1">
           {/* Header */}
           <div className="text-center mb-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-medium mb-3">
-              <Sparkles className="w-3.5 h-3.5" /> DIRECTOR AGENT
+            <div className="flex items-center justify-center gap-2 mb-3 flex-wrap">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-medium">
+                <Sparkles className="w-3.5 h-3.5" /> DIRECTOR AGENT
+              </div>
+              {modeLabel && (
+                <div className={cn(
+                  "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border",
+                  realAvailable
+                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/25"
+                    : "bg-amber-500/10 text-amber-600 border-amber-500/25"
+                )}>
+                  <span className={cn("w-1.5 h-1.5 rounded-full", realAvailable ? "bg-emerald-500" : "bg-amber-500")} />
+                  {modeLabel}
+                </div>
+              )}
             </div>
-            <h1 className="text-2xl font-bold mb-1">不写提示词，只做导演</h1>
+            <h1 className="text-2xl font-display font-bold mb-1">{t("agent.title")}</h1>
             <p className="text-sm text-text-secondary">一句话说出你想要的，AI 自动拆分镜、智能选模型、逐镜生成、剪辑成片</p>
           </div>
 
@@ -461,7 +494,7 @@ export default function AgentPage() {
                 className={cn("flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all",
                   brief.trim() && phase !== "planning" ? "bg-brand text-white hover:bg-brand-strong" : "bg-cosmic-surface text-text-secondary cursor-not-allowed")}>
                 {phase === "planning" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                {phase === "planning" ? "规划中" : "开始导演"}
+                {phase === "planning" ? "规划中" : t("agent.cta")}
               </button>
             </div>
           </div>
@@ -678,12 +711,27 @@ export default function AgentPage() {
                       <>
                         <button onClick={() => execute(true)}
                           className="flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold bg-brand text-white hover:bg-brand-strong shadow-button-glow transition-all">
-                          <Clapperboard className="w-4 h-4" />免费预览成片<ArrowRight className="w-4 h-4" />
+                          <Clapperboard className="w-4 h-4" />免费预览成片（本地 Demo）<ArrowRight className="w-4 h-4" />
                         </button>
-                        <button onClick={() => execute(false)} title="调用真实模型逐镜生成，消耗积分"
-                          className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border border-amber-400/50 text-amber-500 hover:bg-amber-400/10 transition-all">
-                          <Coins className="w-4 h-4" />真实生成 · {plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)}积分
-                        </button>
+                        <div className="flex flex-col gap-1 flex-1 sm:flex-initial">
+                          <button
+                            onClick={() => execute(false)}
+                            disabled={realAvailable === false}
+                            title={realAvailable === false ? "未配置模型 API Key，真实生成不可用" : "调用真实模型逐镜生成，消耗积分"}
+                            className={cn(
+                              "flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border transition-all",
+                              realAvailable === false
+                                ? "border-cosmic-border text-text-tertiary cursor-not-allowed opacity-60"
+                                : "border-amber-400/50 text-amber-500 hover:bg-amber-400/10"
+                            )}>
+                            <Coins className="w-4 h-4" />真实生成 · {plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)}积分
+                          </button>
+                          {realAvailable === false && (
+                            <p className="text-[11px] text-amber-600/90 text-center sm:text-left px-1">
+                              预览模式：未配置 Key，真实生成已禁用
+                            </p>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>

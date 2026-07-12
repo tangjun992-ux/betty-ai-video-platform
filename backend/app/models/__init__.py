@@ -8,9 +8,10 @@ from app.models.project import Project
 from app.models.payment_order import PaymentOrder
 from app.models.api_key import ApiKey
 from app.models.timeline_project import TimelineProject
+from app.models.team import Team, TeamMember
 
 __all__ = [
     "Base", "User", "Task", "TaskResult", "Transaction", "UserBalance",
     "DirectorSession", "Asset", "Project", "PaymentOrder", "ApiKey",
-    "TimelineProject",
+    "TimelineProject", "Team", "TeamMember",
 ]

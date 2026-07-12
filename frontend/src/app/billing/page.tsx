@@ -8,6 +8,7 @@ import { getBillingSummary, getCreditPacks, getTransactions, getUsage, refundOrd
 import { useToast } from "@/components/Toast";
 import { PayModal, type PayTarget } from "@/components/PayModal";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/LocaleProvider";
 
 const TYPE_META: Record<string, { label: string; cls: string }> = {
   purchase: { label: "充值", cls: "text-success" },
@@ -19,6 +20,7 @@ const TYPE_META: Record<string, { label: string; cls: string }> = {
 
 export default function BillingPage() {
   const toast = useToast();
+  const { t } = useLocale();
   const [summary, setSummary] = useState<any>(null);
   const [packs, setPacks] = useState<any[]>([]);
   const [txns, setTxns] = useState<any[]>([]);
@@ -51,8 +53,8 @@ export default function BillingPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold gradient-text-static">积分中心</h1>
-        <p className="text-text-secondary text-sm mt-1">管理你的积分余额、充值与消费流水</p>
+        <h1 className="text-2xl font-display font-bold">{t("billing.title")}</h1>
+        <p className="text-text-secondary text-sm mt-1">{t("billing.subtitle")}</p>
       </div>
 
       {/* Balance hero */}
@@ -98,7 +100,7 @@ export default function BillingPage() {
               {pk.bonus > 0 && <div className="inline-flex items-center gap-1 text-[11px] text-brand"><Gift className="w-3 h-3" /> 额外赠送 {pk.bonus}</div>}
               <div className="text-sm text-text-secondary">${pk.price_usd}</div>
               <button onClick={() => buy(pk.id)} className="btn-primary w-full mt-auto text-sm">
-                <Zap className="w-4 h-4" /> 购买
+                <Zap className="w-4 h-4" /> {t("billing.cta")}
               </button>
             </div>
           ) : <div key={i} className="aspect-[3/4] rounded-2xl skeleton" />

@@ -178,7 +178,7 @@ const MODELS = [
 
 // 真实产品事实（非虚构增长数据）— 诚实且经得起推敲
 const STATS = [
-  { value: "15+", label: "顶级 AI 模型", icon: TrendingUp },
+  { value: "5+", label: "已验证 AI 模型", icon: TrendingUp },
   { value: "4K", label: "超高清输出", icon: Award },
   { value: "秒级", label: "图片生成 · 分钟级出片", icon: Timer },
   { value: "一句话", label: "Agent 自动成片", icon: Bot },
@@ -188,7 +188,7 @@ const FEATURES = [
   {
     icon: Zap,
     title: "多模型路由",
-    desc: "智能分发到最优 AI 模型，确保每次输出都是最佳质量，支持 15+ 主流模型一键切换",
+    desc: "智能分发到已验证可用的 AI 模型，失败自动降级，确保输出质量稳定可靠",
     color: "from-brand to-accent-violet",
   },
   {

@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { useToast } from "@/components/Toast";
+import { useLocale } from "@/i18n/LocaleProvider";
 
 // ─── Types ──────────────────────────────────────────────
 interface LibraryItem {
@@ -126,6 +127,7 @@ function Preview({ item, className, controls = false }: { item: LibraryItem; cla
 export default function LibraryPage() {
   const router = useRouter();
   const toast = useToast();
+  const { t } = useLocale();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [items, setItems] = useState<LibraryItem[]>([]);
@@ -293,9 +295,9 @@ export default function LibraryPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold">内容库</h1>
+          <h1 className="text-2xl font-display font-bold">{t("library.title")}</h1>
           <p className="text-sm text-text-secondary mt-0.5">
-            上传素材与 AI 生成内容统一管理 · 共 {tabCount("all")} 项 · 支持拖拽 / Ctrl+V 粘贴上传
+            {t("library.subtitle")} · 共 {tabCount("all")} 项 · 支持拖拽 / Ctrl+V 粘贴上传
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -323,7 +325,7 @@ export default function LibraryPage() {
               className="btn-primary disabled:opacity-60"
             >
               <Upload className="w-4 h-4" />
-              {uploading ? "上传中..." : "上传素材"}
+              {uploading ? "上传中..." : t("library.cta")}
             </button>
           )}
         </div>

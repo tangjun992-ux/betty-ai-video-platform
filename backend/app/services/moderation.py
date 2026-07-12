@@ -3,14 +3,25 @@ Content moderation — shared prompt/asset safety checks used across generation
 entry points (generate, director, image tools) and the public gallery.
 
 This is a fast, deterministic keyword/regex policy engine (no external calls) that
-returns a category + human-readable reason. It is the pre-generation gate; a
-future async ML classifier can plug into `check_prompt` without changing callers.
+returns a category + human-readable reason + risk_score. It is the pre-generation
+gate; a future async ML classifier can plug into `check_prompt` without changing callers.
 """
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
+
+
+# Category severity weights for risk_score aggregation (0–1).
+_CATEGORY_WEIGHT: dict[str, float] = {
+    "minors": 1.0,
+    "sexual": 0.85,
+    "deepfake": 0.8,
+    "violence": 0.75,
+    "hate": 0.7,
+    "illegal": 0.9,
+}
 
 
 @dataclass
@@ -18,6 +29,17 @@ class ModerationResult:
     allowed: bool
     category: Optional[str] = None   # sexual | minors | violence | hate | deepfake | illegal
     reason: Optional[str] = None
+    risk_score: float = 0.0          # 0 (safe) → 1 (blocked / high risk)
+    categories: list[str] = field(default_factory=list)
+
+    def public_dict(self) -> dict:
+        return {
+            "allowed": self.allowed,
+            "category": self.category,
+            "categories": self.categories,
+            "reason": self.reason,
+            "risk_score": round(self.risk_score, 3),
+        }
 
 
 # Category → (patterns, user-facing reason). Word-boundary matched to reduce
@@ -55,16 +77,41 @@ _COMPILED = [(cat, reason, [re.compile(p, re.IGNORECASE) for p in pats])
 
 
 def check_prompt(text: str) -> ModerationResult:
-    """Pre-generation gate. Returns allowed=False with a category+reason on hit."""
+    """Pre-generation gate. Returns allowed=False with category/reason/risk on hit."""
     if not text:
-        return ModerationResult(allowed=True)
+        return ModerationResult(allowed=True, risk_score=0.0, categories=[])
+
+    hits: list[tuple[str, str]] = []
     for category, reason, patterns in _COMPILED:
         for pat in patterns:
             if pat.search(text):
-                return ModerationResult(allowed=False, category=category, reason=reason)
-    return ModerationResult(allowed=True)
+                hits.append((category, reason))
+                break
+
+    if not hits:
+        return ModerationResult(allowed=True, risk_score=0.0, categories=[])
+
+    categories = list(dict.fromkeys(c for c, _ in hits))
+    primary_cat, primary_reason = hits[0]
+    risk = min(1.0, max(_CATEGORY_WEIGHT.get(c, 0.6) for c in categories))
+    # Slight bump when multiple categories fire.
+    if len(categories) > 1:
+        risk = min(1.0, risk + 0.05 * (len(categories) - 1))
+
+    return ModerationResult(
+        allowed=False,
+        category=primary_cat,
+        reason=primary_reason,
+        risk_score=risk,
+        categories=categories,
+    )
 
 
 def is_safe(text: str) -> bool:
     """Boolean convenience wrapper (e.g. for gallery display filtering)."""
     return check_prompt(text or "").allowed
+
+
+def score_prompt(text: str) -> dict:
+    """Public scoring helper for admin / tooling."""
+    return check_prompt(text or "").public_dict()

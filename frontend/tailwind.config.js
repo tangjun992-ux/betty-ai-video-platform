@@ -61,21 +61,21 @@ module.exports = {
   				foreground: 'hsl(0 0% 100%)',
   				muted: 'hsl(var(--info) / 0.10)'
   			},
-  			brand: {
-  				'50': '#f1effe',
-  				'100': '#e5e0fd',
-  				'200': '#cdc4fb',
-  				'300': '#ab9bf6',
-  				'400': '#8b75f0',
-  				'500': '#6c5ce7',
-  				'600': '#5847d6',
-  				'700': '#4836b8',
-  				'800': '#3b2e95',
-  				'900': '#332a78',
-  				DEFAULT: 'hsl(var(--brand) / <alpha-value>)',
-  				strong: 'hsl(var(--brand-strong) / <alpha-value>)',
-  				soft: 'hsl(var(--brand-soft) / <alpha-value>)'
-  			}
+			brand: {
+				'50': '#f0faf8',
+				'100': '#d5f0eb',
+				'200': '#abe1d7',
+				'300': '#6fc9bb',
+				'400': '#3aada0',
+				'500': '#0f766e',
+				'600': '#0d9488',
+				'700': '#0f766e',
+				'800': '#115e59',
+				'900': '#134e4a',
+				DEFAULT: 'hsl(var(--brand) / <alpha-value>)',
+				strong: 'hsl(var(--brand-strong) / <alpha-value>)',
+				soft: 'hsl(var(--brand-soft) / <alpha-value>)'
+			}
   		},
   		borderRadius: {
   			xs: '0.25rem',
@@ -86,16 +86,20 @@ module.exports = {
   			'2xl': '1.25rem',
   			'3xl': '1.5rem'
   		},
-  		fontFamily: {
-  			sans: [
-  				'var(--font-inter)',
+		fontFamily: {
+			sans: [
+				'var(--font-sans)',
                     ...fontFamily.sans
                 ],
-  			mono: [
-  				'var(--font-mono)',
+			display: [
+				'var(--font-display)',
+                    ...fontFamily.serif
+                ],
+			mono: [
+				'var(--font-mono)',
                     ...fontFamily.mono
                 ]
-  		},
+		},
   		fontSize: {
   			hero: [
   				'4.25rem',
@@ -173,20 +177,20 @@ module.exports = {
   			'elevation-lg': '0 12px 28px -6px rgb(18 18 28 / 0.10), 0 6px 12px -6px rgb(18 18 28 / 0.06)',
   			'elevation-xl': '0 24px 48px -12px rgb(18 18 28 / 0.14), 0 10px 20px -8px rgb(18 18 28 / 0.08)',
   			'elevation-2xl': '0 32px 64px -16px rgb(18 18 28 / 0.18)',
-  			'glow-subtle': '0 4px 16px -6px hsl(252 78% 63% / 0.18)',
-  			'glow-medium': '0 8px 24px -6px hsl(252 78% 63% / 0.28)',
-  			'glow-strong': '0 12px 32px -8px hsl(252 78% 63% / 0.40)',
-  			'glow-cyan': '0 8px 24px -6px hsl(252 78% 63% / 0.30)',
-  			'glow-blue': '0 8px 24px -6px hsl(250 84% 68% / 0.30)',
-  			'glow-violet': '0 8px 24px -6px hsl(262 83% 66% / 0.30)',
-  			'inner-glow-t': 'inset 0 1px 0 0 rgb(255 255 255 / 0.6)',
-  			'inner-glow-b': 'inset 0 -1px 0 0 rgb(18 18 28 / 0.04)',
-  			'inner-depth': 'inset 0 2px 6px 0 rgb(18 18 28 / 0.05)',
-  			card: '0 1px 3px 0 rgb(18 18 28 / 0.06), 0 1px 2px -1px rgb(18 18 28 / 0.05)',
-  			'card-hover': '0 12px 28px -6px rgb(18 18 28 / 0.12), 0 4px 10px -4px hsl(252 78% 63% / 0.10)',
-  			'card-active': 'inset 0 1px 3px 0 rgb(18 18 28 / 0.06)',
-  			'button-glow': '0 8px 24px -6px hsl(252 78% 63% / 0.35)',
-  			'button-glow-lg': '0 12px 32px -8px hsl(252 78% 63% / 0.45)'
+			'glow-subtle': '0 4px 16px -6px hsl(175 77% 26% / 0.18)',
+			'glow-medium': '0 8px 24px -6px hsl(175 77% 26% / 0.28)',
+			'glow-strong': '0 12px 32px -8px hsl(175 77% 26% / 0.40)',
+			'glow-cyan': '0 8px 24px -6px hsl(175 77% 26% / 0.30)',
+			'glow-blue': '0 8px 24px -6px hsl(186 70% 36% / 0.30)',
+			'glow-violet': '0 8px 24px -6px hsl(168 55% 38% / 0.30)',
+			'inner-glow-t': 'inset 0 1px 0 0 rgb(255 255 255 / 0.6)',
+			'inner-glow-b': 'inset 0 -1px 0 0 rgb(18 18 28 / 0.04)',
+			'inner-depth': 'inset 0 2px 6px 0 rgb(18 18 28 / 0.05)',
+			card: '0 1px 3px 0 rgb(18 18 28 / 0.06), 0 1px 2px -1px rgb(18 18 28 / 0.05)',
+			'card-hover': '0 12px 28px -6px rgb(18 18 28 / 0.12), 0 4px 10px -4px hsl(175 77% 26% / 0.10)',
+			'card-active': 'inset 0 1px 3px 0 rgb(18 18 28 / 0.06)',
+			'button-glow': '0 8px 24px -6px hsl(175 77% 26% / 0.35)',
+			'button-glow-lg': '0 12px 32px -8px hsl(175 77% 26% / 0.45)'
   		},
   		keyframes: {
   			'fade-in-up': {
@@ -237,14 +241,14 @@ module.exports = {
   					backgroundPosition: '100% 50%'
   				}
   			},
-  			'glow-pulse': {
-  				'0%, 100%': {
-  					boxShadow: '0 0 0 0 hsl(252 78% 63% / 0)'
-  				},
-  				'50%': {
-  					boxShadow: '0 8px 24px -6px hsl(252 78% 63% / 0.30)'
-  				}
-  			},
+			'glow-pulse': {
+				'0%, 100%': {
+					boxShadow: '0 0 0 0 hsl(175 77% 26% / 0)'
+				},
+				'50%': {
+					boxShadow: '0 8px 24px -6px hsl(175 77% 26% / 0.30)'
+				}
+			},
   			'shimmer': {
   				'0%': {
   					backgroundPosition: '-200% 0'

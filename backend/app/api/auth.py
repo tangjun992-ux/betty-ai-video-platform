@@ -26,14 +26,30 @@ class RegisterRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    username: str
+    """Accept email (preferred, matches frontend) or username for backward compat."""
     password: str
+    email: str | None = None
+    username: str | None = None
 
 
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: dict
+
+
+def _user_payload(user: User, credits: int | None = None) -> dict:
+    payload = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "display_name": user.display_name,
+        "name": user.display_name or user.username,
+        "role": user.role,
+    }
+    if credits is not None:
+        payload["credits"] = credits
+    return payload
 
 
 @router.post("/register", summary="注册")
@@ -68,14 +84,7 @@ async def register(
 
     return AuthResponse(
         access_token=token,
-        user={
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "display_name": user.display_name,
-            "role": user.role,
-            "credits": 10,
-        },
+        user=_user_payload(user, credits=10),
     )
 
 
@@ -84,11 +93,25 @@ async def login(
     req: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).where(User.username == req.username))
-    user = result.scalar_one_or_none()
+    """Login by email (preferred) or username. Frontend sends {email, password}."""
+    identifier = (req.email or req.username or "").strip()
+    if not identifier:
+        raise HTTPException(status_code=400, detail="请输入邮箱或用户名")
+
+    user = None
+    if "@" in identifier:
+        result = await db.execute(select(User).where(User.email == identifier))
+        user = result.scalar_one_or_none()
+    if user is None:
+        result = await db.execute(select(User).where(User.username == identifier))
+        user = result.scalar_one_or_none()
+    # Also try email lookup when username field was used without @
+    if user is None and req.username and "@" not in identifier:
+        result = await db.execute(select(User).where(User.email == identifier))
+        user = result.scalar_one_or_none()
 
     if not user or not verify_password(req.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
+        raise HTTPException(status_code=401, detail="邮箱/用户名或密码错误")
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="账户已停用")
@@ -97,13 +120,7 @@ async def login(
 
     return AuthResponse(
         access_token=token,
-        user={
-            "id": user.id,
-            "username": user.username,
-            "display_name": user.display_name,
-            "role": user.role,
-            "email": user.email,
-        },
+        user=_user_payload(user),
     )
 
 

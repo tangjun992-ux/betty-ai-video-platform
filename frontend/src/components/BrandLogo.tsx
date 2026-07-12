@@ -55,14 +55,14 @@ export function BrandMark({
       {variant === "gradient" && (
         <defs>
           <linearGradient id={gradId} x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#7A6BF0" />
-            <stop offset="100%" stopColor="#5A49D6" />
+            <stop offset="0%" stopColor="#14B8A6" />
+            <stop offset="100%" stopColor="#0F766E" />
           </linearGradient>
         </defs>
       )}
       {/* Squircle container */}
       <rect x="3" y="3" width="58" height="58" rx="16"
-        fill={variant === "gradient" ? `url(#${gradId})` : "#6C5CE7"} />
+        fill={variant === "gradient" ? `url(#${gradId})` : "#0F766E"} />
       {/* Subtle top inner highlight for polished product-icon depth */}
       <rect x="3" y="3" width="58" height="58" rx="16" fill="white" fillOpacity="0.06" />
       {/* Geometric "b" glyph */}

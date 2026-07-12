@@ -2,32 +2,32 @@
 
 import { motion } from "framer-motion";
 import { Check, ChevronDown, Info, Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useToast } from "@/components/Toast";
 import { PayModal, type PayTarget } from "@/components/PayModal";
+import { useLocale } from "@/i18n/LocaleProvider";
 
-// 前 3 档固定，对齐 yapper: Starter 1k / Personal 3k / Creator 7k(Most Popular)
+// 前 3 档固定：Starter / Personal / Creator
 const PLANS = [
   {
     id: "starter", name: "Starter", priceMonthly: 9.99, priceYearly: 7.99, credits: 1000, popular: false,
     color: "from-slate-500 to-slate-400",
-    features: ["1,000 Credits / 月", "16+ 专业图片模型", "1080p 分辨率", "标准生成速度", "高级唇形同步", "个人使用许可"],
+    features: ["1,000 Credits / 月", "已验证图片模型", "1080p 分辨率", "标准生成速度", "高级唇形同步", "个人使用许可"],
   },
   {
     id: "personal", name: "Personal", priceMonthly: 24.99, priceYearly: 19.99, credits: 3000, popular: false,
-    color: "from-violet-500 to-purple-500",
-    features: ["3,000 Credits / 月", "23+ 专业视频模型", "Seedance 2.0 全模态", "4K 分辨率", "高级运动控制", "图片 & 视频放大"],
+    color: "from-teal-500 to-emerald-600",
+    features: ["3,000 Credits / 月", "已验证视频模型", "Seedance 2.0 全模态", "4K 分辨率", "高级运动控制", "图片 & 视频放大"],
   },
   {
     id: "creator", name: "Creator", priceMonthly: 49.99, priceYearly: 39.99, credits: 7000, popular: true,
     color: "from-brand to-accent-violet",
-    features: ["7,000 Credits / 月", "全部 37 个模型", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
+    features: ["7,000 Credits / 月", "全部可用模型", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
   },
 ];
 
-// 第 4 档 Max：credits 滑块 (对齐 yapper Max 15k→150k)
+// 第 4 档 Max：credits 滑块
 const MAX_TIERS = [
   { credits: 15000, monthly: 99.99, yearly: 79.99 },
   { credits: 22500, monthly: 139.99, yearly: 111.99 },
@@ -57,6 +57,7 @@ const FAQS = [
 export default function PricingPage() {
   const router = useRouter();
   const toast = useToast();
+  const { t } = useLocale();
   const [busy, setBusy] = useState<string | null>(null);
   const [yearly, setYearly] = useState(false);
   const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
@@ -64,7 +65,7 @@ export default function PricingPage() {
   const subscribe = (planId: string) =>
     setPayTarget({ kind: "plan", id: planId, cycle: yearly ? "yearly" : "monthly" });
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [maxIdx, setMaxIdx] = useState(1); // 默认 22.5k (yapper Best Value)
+  const [maxIdx, setMaxIdx] = useState(1);
   const maxTier = MAX_TIERS[maxIdx];
   const fmt = (n: number) => `$${n.toFixed(2)}`;
 
@@ -72,8 +73,8 @@ export default function PricingPage() {
     <div className="max-w-6xl mx-auto px-4 py-12">
       {/* Hero */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
-        <h1 className="text-3xl md:text-4xl font-bold mb-3 text-text-accent-cyan">灵活定价，适合每个人</h1>
-        <p className="text-text-secondary max-w-lg mx-auto mb-8">随时按比例调整方案。从入门到专业，按需付费。</p>
+        <h1 className="text-3xl md:text-4xl font-display font-bold mb-3 text-text-accent-cyan">{t("pricing.title")}</h1>
+        <p className="text-text-secondary max-w-lg mx-auto mb-8">{t("pricing.subtitle")}</p>
         <div role="radiogroup" aria-label="计费周期" className="inline-flex items-center gap-3 p-1 rounded-full bg-cosmic-subtle border border-cosmic-border">
           <button role="radio" aria-checked={!yearly} onClick={() => setYearly(false)}
             className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${!yearly ? "bg-brand text-white shadow-button-glow" : "text-text-secondary hover:text-brand"}`}>月付</button>
@@ -84,17 +85,17 @@ export default function PricingPage() {
         </div>
       </motion.div>
 
-      {/* "All plans include" Banner — 对齐 yapper.so */}
+      {/* "All plans include" Banner */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
         className="mb-10 p-6 rounded-2xl border border-cosmic-border bg-cosmic-subtle">
         <p className="text-sm text-text-secondary text-center">所有计划均包含：</p>
         <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-3 text-sm text-text-primary font-medium">
           <span>✅ Seedance 2.0 Omni</span>
-          <span>✅ 全部 16+ 图片模型</span>
-          <span>✅ 全部 24+ 视频模型</span>
+          <span>✅ 已验证图片模型</span>
+          <span>✅ 已验证视频模型</span>
           <span>✅ 唇形同步 & 运动控制</span>
           <span>✅ 商业使用授权</span>
-          <span>✅ 优先支持</span>
+          <span>✅ 按用量计费</span>
         </div>
       </motion.div>
 
@@ -128,7 +129,7 @@ export default function PricingPage() {
               className={`w-full py-2.5 rounded-xl text-sm font-semibold text-center transition-all active:scale-[0.98] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 ${
               plan.popular ? "bg-brand text-white hover:bg-brand-strong shadow-button-glow" : "bg-cosmic-subtle border border-cosmic-border text-text-primary hover:bg-cosmic-border"}`}>
               {busy === plan.id && <Loader2 className="w-4 h-4 animate-spin" />}
-              {plan.popular ? "立即开始" : `选择 ${plan.name}`}
+              {plan.popular ? t("pricing.cta") : `选择 ${plan.name}`}
             </button>
           </motion.div>
         ))}
@@ -155,7 +156,7 @@ export default function PricingPage() {
             {MAX_TIERS.map((t) => <span key={t.credits}>{t.credits >= 1000 ? `${t.credits / 1000}k` : t.credits}</span>)}
           </div>
           <ul className="space-y-2.5 mb-6 flex-1">
-            {["全部 37 个模型 + 抢先体验", "最高并发 · 8K 分辨率", "无限团队座位", "API + Webhook", "专属客户经理 · SLA"].map((f) => (
+            {["全部可用模型 + 抢先体验", "最高并发 · 8K 分辨率", "无限团队座位", "API + Webhook", "专属客户经理 · SLA"].map((f) => (
               <li key={f} className="flex items-start gap-2 text-sm">
                 <Check className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" /><span className="text-text-secondary">{f}</span>
               </li>

@@ -1,14 +1,20 @@
 import type { Metadata, Viewport } from "next";
 import dynamic from "next/dynamic";
-import { Inter } from "next/font/google";
+import { Outfit, Fraunces } from "next/font/google";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 import { ThemeScript } from "@/components/ThemeScript";
 import { LocaleScript } from "@/i18n/LocaleScript";
 
-const inter = Inter({
+const outfit = Outfit({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-display",
   display: "swap",
 });
 
@@ -76,7 +82,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#6C5CE7",
+  themeColor: "#0F766E",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -105,7 +111,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeScript />
         <LocaleScript />
       </head>
-      <body className={cn("min-h-screen bg-cosmic-deep antialiased", inter.variable, "font-sans")}>
+      <body className={cn("min-h-screen bg-cosmic-deep antialiased", outfit.variable, fraunces.variable, "font-sans")}>
         <ClientLayout>{children}</ClientLayout>
       </body>
     </html>

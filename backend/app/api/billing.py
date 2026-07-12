@@ -7,6 +7,7 @@ account immediately and recording a PURCHASE transaction. The whole app shares
 the guest account (user_id=0), matching how generation deducts credits.
 """
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -23,11 +24,27 @@ from app.models.payment_order import PaymentOrder
 from app.api.pricing import PLANS
 from app.rate_limiter import rate_limit
 from app.auth import resolve_user_id
+from app.services.receipt_email import send_receipt_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 GUEST_USER_ID = 0
+
+
+def _emit_receipt(order: PaymentOrder, to_email: Optional[str] = None) -> None:
+    """Fire-and-forget receipt email stub after a successful grant."""
+    try:
+        send_receipt_email(
+            to_email=to_email,
+            order_no=order.order_no,
+            label=order.label or "",
+            credits=int(order.credits or 0),
+            amount_usd=float(order.amount_usd or 0),
+            provider=order.provider or "",
+        )
+    except Exception as e:
+        logger.warning("send_receipt_email failed: %s", e)
 
 
 # One-time credit packs (对标 credit bundles). price_usd 供展示 & 未来 Stripe。
@@ -236,6 +253,15 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
         try:
             import stripe  # optional dependency
             stripe.api_key = settings.STRIPE_API_KEY
+            order_no = "ST" + uuid.uuid4().hex[:22]
+            order = PaymentOrder(
+                order_no=order_no, user_id=user_id, provider="stripe",
+                kind=req.kind, item_id=req.id, cycle=req.cycle, credits=credits,
+                amount_usd=price_usd, amount_cny=round(price_usd * settings.USD_TO_CNY, 2),
+                label=label, status="pending",
+            )
+            db.add(order)
+            await db.commit()
             session = stripe.checkout.Session.create(
                 mode="payment",
                 line_items=[{
@@ -248,9 +274,12 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
                 }],
                 success_url=settings.STRIPE_SUCCESS_URL,
                 cancel_url=settings.STRIPE_CANCEL_URL,
-                metadata={"kind": req.kind, "id": req.id, "credits": credits},
+                metadata={
+                    "kind": req.kind, "id": req.id, "credits": str(credits),
+                    "order_no": order_no, "user_id": str(user_id),
+                },
             )
-            return {"mode": "stripe", "checkout_url": session.url, "credits": credits}
+            return {"mode": "stripe", "checkout_url": session.url, "credits": credits, "order_no": order_no}
         except Exception as e:
             logger.error("stripe checkout failed: %s", e)
             raise HTTPException(status_code=502, detail=f"支付网关错误: {e}")
@@ -261,6 +290,7 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
     bal.credits += credits
     bal.total_purchased += credits
     after = bal.credits + bal.daily_credits
+    order_no = "DEV" + uuid.uuid4().hex[:20]
     txn = Transaction(
         user_id=user_id,
         type=TransactionType.PURCHASE.value,
@@ -269,17 +299,25 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
         balance_after=after,
         amount_usd=price_usd,
         payment_method="dev-grant",
+        payment_id=order_no,
         description=f"购买 {label}（+{credits} 积分）",
     )
     db.add(txn)
     await db.commit()
     logger.info("dev-grant checkout: +%d credits (%s), balance %d→%d", credits, label, before, after)
+    try:
+        send_receipt_email(
+            order_no=order_no, label=label, credits=credits,
+            amount_usd=price_usd, provider="dev-grant",
+        )
+    except Exception as e:
+        logger.warning("dev-grant receipt email stub failed: %s", e)
     return {"mode": "dev", "success": True, "credits_added": credits,
-            "new_balance": after, "label": label}
+            "new_balance": after, "label": label, "order_no": order_no}
 
 
 # ─── QR-based payment (WeChat / Alipay) ──────────────────
-async def _grant_order(db: AsyncSession, order: PaymentOrder) -> int:
+async def _grant_order(db: AsyncSession, order: PaymentOrder, *, email: Optional[str] = None) -> int:
     """Idempotently credit a PAID order and record a PURCHASE transaction."""
     if order.granted or order.status != "paid":
         bal = await _get_balance(db, order.user_id or GUEST_USER_ID)
@@ -299,6 +337,7 @@ async def _grant_order(db: AsyncSession, order: PaymentOrder) -> int:
     order.granted = True
     await db.commit()
     logger.info("order %s granted +%d credits (%s)", order.order_no, order.credits, order.provider)
+    _emit_receipt(order, to_email=email)
     return after
 
 
@@ -408,3 +447,47 @@ async def pay_notify(provider: str, request: Request, db: AsyncSession = Depends
     except Exception as e:
         logger.error("pay notify(%s) error: %s", provider, e)
         return {"code": "FAIL", "message": str(e)}
+
+
+@router.post("/stripe/webhook", summary="Stripe Webhook（checkout.session.completed）")
+async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
+    """Mark the pending Stripe order paid and grant credits + send receipt stub."""
+    import json
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature", "")
+    secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    try:
+        if secret and settings.STRIPE_API_KEY:
+            import stripe
+            stripe.api_key = settings.STRIPE_API_KEY
+            event = stripe.Webhook.construct_event(payload, sig, secret)
+            etype = event["type"]
+            data_obj = event["data"]["object"]
+        else:
+            event = json.loads(payload.decode("utf-8"))
+            etype = event.get("type")
+            data_obj = (event.get("data") or {}).get("object") or {}
+    except Exception as e:
+        logger.error("stripe webhook parse failed: %s", e)
+        raise HTTPException(status_code=400, detail=f"invalid webhook: {e}")
+
+    if etype != "checkout.session.completed":
+        return {"received": True, "ignored": etype}
+
+    meta = data_obj.get("metadata") or {}
+    order_no = meta.get("order_no")
+    customer_details = data_obj.get("customer_details") or {}
+    customer_email = customer_details.get("email") or data_obj.get("customer_email")
+    if not order_no:
+        logger.warning("stripe webhook missing order_no metadata")
+        return {"received": True, "error": "missing order_no"}
+
+    res = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.status != "paid":
+        order.status = "paid"
+        await db.commit()
+    balance = await _grant_order(db, order, email=customer_email)
+    return {"received": True, "order_no": order_no, "status": "paid", "balance": balance}

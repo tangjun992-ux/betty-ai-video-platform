@@ -422,11 +422,25 @@ export async function listLibrary(params: { media_type?: string; source?: string
 }
 
 /** Compose an ordered list of clips into one film (timeline editor) */
-export async function composeTimeline(clips: { url: string }[], opts: { narration_url?: string; with_audio?: boolean } = {}): Promise<{ url: string; thumbnail: string; clip_count: number }> {
+export async function composeTimeline(
+  clips: { url: string; transition?: string }[],
+  opts: {
+    narration_url?: string;
+    with_audio?: boolean;
+    transition?: string;
+    subtitle_track?: { text: string; start?: number; end?: number }[];
+  } = {},
+): Promise<{ url: string; thumbnail: string; clip_count: number; transition?: string }> {
   const res = await fetch(`${API_BASE}/timeline/compose`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ clips, narration_url: opts.narration_url ?? null, with_audio: opts.with_audio ?? true }),
+    body: JSON.stringify({
+      clips,
+      narration_url: opts.narration_url ?? null,
+      with_audio: opts.with_audio ?? true,
+      transition: opts.transition ?? "cut",
+      subtitle_track: opts.subtitle_track ?? [],
+    }),
   });
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));

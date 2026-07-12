@@ -261,13 +261,18 @@ async def list_models():
     return {"models": MODELS}
 
 
+@router.get("/health", summary="模型健康 registry 快照")
 @router.get("/health/live", summary="模型实时健康与熔断状态")
 async def live_model_health():
     """Runtime feedback used by automatic routing (success, latency, circuit)."""
     from app.services.model_health import model_health
     rows = [model_health.snapshot(m.id).public_dict() for m in MODELS]
     rows.sort(key=lambda r: (r["circuit_open"], -r["score"], r["model_id"]))
-    return {"models": rows, "circuits_open": sum(1 for r in rows if r["circuit_open"])}
+    return {
+        "models": rows,
+        "circuits_open": sum(1 for r in rows if r["circuit_open"]),
+        "count": len(rows),
+    }
 
 
 @router.get("/{model_id}", summary="获取指定模型详情")
@@ -287,13 +292,13 @@ from app.models.billing import UserBalance, Transaction, TransactionType
 
 PLANS_DATA = [
     {"id":"starter","name":"入门版","monthly_price":9.99,"yearly_price":7.99,"credits":1000,
-     "features":[{"name":"Seedance 2.0 全模态视频","included":False},{"name":"16+ 专业图片模型","included":True},{"name":"23+ 专业视频模型","included":False},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":False},{"name":"已验证图片模型","included":True},{"name":"已验证视频模型","included":False},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
     {"id":"personal","name":"个人版","monthly_price":24.99,"yearly_price":19.99,"credits":3000,
-     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"16+ 专业图片模型","included":True},{"name":"23+ 专业视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
-    {"id":"creator","name":"创作者版","monthly_price":49.99,"yearly_price":39.99,"credits":7000,"highlighted":True,"badge":"最受欢迎 🔥",
-     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"16+ 专业图片模型","included":True},{"name":"23+ 专业视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"已验证图片模型","included":True},{"name":"已验证视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
+    {"id":"creator","name":"创作者版","monthly_price":49.99,"yearly_price":39.99,"credits":7000,"highlighted":True,"badge":"最受欢迎",
+     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"已验证图片模型","included":True},{"name":"已验证视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
     {"id":"pro","name":"专业版","monthly_price":99.99,"yearly_price":79.99,"credits":15000,
-     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"16+ 专业图片模型","included":True},{"name":"23+ 专业视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"全部可用模型","included":True},{"name":"按用量计费","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
 ]
 
 @router.get("/pricing/plans", summary="获取定价方案")

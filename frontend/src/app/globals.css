@@ -4,7 +4,7 @@
 
 /* ═══════════════════════════════════════════════════════════════
    betty Design System v4 — AURORA
-   亮色消费级 · 紫色品牌 #6C5CE7 · 干净精致 · border-first · 克制留白
+   亮色消费级 · ink teal 品牌 #0F766E · 干净精致 · border-first · 克制留白
    对标 yapper / Linear / Stripe / Canva 的顶级气质
    （保留 v3 全部类名/变量名/动画名 → 组件零改动自动继承新主题）
    ═══════════════════════════════════════════════════════════════ */
@@ -22,17 +22,17 @@
     --cosmic-elevated: 240 33% 98%;       /* #F8F8FC — 浮层/弹层 */
     --cosmic-subtle: 240 24% 97%;         /* #F4F4F8 — hover 底/分组底 */
     --cosmic-border: 240 18% 91%;         /* #E6E6EE — 默认边框 */
-    --cosmic-border-hover: 252 30% 82%;   /* #CFCAE6 — 悬停边框(微紫) */
+    --cosmic-border-hover: 174 28% 72%;   /* 悬停边框(微 teal) */
 
-    /* ─── BRAND PURPLE SPECTRUM (#6C5CE7 主导) ─── */
-    --accent-cyan: 252 78% 63%;           /* #6C5CE7 — 品牌主紫(沿用cyan变量名) */
-    --accent-blue: 250 84% 68%;           /* #7B6CF0 — 浅紫蓝 */
-    --accent-violet: 262 83% 66%;         /* #8B5CF6 — 紫罗兰 */
-    --accent-purple: 271 81% 66%;         /* #A855F7 — 亮紫 */
-    --accent-fuchsia: 292 84% 64%;        /* #D946EF — 品红点缀 */
-    --brand: 252 78% 63%;                 /* #6C5CE7 — 语义品牌色 */
-    --brand-strong: 252 70% 56%;          /* #5847D6 — 按下/深色态 */
-    --brand-soft: 252 100% 97%;           /* #F1EFFE — 品牌浅底 */
+    /* ─── BRAND INK TEAL SPECTRUM (#0F766E 主导) ─── */
+    --accent-cyan: 175 77% 26%;           /* #0F766E — 品牌主色(沿用cyan变量名) */
+    --accent-blue: 186 70% 36%;           /* #1C9BA8 — 青蓝点缀 */
+    --accent-violet: 168 55% 38%;         /* #2C9A87 — 青绿 */
+    --accent-purple: 158 48% 42%;         /* #38A169 — 翠绿 */
+    --accent-fuchsia: 192 62% 42%;        /* #2A8FAd — 水色点缀 */
+    --brand: 175 77% 26%;                 /* #0F766E — 语义品牌色 (ink teal) */
+    --brand-strong: 175 78% 20%;          /* #0A5C56 — 按下/深色态 */
+    --brand-soft: 170 55% 96%;            /* #F0FAF8 — 品牌浅底 */
 
     /* ─── TEXT (深色文字, 亮底) ─── */
     --text-primary: 240 24% 9%;           /* #12121C — 主文字 */
@@ -44,7 +44,7 @@
     --success: 150 68% 42%;               /* #22A06B */
     --warning: 36 92% 50%;                /* #F59E0B */
     --destructive: 0 74% 58%;             /* #E14444 */
-    --info: 252 78% 63%;                  /* 用品牌紫 */
+    --info: 175 77% 26%;                  /* 用品牌 teal */
 
     /* ─── RADII (精致, 收敛到 12px 主) ─── */
     --radius-xs: 0.25rem;                 /* 4px */
@@ -76,9 +76,9 @@
     --cosmic-elevated: 240 12% 14%;       /* #21212B 浮层 */
     --cosmic-subtle: 240 11% 16%;         /* #24242E hover 底 */
     --cosmic-border: 240 9% 22%;          /* #34343E 边框 */
-    --cosmic-border-hover: 252 30% 44%;   /* 悬停边框(微紫) */
+    --cosmic-border-hover: 174 28% 36%;   /* 悬停边框(微 teal) */
 
-    --brand-soft: 252 40% 16%;            /* 暗底品牌浅底 */
+    --brand-soft: 174 35% 14%;            /* 暗底品牌浅底 */
 
     --text-primary: 240 20% 96%;          /* #F2F2F7 主文字 */
     --text-secondary: 240 8% 70%;         /* #A9A9B5 次文字 */
@@ -121,7 +121,10 @@
   h2 { letter-spacing: -0.022em; font-weight: 650; }
   h3 { letter-spacing: -0.016em; font-weight: 600; }
 
-  /* ─── Focus Ring (品牌紫细环, 无暴力 glow) ─── */
+  /* ─── Headings use display face when available ─── */
+  h1, h2, .font-display { font-family: var(--font-display), var(--font-sans), ui-serif, Georgia, serif; }
+
+  /* ─── Focus Ring (品牌色细环, 无暴力 glow) ─── */
   :focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px hsl(var(--cosmic-deep)),
@@ -202,7 +205,7 @@
     transform: translateY(-2px);
   }
 
-  /* ─── GRADIENT BORDER CARDS (克制紫色渐变描边) ─── */
+  /* ─── GRADIENT BORDER CARDS (克制 teal 渐变描边) ─── */
   .gradient-card {
     position: relative;
     border-radius: var(--radius-lg);
@@ -448,7 +451,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 @layer utilities {
-  /* ─── GRADIENT TEXT (品牌紫渐变, 用于 Hero 关键词) ─── */
+  /* ─── GRADIENT TEXT (品牌 teal 渐变, 用于 Hero 关键词) ─── */
   .text-gradient {
     /* Restrained, static single-hue-family gradient (brand → violet).
        Dropped the flowing rainbow animation + fuchsia for a more premium,
@@ -590,7 +593,7 @@
 .stagger-children > *:nth-child(10) { animation-delay: 0.5s; }
 
 
-/* ─── NAV LINK UNDERLINE (品牌紫) ─── */
+/* ─── NAV LINK UNDERLINE (品牌色) ─── */
 .nav-link { position: relative; }
 .nav-link::after {
   content: '';

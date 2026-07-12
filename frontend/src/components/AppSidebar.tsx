@@ -36,11 +36,11 @@ import {
   Scissors,
   Expand,
   AudioLines,
-  ScanLine,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
   Sparkles,
+  Users,
 } from "lucide-react";
 
 // ─── NAV ITEMS ──────────────────────────────────────────
@@ -50,6 +50,7 @@ const mainNav = [
   { href: "/feed", icon: Rss, labelKey: "nav.feed" },
   { href: "/library", icon: Library, labelKey: "nav.library" },
   { href: "/projects", icon: FolderKanban, labelKey: "nav.projects" },
+  { href: "/teams", icon: Users, labelKey: "nav.teams" },
 ];
 
 const toolNav = [
@@ -59,13 +60,11 @@ const toolNav = [
   { href: "/create/image-editor", icon: Wand2, labelKey: "nav.imageEdit" },
   { href: "/create/motion", icon: Music, labelKey: "nav.motion" },
   { href: "/create/lipsync", icon: Mic, labelKey: "nav.lipsync" },
-  { href: "/create/avatar", icon: User, labelKey: "nav.avatar" },
   { href: "/create/timeline", icon: Clock, labelKey: "nav.timeline" },
   { href: "/create/upscale", icon: Maximize2, labelKey: "nav.upscale" },
   { href: "/create/bg-remove", icon: Scissors, labelKey: "nav.removeBg" },
   { href: "/create/extend", icon: Expand, labelKey: "nav.extend" },
   { href: "/create/audio", icon: AudioLines, labelKey: "nav.audio" },
-  { href: "/create/extract", icon: ScanLine, labelKey: "nav.extract" },
 ];
 
 // ─── HELPER: Nav Item ───────────────────────────────────

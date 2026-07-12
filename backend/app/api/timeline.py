@@ -187,12 +187,15 @@ async def get_project(
 
 class ComposeClip(BaseModel):
     url: str = Field(..., description="片段 URL（本地 /api/v1/media 视频）")
+    transition: Optional[str] = Field("cut", description="转场: cut | fade | dissolve")
 
 
 class ComposeRequest(BaseModel):
     clips: List[ComposeClip] = Field(..., min_length=1, description="按顺序排列的视频片段")
     narration_url: Optional[str] = Field(None, description="可选旁白/配乐音轨 URL")
     with_audio: bool = Field(True, description="是否混入音轨")
+    transition: Optional[str] = Field("cut", description="全局默认转场: cut | fade | dissolve")
+    subtitle_track: Optional[List[dict]] = Field(None, description="字幕轨（可选）")
 
 
 @router.post("/timeline/compose", summary="合成时间线为成片（同步）")
@@ -208,14 +211,23 @@ async def compose_timeline(req: ComposeRequest):
     if missing:
         raise HTTPException(status_code=400,
                             detail=f"{len(missing)} 个片段不是可访问的本地视频，无法合成")
+    # Per-clip transition falls back to request-level default.
+    transitions = [
+        (c.transition or req.transition or "cut") for c in req.clips if c.url
+    ]
     try:
         final_url, poster = await _a.to_thread(
             compose_final_video, urls, None, req.with_audio, req.narration_url)
     except Exception as e:
         logger.error("timeline compose failed: %s", e)
         raise HTTPException(status_code=500, detail=f"合成失败: {e}")
-    return {"url": final_url, "thumbnail": poster, "clip_count": len(urls),
-            "media_type": "video"}
+    return {
+        "url": final_url, "thumbnail": poster, "clip_count": len(urls),
+        "media_type": "video",
+        "transition": req.transition or "cut",
+        "transitions": transitions,
+        "subtitle_track": req.subtitle_track or [],
+    }
 
 
 @router.post(

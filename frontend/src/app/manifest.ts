@@ -4,12 +4,12 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "betty — AI 内容创作平台",
     short_name: "betty",
-    description: "一句话成片：对接 15+ 全球顶级 AI 模型的图片/视频/音频创作平台",
+    description: "一句话成片：对接已验证全球顶级 AI 模型的图片/视频/音频创作平台",
     start_url: "/",
     scope: "/",
     display: "standalone",
     background_color: "#FCFCFE",
-    theme_color: "#6C5CE7",
+    theme_color: "#0F766E",
     lang: "zh-CN",
     orientation: "portrait-primary",
     icons: [
