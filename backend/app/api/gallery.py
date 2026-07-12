@@ -2,13 +2,13 @@
 Gallery/Explore API — community showcase from real completed tasks.
 """
 import json
-import zlib
 from fastapi import APIRouter, Query, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, text
 from typing import Optional
 from app.db import get_db
 from app.models.task import Task
+from app.models.user import User
 from app.models.billing import Transaction, TransactionType
 
 router = APIRouter()
@@ -16,6 +16,10 @@ router = APIRouter()
 _LIKES_DDL = (
     "CREATE TABLE IF NOT EXISTS gallery_likes "
     "(item_key TEXT PRIMARY KEY, likes INTEGER NOT NULL DEFAULT 0)"
+)
+_VIEWS_DDL = (
+    "CREATE TABLE IF NOT EXISTS gallery_views "
+    "(item_key TEXT PRIMARY KEY, views INTEGER NOT NULL DEFAULT 0)"
 )
 _MOD_DDL = (
     "CREATE TABLE IF NOT EXISTS gallery_moderation "
@@ -30,6 +34,10 @@ async def _ensure_likes_table(db: AsyncSession) -> None:
     await db.execute(text(_LIKES_DDL))
 
 
+async def _ensure_views_table(db: AsyncSession) -> None:
+    await db.execute(text(_VIEWS_DDL))
+
+
 async def _stored_likes(db: AsyncSession) -> dict:
     """Map of item_key → real (community) like count."""
     try:
@@ -40,9 +48,14 @@ async def _stored_likes(db: AsyncSession) -> dict:
         return {}
 
 
-def _base_likes(task_id: str) -> int:
-    """Deterministic seed so counts are stable across restarts (pre-community)."""
-    return zlib.crc32(task_id.encode()) % 100
+async def _stored_views(db: AsyncSession) -> dict:
+    """Map of item_key → real view count (list endpoint does not increment)."""
+    try:
+        await _ensure_views_table(db)
+        rows = await db.execute(text("SELECT item_key, views FROM gallery_views"))
+        return {k: int(v) for k, v in rows.all()}
+    except Exception:
+        return {}
 
 
 async def _hidden_keys(db: AsyncSession) -> set:
@@ -79,6 +92,19 @@ def _safe_list(value) -> list:
         except Exception:
             return []
     return []
+
+
+def _author_fields(user: Optional[User]) -> dict:
+    """Real author from Task.user; anonymous fallback without fake AI branding."""
+    if user is None:
+        return {"username": "创作者", "display_name": "创作者", "avatar": ""}
+    display = (user.display_name or user.username or "创作者").strip() or "创作者"
+    return {
+        "username": user.username or "创作者",
+        "display_name": display,
+        "avatar": user.avatar_url or "",
+    }
+
 
 # ─── Content Safety Filter ────────────────────────────
 NSFW_KEYWORDS = [
@@ -145,26 +171,32 @@ async def explore_gallery(
     db: AsyncSession = Depends(get_db),
 ):
     """Return gallery items from completed tasks with real media."""
-    # Get completed tasks
-    q = select(Task).where(Task.status == "completed")
+    # Join User for real author fields (outer — guest/orphan tasks still show)
+    q = (
+        select(Task, User)
+        .outerjoin(User, Task.user_id == User.id)
+        .where(Task.status == "completed")
+    )
     if media_type != "all":
         q = q.where(Task.media_type == media_type)
     q = q.order_by(Task.completed_at.desc() if sort == "recent" else Task.created_at.desc())
     q = q.limit(500)  # fetch more for filtering
 
     result = await db.execute(q)
-    tasks = result.scalars().all()
+    rows = result.all()
 
     likes_map = await _stored_likes(db)
+    views_map = await _stored_views(db)
     hidden = await _hidden_keys(db)
 
     items = []
     filtered_count = 0
-    for t in tasks:
+    for t, user in rows:
         results = _safe_list(t.results)
         if not results:
             continue
         params = _safe_dict(t.parameters)
+        author = _author_fields(user)
 
         for r in results:
             try:
@@ -202,7 +234,7 @@ async def explore_gallery(
                 item_key = f"{t.task_id}_{len(items)}"
                 if item_key in hidden:
                     continue
-                likes = _base_likes(t.task_id) + likes_map.get(item_key, 0)
+                likes = likes_map.get(item_key, 0)
                 items.append({
                     "id": item_key,
                     "task_id": t.task_id,
@@ -217,10 +249,11 @@ async def explore_gallery(
                     "thumbnail": r.get("thumbnail") or url,
                     "credits_cost": int(t.estimated_cost or 0),
                     "created_at": ts.isoformat() if ts else "",
-                    "username": "AI 创作者",
-                    "avatar": "🤖",
+                    "username": author["username"],
+                    "display_name": author["display_name"],
+                    "avatar": author["avatar"],
                     "likes": likes,
-                    "views": zlib.crc32((t.task_id + "v").encode()) % 1000,
+                    "views": views_map.get(item_key, 0),
                 })
             except Exception:
                 # One malformed legacy row must never break the whole gallery
@@ -244,7 +277,6 @@ async def like_item(item_key: str, undo: bool = Query(default=False), db: AsyncS
     gallery_likes so counts survive restarts (real reactions, not seeded)."""
     if not item_key or "_" not in item_key:
         raise HTTPException(status_code=400, detail="无效的作品 ID")
-    task_id = item_key.rsplit("_", 1)[0]
     await _ensure_likes_table(db)
     delta = -1 if undo else 1
     # upsert with a floor of 0 on the stored delta
@@ -258,7 +290,7 @@ async def like_item(item_key: str, undo: bool = Query(default=False), db: AsyncS
     await db.commit()
     row = await db.execute(text("SELECT likes FROM gallery_likes WHERE item_key = :k"), {"k": item_key})
     stored = int(row.scalar() or 0)
-    return {"item_key": item_key, "likes": _base_likes(task_id) + stored, "liked": not undo}
+    return {"item_key": item_key, "likes": stored, "liked": not undo}
 
 
 @router.post("/{item_key}/report", summary="举报作品")

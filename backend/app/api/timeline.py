@@ -1,26 +1,28 @@
 """
 Timeline Editor API — 时间线编辑器: 多片段编排 → 渲染合成视频
 
-对标剪映 / CapCut 时间线剪辑功能。
+对标剪映 / CapCut 时间线剪辑功能。项目持久化到 DB，按 resolve_user_id 隔离。
 """
 import uuid
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
-from app.models.task import Task
+from app.db import get_db
+from app.auth import resolve_user_id
+from app.models.timeline_project import TimelineProject as TimelineProjectRow
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# ─── In-Memory Store ────────────────────────────────────
-# 简单内存存储，替代数据库表
-_timeline_projects: dict = {}
 
-# ─── Models ────────────────────────────────────────────
+# ─── Request / Response Models ─────────────────────────
 
 class ClipItem(BaseModel):
     """时间线片段"""
@@ -29,15 +31,6 @@ class ClipItem(BaseModel):
     end: float = Field(5.0, description="结束时间 (秒)")
     transition: Optional[str] = Field("cut", description="转场效果: cut | fade | dissolve | slide | zoom")
     label: Optional[str] = Field(None, description="片段标签/备注")
-
-
-class TimelineProject(BaseModel):
-    """时间线项目"""
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str = Field("未命名项目", description="项目名称")
-    clips: List[ClipItem] = Field(default_factory=list, description="时间线片段列表")
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class SaveProjectRequest(BaseModel):
@@ -72,38 +65,17 @@ class RenderResponse(BaseModel):
     poll_url: str = ""
 
 
-# ─── Pre-populate Demo Projects ─────────────────────────
-
-_DEMO_PROJECTS = [
-    TimelineProject(
-        id="demo-001",
-        name="产品宣传片",
-        clips=[
-            ClipItem(url="https://example.com/media/intro.mp4", start=0.0, end=3.0, transition="fade", label="开场"),
-            ClipItem(url="https://example.com/media/product-showcase.mp4", start=0.0, end=8.0, transition="dissolve", label="产品展示"),
-            ClipItem(url="https://example.com/media/testimonial.mp4", start=0.0, end=5.0, transition="slide", label="客户证言"),
-            ClipItem(url="https://example.com/media/outro.mp4", start=0.0, end=3.0, transition="fade", label="结尾 CTA"),
-        ],
-        created_at="2025-05-01T08:00:00+00:00",
-        updated_at="2025-05-01T08:00:00+00:00",
-    ),
-    TimelineProject(
-        id="demo-002",
-        name="旅行 Vlog",
-        clips=[
-            ClipItem(url="https://example.com/media/airport.mp4", start=0.0, end=4.0, transition="cut", label="出发"),
-            ClipItem(url="https://example.com/media/beach.mp4", start=2.0, end=10.0, transition="dissolve", label="海滩"),
-            ClipItem(url="https://example.com/media/food.mp4", start=0.0, end=6.0, transition="zoom", label="美食"),
-            ClipItem(url="https://example.com/media/sunset.mp4", start=0.0, end=5.0, transition="fade", label="日落"),
-            ClipItem(url="https://example.com/media/goodbye.mp4", start=0.0, end=3.0, transition="fade", label="告别"),
-        ],
-        created_at="2025-05-10T12:00:00+00:00",
-        updated_at="2025-05-10T12:00:00+00:00",
-    ),
-]
-
-for p in _DEMO_PROJECTS:
-    _timeline_projects[p.id] = p.model_dump()
+async def _owned(
+    db: AsyncSession, project_id: str, user_id: int,
+) -> TimelineProjectRow:
+    row = (await db.execute(
+        select(TimelineProjectRow).where(TimelineProjectRow.project_id == project_id)
+    )).scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"项目不存在: {project_id}")
+    if (row.user_id or 0) != user_id:
+        raise HTTPException(status_code=403, detail="无权访问此项目")
+    return row
 
 
 # ─── Endpoints ─────────────────────────────────────────
@@ -111,17 +83,20 @@ for p in _DEMO_PROJECTS:
 @router.get(
     "/timeline/projects",
     summary="列出所有时间线项目",
-    description="返回所有已保存的时间线项目列表。",
+    description="返回当前用户已保存的时间线项目列表。",
 )
-async def list_projects():
-    """列出所有已保存的时间线项目。"""
-    projects = list(_timeline_projects.values())
-    # 按更新时间倒序排列
-    projects.sort(key=lambda p: p.get("updated_at", ""), reverse=True)
-    return {
-        "total": len(projects),
-        "projects": projects,
-    }
+async def list_projects(
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """列出当前用户已保存的时间线项目。"""
+    rows = (await db.execute(
+        select(TimelineProjectRow)
+        .where(TimelineProjectRow.user_id == user_id)
+        .order_by(TimelineProjectRow.updated_at.desc())
+    )).scalars().all()
+    projects = [r.to_api_dict() for r in rows]
+    return {"total": len(projects), "projects": projects}
 
 
 @router.post(
@@ -131,57 +106,67 @@ async def list_projects():
     summary="创建或保存时间线项目",
     description="创建新的时间线项目或更新已有项目。传入 id 则更新，否则新建。",
 )
-async def save_project(req: SaveProjectRequest):
+async def save_project(
+    req: SaveProjectRequest,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """
     创建或保存时间线项目。
 
     - **id**: 可选，传入则更新已有项目，不传则新建
     - **name**: 项目名称
-    - **clips**: 时间线片段数组，每个片段包含:
-        - url: 素材 URL
-        - start: 起始时间 (秒)
-        - end: 结束时间 (秒)
-        - transition: 转场效果
-        - label: 标签/备注
+    - **clips**: 时间线片段数组
     """
-    now = datetime.now(timezone.utc).isoformat()
+    clips_data = [c.model_dump() for c in req.clips]
+    total_duration = sum(max(0, c.end - c.start) for c in req.clips)
 
-    if req.id and req.id in _timeline_projects:
-        # 更新已有项目
-        project = _timeline_projects[req.id]
-        project["name"] = req.name
-        project["clips"] = [c.model_dump() for c in req.clips]
-        project["updated_at"] = now
-        pid = req.id
-        created_at = project["created_at"]
-        action = "updated"
-    else:
-        # 新建项目
-        pid = req.id or str(uuid.uuid4())
-        project_data = {
-            "id": pid,
-            "name": req.name,
-            "clips": [c.model_dump() for c in req.clips],
-            "created_at": now,
-            "updated_at": now,
-        }
-        _timeline_projects[pid] = project_data
-        created_at = now
-        action = "created"
+    if req.id:
+        row = (await db.execute(
+            select(TimelineProjectRow).where(TimelineProjectRow.project_id == req.id)
+        )).scalar_one_or_none()
+        if row:
+            if (row.user_id or 0) != user_id:
+                raise HTTPException(status_code=403, detail="无权访问此项目")
+            row.name = req.name
+            row.clips = clips_data
+            flag_modified(row, "clips")
+            await db.commit()
+            await db.refresh(row)
+            logger.info(
+                "Timeline project updated: %s (%s) - %d clips, %.1fs",
+                row.project_id, req.name, len(req.clips), total_duration,
+            )
+            return SaveProjectResponse(
+                id=row.project_id,
+                name=row.name,
+                clip_count=len(req.clips),
+                total_duration=round(total_duration, 1),
+                created_at=row.created_at.isoformat() if row.created_at else "",
+                updated_at=row.updated_at.isoformat() if row.updated_at else "",
+            )
 
-    total_duration = sum(
-        max(0, c.end - c.start) for c in req.clips
-    )
-
-    logger.info(f"Timeline project {action}: {pid} ({req.name}) - {len(req.clips)} clips, {total_duration:.1f}s")
-
-    return SaveProjectResponse(
-        id=pid,
+    pid = req.id or str(uuid.uuid4())
+    row = TimelineProjectRow(
+        project_id=pid,
+        user_id=user_id,
         name=req.name,
+        clips=clips_data,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    logger.info(
+        "Timeline project created: %s (%s) - %d clips, %.1fs",
+        pid, req.name, len(req.clips), total_duration,
+    )
+    return SaveProjectResponse(
+        id=row.project_id,
+        name=row.name,
         clip_count=len(req.clips),
         total_duration=round(total_duration, 1),
-        created_at=created_at,
-        updated_at=now,
+        created_at=row.created_at.isoformat() if row.created_at else "",
+        updated_at=row.updated_at.isoformat() if row.updated_at else "",
     )
 
 
@@ -190,15 +175,14 @@ async def save_project(req: SaveProjectRequest):
     summary="获取单个时间线项目",
     description="根据项目 ID 获取项目详情。",
 )
-async def get_project(project_id: str):
+async def get_project(
+    project_id: str,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """获取单个时间线项目的完整信息。"""
-    project = _timeline_projects.get(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=404,
-            detail=f"项目不存在: {project_id}",
-        )
-    return project
+    row = await _owned(db, project_id, user_id)
+    return row.to_api_dict()
 
 
 class ComposeClip(BaseModel):
@@ -241,7 +225,11 @@ async def compose_timeline(req: ComposeRequest):
     summary="渲染时间线为视频",
     description="将指定时间线项目渲染合成为视频，返回任务 ID 用于追踪进度。",
 )
-async def render_timeline(req: RenderRequest):
+async def render_timeline(
+    req: RenderRequest,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """
     渲染时间线项目为视频。
 
@@ -251,15 +239,8 @@ async def render_timeline(req: RenderRequest):
 
     返回 task_id，可通过 `/api/v1/tasks/{task_id}` 查询渲染进度。
     """
-    # Validate project exists
-    project = _timeline_projects.get(req.project_id)
-    if not project:
-        raise HTTPException(
-            status_code=404,
-            detail=f"项目不存在: {req.project_id}",
-        )
-
-    clips = project.get("clips", [])
+    row = await _owned(db, req.project_id, user_id)
+    clips = row.clips if isinstance(row.clips, list) else []
     if not clips:
         raise HTTPException(
             status_code=400,
@@ -267,9 +248,7 @@ async def render_timeline(req: RenderRequest):
         )
 
     task_id = str(uuid.uuid4())
-    model = "timeline-render"
-
-    total_duration = sum(max(0, c.get("end", 5) - c.get("start", 0)) for c in clips)
+    total_duration = sum(max(0, float(c.get("end", 5)) - float(c.get("start", 0))) for c in clips)
     estimated_time = max(30, int(total_duration * 3))  # ~3x real-time
 
     # Dispatch Celery task

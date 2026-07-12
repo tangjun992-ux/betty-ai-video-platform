@@ -123,16 +123,34 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
         logger.warning("FFmpeg not found, using simulation")
         return _simulate_render(db_task_id)
 
-    # Load project from in-memory store
+    # Load project from DB (timeline_projects)
+    project = None
     try:
-        from app.api.timeline import _timeline_projects
-        project = _timeline_projects.get(project_id)
-        if not project:
-            _update_task(db_task_id, status="failed", error_message=f"Project not found: {project_id}")
-            return {"status": "failed", "error": "Project not found"}
-    except ImportError:
-        logger.warning("Cannot import timeline store, using simulation")
+        db_url = _get_db_url_sync()
+        engine = create_engine(db_url)
+        with Session(engine) as session:
+            row = session.execute(
+                text(
+                    "SELECT name, clips FROM timeline_projects WHERE project_id = :pid"
+                ),
+                {"pid": project_id},
+            ).first()
+            if row:
+                clips_raw = row[1]
+                if isinstance(clips_raw, str):
+                    try:
+                        clips_raw = json.loads(clips_raw)
+                    except Exception:
+                        clips_raw = []
+                project = {"name": row[0], "clips": clips_raw if isinstance(clips_raw, list) else []}
+        engine.dispose()
+    except Exception as e:
+        logger.warning("Cannot load timeline project from DB: %s", e)
         return _simulate_render(db_task_id)
+
+    if not project:
+        _update_task(db_task_id, status="failed", error_message=f"Project not found: {project_id}")
+        return {"status": "failed", "error": "Project not found"}
 
     clips = project.get("clips", [])
     if not clips:

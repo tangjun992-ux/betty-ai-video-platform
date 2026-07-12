@@ -14,7 +14,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.db import get_db
 from app.models.project import Project
 from app.models.user import User
-from app.auth import get_optional_user
+from app.auth import get_optional_user, resolve_user_id
 
 router = APIRouter()
 
@@ -78,14 +78,30 @@ async def _get(db: AsyncSession, project_id: str) -> Project:
     return p
 
 
+async def _get_owned(db: AsyncSession, project_id: str, user_id: int) -> Project:
+    p = await _get(db, project_id)
+    if (p.user_id or 0) != user_id:
+        raise HTTPException(status_code=403, detail="无权访问此项目")
+    return p
+
+
 @router.get("/{project_id}", summary="项目详情")
-async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
-    return _serialize(await _get(db, project_id))
+async def get_project(
+    project_id: str,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return _serialize(await _get_owned(db, project_id, user_id))
 
 
 @router.patch("/{project_id}", summary="更新项目信息")
-async def update_project(project_id: str, req: UpdateProject, db: AsyncSession = Depends(get_db)):
-    p = await _get(db, project_id)
+async def update_project(
+    project_id: str,
+    req: UpdateProject,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    p = await _get_owned(db, project_id, user_id)
     if req.name is not None:
         p.name = req.name.strip() or p.name
     if req.description is not None:
@@ -96,8 +112,13 @@ async def update_project(project_id: str, req: UpdateProject, db: AsyncSession =
 
 
 @router.post("/{project_id}/items", summary="向项目添加作品")
-async def add_item(project_id: str, item: ProjectItem, db: AsyncSession = Depends(get_db)):
-    p = await _get(db, project_id)
+async def add_item(
+    project_id: str,
+    item: ProjectItem,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    p = await _get_owned(db, project_id, user_id)
     items = list(p.items or [])
     if any(it.get("item_id") == item.item_id for it in items):
         return _serialize(p)  # already in project (idempotent)
@@ -112,8 +133,13 @@ async def add_item(project_id: str, item: ProjectItem, db: AsyncSession = Depend
 
 
 @router.delete("/{project_id}/items/{item_id}", summary="从项目移除作品")
-async def remove_item(project_id: str, item_id: str, db: AsyncSession = Depends(get_db)):
-    p = await _get(db, project_id)
+async def remove_item(
+    project_id: str,
+    item_id: str,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    p = await _get_owned(db, project_id, user_id)
     items = [it for it in (p.items or []) if it.get("item_id") != item_id]
     p.items = items
     if p.cover and not any((it.get("thumbnail") == p.cover or it.get("url") == p.cover) for it in items):
@@ -125,8 +151,12 @@ async def remove_item(project_id: str, item_id: str, db: AsyncSession = Depends(
 
 
 @router.delete("/{project_id}", summary="删除项目")
-async def delete_project(project_id: str, db: AsyncSession = Depends(get_db)):
-    p = await _get(db, project_id)
+async def delete_project(
+    project_id: str,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    p = await _get_owned(db, project_id, user_id)
     await db.delete(p)
     await db.commit()
     return {"deleted": project_id}

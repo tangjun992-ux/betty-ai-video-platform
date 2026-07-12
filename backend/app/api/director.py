@@ -1,7 +1,8 @@
 """
 Director API — 导演式编排端点 (对标 yapper Agent)
   POST /director/plan  → 生成创作计划 (用户先看导演方案)
-  POST /director/run   → 执行计划，产出多资产 (默认 DRY_RUN)
+  POST /director/run   → 执行计划，产出多资产
+  默认策略：有真实模型 Key 时允许真实执行；显式 DIRECTOR_DRY_RUN=1 才强制预览。
 """
 import json
 import os
@@ -13,22 +14,33 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.director import planner, DirectorExecutor, DirectorPlanner, plan_from_dict, refine_plan, DirectorStep
+from app.director import planner, DirectorExecutor, DirectorPlanner, plan_from_dict, DirectorStep
 from app.db import get_db
 from app.models.director_session import DirectorSession
+from app.auth import resolve_user_id, get_optional_user, GUEST_USER_ID
+from app.models.user import User
+from app.services.director_brain import ideate as brain_ideate, refine_with_llm
 
 router = APIRouter()
 
 
 def _dry_run_default() -> bool:
+    """Preview-only when explicitly forced OR no provider keys are configured.
+    When real models are available, default to real execution (client can still
+    request dry_run=true for free preview)."""
     val = os.getenv("DIRECTOR_DRY_RUN") or os.getenv("DRY_RUN") or ""
     if val:
         return val.lower() in ("1", "true", "yes", "on")
     try:
-        from app.config import settings  # type: ignore
-        return bool(getattr(settings, "LOCAL_MODE", False) or getattr(settings, "DRY_RUN", False))
+        from app.adapters.demo_provider import demo_mode_active
+        if demo_mode_active():
+            return True  # no keys → only demo/preview makes sense
+        from app.config import settings
+        if getattr(settings, "is_production", False):
+            return False
+        return False  # keys present → real by default
     except Exception:
-        return True  # 安全默认：不真实烧钱
+        return True
 
 
 class PlanRequest(BaseModel):
@@ -88,23 +100,16 @@ class IdeateRequest(BaseModel):
 @router.post("/ideate", summary="帮我构思：从一句话发散多个创意方向")
 async def ideate(req: IdeateRequest):
     """Expand a rough idea into several distinct creative concepts to pick from
-    (对标 yapper 'Help Ideate')."""
-    b = req.brief.strip()
-    angles = [
-        ("电影感大片", f"{b}，电影级运镜与调色，史诗氛围，宽银幕构图"),
-        ("高能快剪", f"{b}，快节奏踩点剪辑，动感转场，强视觉冲击，竖屏"),
-        ("情绪治愈", f"{b}，柔和自然光，舒缓节奏，温暖治愈氛围"),
-        ("悬念钩子", f"{b}，强钩子开场加剧情反转，抓住前 3 秒注意力，竖屏"),
-        ("高级质感", f"{b}，极简高级质感，精致布光，商业大片级细节"),
-    ]
-    return {"concepts": [{"title": t, "brief": br} for t, br in angles]}
+    (对标 yapper 'Help Ideate'). Uses LLM when a key is configured, else rules."""
+    concepts = await brain_ideate(req.brief.strip())
+    return {"concepts": concepts}
 
 
 @router.post("/refine", summary="对话式导演：用自然语言迭代计划")
 async def refine(req: RefineRequest):
-    plan = plan_from_dict(req.plan)
-    updated, changes = refine_plan(plan, req.directive)
-    return {"plan": updated.to_dict(), "changes": changes}
+    """LLM refine when a key is available; falls back to the rule engine."""
+    plan_dict, changes = await refine_with_llm(req.plan, req.directive)
+    return {"plan": plan_dict, "changes": changes}
 
 
 @router.post("/run", summary="执行导演计划，产出多资产 (非流式)")
@@ -186,7 +191,6 @@ async def rerun_step(req: StepRerunRequest):
 class SessionCreate(BaseModel):
     title: str | None = None
     brief: str | None = None
-    user_id: int = 0
 
 
 class SessionUpdate(BaseModel):
@@ -198,19 +202,38 @@ class SessionUpdate(BaseModel):
     status: str | None = None
 
 
+async def _owned_session(db: AsyncSession, uid: str, user_id: int) -> DirectorSession:
+    s = (await db.execute(
+        select(DirectorSession).where(DirectorSession.session_uid == uid)
+    )).scalar_one_or_none()
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    # Guests only see guest sessions; authenticated users only their own.
+    if s.user_id != user_id:
+        raise HTTPException(status_code=403, detail="无权访问此会话")
+    return s
+
+
 @router.get("/sessions", summary="列出导演会话")
-async def list_sessions(user_id: int = 0, db: AsyncSession = Depends(get_db)):
+async def list_sessions(
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     rows = (await db.execute(
         select(DirectorSession).where(DirectorSession.user_id == user_id)
         .order_by(DirectorSession.updated_at.desc()).limit(100)
     )).scalars().all()
-    return {"sessions": [s.to_dict() for s in rows]}
+    return {"sessions": [s.to_dict() for s in rows], "user_id": user_id}
 
 
 @router.post("/sessions", summary="创建导演会话")
-async def create_session(req: SessionCreate, db: AsyncSession = Depends(get_db)):
+async def create_session(
+    req: SessionCreate,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     s = DirectorSession(
-        session_uid=uuid.uuid4().hex, user_id=req.user_id,
+        session_uid=uuid.uuid4().hex, user_id=user_id,
         title=req.title or "新导演会话", brief=req.brief, status="draft",
     )
     db.add(s)
@@ -219,18 +242,23 @@ async def create_session(req: SessionCreate, db: AsyncSession = Depends(get_db))
 
 
 @router.get("/sessions/{uid}", summary="获取会话详情")
-async def get_session(uid: str, db: AsyncSession = Depends(get_db)):
-    s = (await db.execute(select(DirectorSession).where(DirectorSession.session_uid == uid))).scalar_one_or_none()
-    if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+async def get_session(
+    uid: str,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    s = await _owned_session(db, uid, user_id)
     return s.to_dict()
 
 
 @router.patch("/sessions/{uid}", summary="更新会话(保存计划/资产)")
-async def update_session(uid: str, req: SessionUpdate, db: AsyncSession = Depends(get_db)):
-    s = (await db.execute(select(DirectorSession).where(DirectorSession.session_uid == uid))).scalar_one_or_none()
-    if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+async def update_session(
+    uid: str,
+    req: SessionUpdate,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    s = await _owned_session(db, uid, user_id)
     for k, v in req.model_dump(exclude_none=True).items():
         setattr(s, k, v)
     await db.flush()
@@ -238,8 +266,30 @@ async def update_session(uid: str, req: SessionUpdate, db: AsyncSession = Depend
 
 
 @router.delete("/sessions/{uid}", summary="删除会话")
-async def delete_session(uid: str, db: AsyncSession = Depends(get_db)):
-    s = (await db.execute(select(DirectorSession).where(DirectorSession.session_uid == uid))).scalar_one_or_none()
-    if s:
-        await db.delete(s)
-    return {"deleted": bool(s)}
+async def delete_session(
+    uid: str,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    s = await _owned_session(db, uid, user_id)
+    await db.delete(s)
+    return {"deleted": True}
+
+
+@router.get("/mode", summary="导演执行模式（预览/真实）")
+async def director_mode():
+    """Tell the UI whether real generation is available vs preview-only."""
+    dry = _dry_run_default()
+    try:
+        from app.adapters.demo_provider import demo_mode_active, any_provider_configured
+        demo = demo_mode_active()
+        configured = any_provider_configured()
+    except Exception:
+        demo, configured = True, False
+    return {
+        "dry_run_default": dry,
+        "demo_mode": demo,
+        "providers_configured": configured,
+        "real_available": configured and not dry,
+        "label": "预览模式" if dry or demo else "真实生成可用",
+    }
