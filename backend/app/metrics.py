@@ -31,6 +31,15 @@ HTTP_EXCEPTIONS = Counter("betty_http_exceptions_total", "Unhandled exceptions",
 QUEUE_DEPTH = Gauge("betty_celery_queue_depth", "Pending tasks per Celery queue", ["queue"], registry=REGISTRY)
 TASKS_TOTAL = Gauge("betty_tasks_total", "Tasks by status", ["status"], registry=REGISTRY)
 UP = Gauge("betty_up", "Service up (1) — dependency health", ["dependency"], registry=REGISTRY)
+MODEL_HEALTH = Gauge(
+    "betty_model_health_score", "Runtime model health score (0-100)",
+    ["model"], registry=REGISTRY)
+MODEL_CIRCUIT = Gauge(
+    "betty_model_circuit_open", "Model circuit state (1=open)",
+    ["model"], registry=REGISTRY)
+ONBOARDING_EVENTS = Counter(
+    "betty_onboarding_events_total", "First-work onboarding funnel events",
+    ["event"], registry=REGISTRY)
 
 _ID_RE = re.compile(r"/(?:[0-9a-f]{8,}|\d+)(?=/|$)", re.IGNORECASE)
 _CELERY_QUEUES = ["celery", "image_q", "video_q", "director_q", "collector_q"]
@@ -71,6 +80,17 @@ async def _refresh_runtime_gauges() -> None:
         UP.labels(dependency="database").set(1)
     except Exception:
         UP.labels(dependency="database").set(0)
+
+    # Live model health/circuit state used by routing.
+    try:
+        from app.api.models_info import MODELS
+        from app.services.model_health import model_health
+        for model in MODELS:
+            snapshot = model_health.snapshot(model.id)
+            MODEL_HEALTH.labels(model=model.id).set(snapshot.score)
+            MODEL_CIRCUIT.labels(model=model.id).set(1 if snapshot.circuit_open else 0)
+    except Exception:
+        pass
 
 
 async def render_metrics() -> tuple[bytes, str]:

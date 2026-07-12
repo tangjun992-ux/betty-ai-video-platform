@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 
 from celery_app import app
@@ -12,6 +13,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.services.media_store import persist_results
+from app.services.model_health import model_health, validate_generation_results
 
 logger = logging.getLogger(__name__)
 
@@ -140,12 +142,16 @@ def generate_image_task(
     _update_task(db_task_id, progress=50)
     _broadcast_progress(db_task_id, 50, "generating", "模型正在创作中，请稍候...")
 
+    started = time.monotonic()
     try:
         result = _run_async(
             adapter.generate_image(prompt=prompt, model_id=model, size=size, style=style, count=count, seed=seed)
         )
         # Adapt single GenerationResult to list for uniform processing
         results = [result] if not isinstance(result, list) else result
+        quality_ok, quality_error = validate_generation_results(results, "image")
+        if not quality_ok:
+            raise RuntimeError(quality_error)
 
         self.update_state(state="PROGRESS", meta={"current_stage": "uploading", "progress": 80})
         _update_task(db_task_id, progress=80, current_stage="uploading")
@@ -182,12 +188,17 @@ def generate_image_task(
             completed_at=datetime.now(timezone.utc),
             results=json.dumps(output), actual_cost=total_cost,
         )
+        model_health.record_success(model, int((time.monotonic() - started) * 1000))
         _broadcast_progress(db_task_id, 100, "completed", "生成完成！")
         return {"status": "completed", "results": output, "cost": total_cost}
 
     except RuntimeError as e:
+        from app.fallback_handler import is_retryable_error
+        model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
         return _handle_retryable(self, db_task_id, model, str(e), "image", prompt, size, style, count)
     except Exception as e:
+        from app.fallback_handler import is_retryable_error
+        model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
         return _mark_failed(db_task_id, str(e))
 
 
@@ -211,6 +222,7 @@ def _handle_retryable(self, db_task_id, model, error, media_type, *args):
     if not fb_adapter:
         return _mark_failed(db_task_id, f"Fallback adapter not found: {fallback_id}")
 
+    started = time.monotonic()
     try:
         kwargs = model.split("/")
         # Reconstruct call for fallback
@@ -231,6 +243,9 @@ def _handle_retryable(self, db_task_id, model, error, media_type, *args):
         # Normalize single-result adapters (e.g. KIE) to a list.
         if not isinstance(results, list):
             results = [results]
+        quality_ok, quality_error = validate_generation_results(results, media_type)
+        if not quality_ok:
+            raise RuntimeError(quality_error)
 
         # ... process results (simplified)
         output = []
@@ -251,9 +266,12 @@ def _handle_retryable(self, db_task_id, model, error, media_type, *args):
             completed_at=datetime.now(timezone.utc),
             results=json.dumps(output), actual_cost=total_cost,
         )
+        model_health.record_success(fallback_id, int((time.monotonic() - started) * 1000))
         return {"status": "completed_fallback", "results": output, "cost": total_cost}
 
     except Exception as fe:
+        from app.fallback_handler import is_retryable_error
+        model_health.record_failure(fallback_id, str(fe), retryable=is_retryable_error(str(fe)))
         return _mark_failed(db_task_id, f"Fallback also failed: {fe}. Original: {error}")
 
 

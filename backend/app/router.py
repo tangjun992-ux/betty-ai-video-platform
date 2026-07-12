@@ -9,6 +9,7 @@ import logging
 from typing import Optional
 from dataclasses import dataclass, field
 from enum import Enum
+from app.services.model_health import model_health
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +269,9 @@ class PromptRouter:
         scores = []
 
         for model_id, pref in models.items():
+            if model_health.is_circuit_open(model_id):
+                logger.warning("Router skipped open circuit model: %s", model_id)
+                continue
             model_score = 50.0  # base score
             reasons = []
 
@@ -302,12 +306,30 @@ class PromptRouter:
 
             model_score += style_bonus
 
+            # Live reliability feeds back into routing. Healthy/unseen models are
+            # neutral; degraded models receive up to a 30-point penalty.
+            health_score = model_health.score(model_id)
+            health_penalty = max(0.0, (100.0 - health_score) * 0.30)
+            model_score -= health_penalty
+            if health_penalty:
+                reasons.append(f"实时健康 {health_score:.0f}/100")
+
             scores.append(ModelScore(
                 model_id=model_id,
                 score=round(model_score, 1),
                 reasons=reasons if reasons else ["默认选择"],
                 recommended_media_type=MediaType(target_media),
             ))
+
+        # A transient outage must not make routing impossible: if all circuits
+        # are open, retain the static candidates and let runtime fallback decide.
+        if not scores:
+            for model_id in models:
+                scores.append(ModelScore(
+                    model_id=model_id, score=1.0,
+                    reasons=["所有候选模型暂时降级，尝试恢复探测"],
+                    recommended_media_type=MediaType(target_media),
+                ))
 
         # Sort by score descending
         scores.sort(key=lambda s: s.score, reverse=True)

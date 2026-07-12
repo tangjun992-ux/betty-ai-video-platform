@@ -85,7 +85,11 @@ def _pick_model(media_type: str, want_styles: list[str], prefer: str = "balanced
     自动路由到 beta/未支持模型导致真实调用 422。用户仍可在编辑器手动切换任意模型。
     """
     all_cands = [m for m in _catalog() if media_type in m["capabilities"]["media_types"]]
-    active = [m for m in all_cands if m.get("status") == "active"]
+    from app.services.model_health import model_health
+    active = [
+        m for m in all_cands
+        if m.get("status") == "active" and not model_health.is_circuit_open(m["id"])
+    ]
     cands = active or all_cands
     if not cands:
         # 兜底
@@ -110,6 +114,8 @@ def _pick_model(media_type: str, want_styles: list[str], prefer: str = "balanced
             s += {"low": 0, "medium": 1, "high": 2}.get(tier, 0)
         else:  # balanced
             s += {"low": 1, "medium": 1.5, "high": 1}.get(tier, 0)
+        # Feed live execution reliability back into Director planning.
+        s -= max(0.0, (100.0 - model_health.score(m["id"])) * 0.03)
         return s
 
     return max(cands, key=score)
@@ -726,28 +732,70 @@ class DirectorExecutor:
                         "thumbnail": img_url, "model": step.model_id, "cost": step.est_credits}
 
             from app.adapters.registry import get_adapter
-            adapter = get_adapter(step.model_id)
-            if adapter is None:
-                step.status = "failed"
-                return {"type": media_type, "error": f"no adapter for {step.model_id}"}
-            if media_type == "video":
-                res = await adapter.generate_video(prompt=step.prompt, model_id=step.model_id,
-                                                   duration=duration, image_url=base_image_url,
-                                                   resolution=_size_from_params(step.params, "1080p"))
-            else:
-                out = await adapter.generate_image(prompt=step.prompt, model_id=step.model_id,
-                                                   size=_size_from_params(step.params, "1024x1024"))
-                res = out[0] if isinstance(out, list) else out
+            from app.fallback_handler import get_fallback, is_retryable_error
+            from app.services.model_health import model_health, validate_generation_results
+
+            async def _call(model_id: str):
+                adapter = get_adapter(model_id)
+                if adapter is None:
+                    raise RuntimeError(f"no adapter for {model_id}")
+                if media_type == "video":
+                    return await adapter.generate_video(
+                        prompt=step.prompt, model_id=model_id, duration=duration,
+                        image_url=base_image_url,
+                        resolution=_size_from_params(step.params, "1080p"))
+                generated = await adapter.generate_image(
+                    prompt=step.prompt, model_id=model_id,
+                    size=_size_from_params(step.params, "1024x1024"), seed=seed)
+                return generated[0] if isinstance(generated, list) else generated
+
+            selected_model = step.model_id
+            if model_health.is_circuit_open(selected_model):
+                selected_model = get_fallback(selected_model) or selected_model
+
+            started = time.monotonic()
+            try:
+                res = await _call(selected_model)
+                quality_ok, quality_error = validate_generation_results(res, media_type)
+                if not quality_ok:
+                    raise RuntimeError(quality_error)
+                model_health.record_success(
+                    selected_model, int((time.monotonic() - started) * 1000))
+            except Exception as primary_error:
+                retryable = is_retryable_error(str(primary_error))
+                model_health.record_failure(
+                    selected_model, str(primary_error), retryable=retryable)
+                fallback_id = get_fallback(selected_model) if retryable else None
+                if not fallback_id or model_health.is_circuit_open(fallback_id):
+                    raise
+                logger.warning(
+                    "[director] fallback %s -> %s: %s",
+                    selected_model, fallback_id, primary_error)
+                fallback_started = time.monotonic()
+                try:
+                    res = await _call(fallback_id)
+                    quality_ok, quality_error = validate_generation_results(res, media_type)
+                    if not quality_ok:
+                        raise RuntimeError(quality_error)
+                    model_health.record_success(
+                        fallback_id,
+                        int((time.monotonic() - fallback_started) * 1000))
+                    selected_model = fallback_id
+                except Exception as fallback_error:
+                    model_health.record_failure(
+                        fallback_id, str(fallback_error),
+                        retryable=is_retryable_error(str(fallback_error)))
+                    raise RuntimeError(
+                        f"primary failed: {primary_error}; "
+                        f"fallback {fallback_id} failed: {fallback_error}")
+
             rd = res.to_dict() if hasattr(res, "to_dict") else (res or {})
-            if rd.get("error"):
-                step.status = "failed"
-                return {"type": media_type, "error": rd["error"]}
             out = {
                 "type": media_type,
                 "url": rd.get("media_url", ""),
                 "media_url": rd.get("media_url", ""),
                 "thumbnail": rd.get("thumbnail_url") or rd.get("media_url", ""),
-                "model": step.model_id,
+                "model": selected_model,
                 "cost": rd.get("cost", step.est_credits),
                 "duration": duration if media_type == "video" else None,
             }

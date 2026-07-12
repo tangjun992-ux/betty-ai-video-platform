@@ -261,6 +261,15 @@ async def list_models():
     return {"models": MODELS}
 
 
+@router.get("/health/live", summary="模型实时健康与熔断状态")
+async def live_model_health():
+    """Runtime feedback used by automatic routing (success, latency, circuit)."""
+    from app.services.model_health import model_health
+    rows = [model_health.snapshot(m.id).public_dict() for m in MODELS]
+    rows.sort(key=lambda r: (r["circuit_open"], -r["score"], r["model_id"]))
+    return {"models": rows, "circuits_open": sum(1 for r in rows if r["circuit_open"])}
+
+
 @router.get("/{model_id}", summary="获取指定模型详情")
 async def get_model(model_id: str):
     for m in MODELS:
