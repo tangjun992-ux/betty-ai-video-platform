@@ -31,7 +31,6 @@ import {
   Mic,
   Clock,
   Wand2,
-  User,
   Maximize2,
   Scissors,
   Expand,
