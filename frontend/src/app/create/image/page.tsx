@@ -15,9 +15,9 @@ import { BatchPromptInput } from "@/components/BatchPromptInput";
 import { CosmicPromptCard } from "@/components/cosmic/CosmicPromptCard";
 import { CosmicParamPanel, CosmicSlider, CosmicSelect } from "@/components/cosmic/CosmicParamPanel";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
-import { useCreationStore } from "@/lib/stores";
+import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { submitGeneration, getTaskStatus, type GenerateResponse, type TaskResult } from "@/lib/api";
+import { submitGeneration, getTaskStatus, trackOnboarding, type GenerateResponse, type TaskResult } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ═══════════════════════════════════════════════════════════
@@ -50,6 +50,8 @@ const PROMPT_TABS = [
 export default function CreateImagePage() {
   const router = useRouter();
   const toast = useToast();
+  const user = useAuthStore((s) => s.user);
+  const completeOnboarding = useOnboardingStore((s) => s.completeFor);
 
   // ── Store ────────────────────────────────────────────
   const {
@@ -184,6 +186,7 @@ export default function CreateImagePage() {
       });
 
       setTaskId(res.task_id);
+      if (user?.id) trackOnboarding("generation_submitted");
       setEstimatedSeconds(res.estimated_time_seconds || 30);
       setProgress(5);
       setProgressStage("模型推理中...");
@@ -237,6 +240,10 @@ export default function CreateImagePage() {
 
       // Success toast
       toast.success("生成完成", `已生成 ${resultCount} 张图片`);
+      if (resultCount > 0 && user?.id) {
+        completeOnboarding(String(user.id));
+        trackOnboarding("first_work_completed");
+      }
 
     } catch (err: any) {
       const message = err.message || "生成失败，请重试";
@@ -253,6 +260,7 @@ export default function CreateImagePage() {
   }, [
     prompt, selectedModel, quality, resolution, aspectRatio, count,
     style, creativity, submitting, addRecentPrompt, addResult, toast,
+    user?.id, completeOnboarding,
   ]);
 
   // 单资产迭代：变体(同 prompt/model，新种子×4) 或 复现(同种子)

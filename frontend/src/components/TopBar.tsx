@@ -17,9 +17,11 @@ import {
   Sparkles,
   Sun,
   Moon,
+  Languages,
 } from "lucide-react";
 import { useUIStore, useAuthStore, useCmdKStore } from "@/lib/stores";
 import { useTheme } from "@/components/ThemeProvider";
+import { useLocale } from "@/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
 import { JobsTray } from "@/components/JobsTray";
@@ -43,6 +45,7 @@ export function TopBar() {
   const { user, logout } = useAuthStore();
   const { setOpen: setCmdKOpen } = useCmdKStore();
   const { theme, toggleTheme } = useTheme();
+  const { t, toggleLocale } = useLocale();
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -69,7 +72,7 @@ export function TopBar() {
   }, []);
 
   const credits = liveCredits ?? user?.credits ?? 0;
-  const displayName = user?.name || user?.email?.split("@")[0] || "访客";
+  const displayName = user?.name || user?.email?.split("@")[0] || t("top.guest");
   const initial = (displayName[0] ?? "B").toUpperCase();
 
   function handleLogout() {
@@ -126,7 +129,7 @@ export function TopBar() {
         >
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary group-hover:text-text-secondary transition-colors" />
           <span className="block w-full h-9 pl-10 pr-16 rounded-xl bg-cosmic-subtle border border-cosmic-border text-sm text-text-tertiary group-hover:border-brand/30 group-hover:bg-cosmic-surface transition-all flex items-center">
-            搜索资产、工具或提示词...
+            {t("top.search")}
           </span>
           <kbd className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-cosmic-surface border border-cosmic-border text-[10px] font-mono text-text-tertiary">⌘K</kbd>
         </button>
@@ -148,7 +151,7 @@ export function TopBar() {
           href="/create/video"
           className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-brand text-white text-xs font-semibold hover:bg-brand-strong hover:-translate-y-px shadow-button-glow transition-all"
         >
-          <Sparkles className="w-3.5 h-3.5" /> 立即创作
+          <Sparkles className="w-3.5 h-3.5" /> {t("top.create")}
         </Link>
 
         {/* Theme toggle */}
@@ -159,6 +162,16 @@ export function TopBar() {
           title={theme === "dark" ? "亮色模式" : "暗色模式"}
         >
           {theme === "dark" ? <Sun className="w-[18px] h-[18px]" /> : <Moon className="w-[18px] h-[18px]" />}
+        </button>
+
+        <button
+          onClick={toggleLocale}
+          className="inline-flex h-9 items-center gap-1 rounded-lg px-2 text-xs font-medium text-text-tertiary transition-colors hover:bg-cosmic-subtle hover:text-text-primary"
+          aria-label="Switch language"
+          title="Switch language"
+        >
+          <Languages className="h-[17px] w-[17px]" />
+          <span className="hidden lg:inline">{t("top.language")}</span>
         </button>
 
         {/* Jobs Tray */}
@@ -212,25 +225,25 @@ export function TopBar() {
               <DropdownMenuItem asChild>
                 <Link href="/settings" className="cursor-pointer">
                   <User className="w-4 h-4 mr-2" />
-                  设置
+                  {t("top.settings")}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/dashboard" className="cursor-pointer">
                   <Zap className="w-4 h-4 mr-2" />
-                  控制台
+                  {t("top.dashboard")}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/billing" className="cursor-pointer">
                   <Zap className="w-4 h-4 mr-2" />
-                  积分中心
+                  {t("top.billing")}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link href="/developer" className="cursor-pointer">
                   <User className="w-4 h-4 mr-2" />
-                  开发者 API
+                  {t("top.developer")}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -239,7 +252,7 @@ export function TopBar() {
                 className="text-destructive focus:text-destructive cursor-pointer"
               >
                 <LogOut className="w-4 h-4 mr-2" />
-                退出登录
+                {t("top.logout")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -253,7 +266,7 @@ export function TopBar() {
             )}
           >
             <LogIn className="w-4 h-4" />
-            <span>登录</span>
+            <span>{t("top.login")}</span>
           </Link>
         )}
 

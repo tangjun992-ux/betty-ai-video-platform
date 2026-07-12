@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { useUIStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
+import { useLocale } from "@/i18n/LocaleProvider";
 import {
   Tooltip,
   TooltipContent,
@@ -44,27 +45,27 @@ import {
 
 // ─── NAV ITEMS ──────────────────────────────────────────
 const mainNav = [
-  { href: "/", icon: Home, label: "首页", exact: true },
-  { href: "/explore", icon: Compass, label: "探索" },
-  { href: "/feed", icon: Rss, label: "动态" },
-  { href: "/library", icon: Library, label: "我的库" },
-  { href: "/projects", icon: FolderKanban, label: "项目" },
+  { href: "/", icon: Home, labelKey: "nav.home", exact: true },
+  { href: "/explore", icon: Compass, labelKey: "nav.explore" },
+  { href: "/feed", icon: Rss, labelKey: "nav.feed" },
+  { href: "/library", icon: Library, labelKey: "nav.library" },
+  { href: "/projects", icon: FolderKanban, labelKey: "nav.projects" },
 ];
 
 const toolNav = [
-  { href: "/agent", icon: Bot, label: "AI Agent" },
-  { href: "/create/image", icon: ImageIcon, label: "图片创作" },
-  { href: "/create/video", icon: Video, label: "视频创作" },
-  { href: "/create/image-editor", icon: Wand2, label: "图片编辑" },
-  { href: "/create/motion", icon: Music, label: "动作同步" },
-  { href: "/create/lipsync", icon: Mic, label: "唇形同步" },
-  { href: "/create/avatar", icon: User, label: "AI 头像" },
-  { href: "/create/timeline", icon: Clock, label: "时间线" },
-  { href: "/create/upscale", icon: Maximize2, label: "AI 放大" },
-  { href: "/create/bg-remove", icon: Scissors, label: "去背景" },
-  { href: "/create/extend", icon: Expand, label: "AI 扩图" },
-  { href: "/create/audio", icon: AudioLines, label: "AI 音频" },
-  { href: "/create/extract", icon: ScanLine, label: "内容提取" },
+  { href: "/agent", icon: Bot, labelKey: "nav.agent" },
+  { href: "/create/image", icon: ImageIcon, labelKey: "nav.image" },
+  { href: "/create/video", icon: Video, labelKey: "nav.video" },
+  { href: "/create/image-editor", icon: Wand2, labelKey: "nav.imageEdit" },
+  { href: "/create/motion", icon: Music, labelKey: "nav.motion" },
+  { href: "/create/lipsync", icon: Mic, labelKey: "nav.lipsync" },
+  { href: "/create/avatar", icon: User, labelKey: "nav.avatar" },
+  { href: "/create/timeline", icon: Clock, labelKey: "nav.timeline" },
+  { href: "/create/upscale", icon: Maximize2, labelKey: "nav.upscale" },
+  { href: "/create/bg-remove", icon: Scissors, labelKey: "nav.removeBg" },
+  { href: "/create/extend", icon: Expand, labelKey: "nav.extend" },
+  { href: "/create/audio", icon: AudioLines, labelKey: "nav.audio" },
+  { href: "/create/extract", icon: ScanLine, labelKey: "nav.extract" },
 ];
 
 // ─── HELPER: Nav Item ───────────────────────────────────
@@ -130,6 +131,7 @@ function NavItem({
 
 // ─── APP SIDEBAR ────────────────────────────────────────
 export function AppSidebar() {
+  const { t } = useLocale();
   const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
   const [toolsOpen, setToolsOpen] = useState(true);
 
@@ -190,7 +192,7 @@ export function AppSidebar() {
             key={item.href}
             href={item.href}
             icon={item.icon}
-            label={item.label}
+            label={t(item.labelKey as any)}
             exact={item.exact}
             collapsed={sidebarCollapsed}
           />
@@ -231,7 +233,7 @@ export function AppSidebar() {
                     key={item.href}
                     href={item.href}
                     icon={item.icon}
-                    label={item.label}
+                    label={t(item.labelKey as any)}
                     collapsed={false}
                   />
                 ))}
@@ -246,7 +248,7 @@ export function AppSidebar() {
                 key={item.href}
                 href={item.href}
                 icon={item.icon}
-                label={item.label}
+                label={t(item.labelKey as any)}
                 collapsed={true}
               />
             ))}

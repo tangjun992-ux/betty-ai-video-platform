@@ -4,6 +4,16 @@
 const _raw = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1").replace(/\/+$/, "");
 export const API_BASE = _raw.endsWith("/api/v1") ? _raw : `${_raw}/api/v1`;
 
+export function trackOnboarding(event: string): void {
+  if (typeof window === "undefined") return;
+  fetch(`${API_BASE}/events/onboarding`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ event }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
 /** Read the persisted JWT from the zustand auth-store (localStorage). */
 export function authToken(): string | null {
   if (typeof window === "undefined") return null;

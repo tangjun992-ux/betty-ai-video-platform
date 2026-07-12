@@ -5,14 +5,15 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
-import { useAuthStore } from "@/lib/stores";
+import { useAuthStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { register } from "@/lib/api";
+import { register, trackOnboarding } from "@/lib/api";
 import { BrandMark } from "@/components/BrandLogo";
 
 export default function RegisterPage() {
   const router = useRouter();
   const { setUser, setToken } = useAuthStore();
+  const startOnboarding = useOnboardingStore((s) => s.startFor);
   const toast = useToast();
 
   const [username, setUsername] = useState("");
@@ -51,8 +52,11 @@ export default function RegisterPage() {
       const res = await register(username.trim(), email.trim(), password);
       setToken(res.access_token);
       setUser(res.user);
+      startOnboarding(String(res.user.id));
+      trackOnboarding("started");
       toast.success("注册成功", `欢迎加入 betty，${res.user.name || username}`);
-      router.push("/dashboard");
+      const firstPrompt = "一杯精品咖啡放在大理石桌面，清晨柔光，商业产品摄影，电影级质感";
+      router.push(`/create/image?onboard=1&prompt=${encodeURIComponent(firstPrompt)}`);
     } catch (err: any) {
       toast.error("注册失败", err.message || "请稍后重试");
     } finally {

@@ -133,7 +133,15 @@ export const useCreationStore = create<CreationState>()(
           activeTab: "prompt",
           selectedModel: "auto",
           quality: "balanced",
+          style: null,
+          creativity: "balanced",
+          resolution: "1080p",
+          aspectRatio: "1:1",
+          count: 1,
+          duration: 5,
           referenceFiles: [],
+          recentPrompts: [],
+          results: [],
         }),
     }),
     { name: "creation-store" }
@@ -190,6 +198,51 @@ export const useAuthStore = create<AuthState>()(
     }),
     { name: "auth-store" }
   )
+);
+
+// ─── First-work onboarding (per user) ───────────────────
+interface OnboardingRecord {
+  started: boolean;
+  completed: boolean;
+  dismissed: boolean;
+}
+
+interface OnboardingState {
+  records: Record<string, OnboardingRecord>;
+  startFor: (userId: string) => void;
+  completeFor: (userId: string) => void;
+  dismissFor: (userId: string) => void;
+}
+
+const emptyOnboarding = (): OnboardingRecord => ({
+  started: false, completed: false, dismissed: false,
+});
+
+export const useOnboardingStore = create<OnboardingState>()(
+  persist(
+    (set) => ({
+      records: {},
+      startFor: (userId) => set((s) => ({
+        records: {
+          ...s.records,
+          [userId]: { ...(s.records[userId] || emptyOnboarding()), started: true, dismissed: false },
+        },
+      })),
+      completeFor: (userId) => set((s) => ({
+        records: {
+          ...s.records,
+          [userId]: { started: true, completed: true, dismissed: false },
+        },
+      })),
+      dismissFor: (userId) => set((s) => ({
+        records: {
+          ...s.records,
+          [userId]: { ...(s.records[userId] || emptyOnboarding()), dismissed: true },
+        },
+      })),
+    }),
+    { name: "onboarding-store" },
+  ),
 );
 
 // ─── ⌘K Command Palette Store ───────────────────────────

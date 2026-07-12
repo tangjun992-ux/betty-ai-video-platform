@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { API_BASE, enhancePrompt } from "@/lib/api";
+import { useLocale } from "@/i18n/LocaleProvider";
 
 const MEDIA_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
 const resolveMedia = (u: string | null | undefined) =>
@@ -129,6 +130,7 @@ function Skeleton({ className }: { className?: string }) {
    ═══════════════════════════════════════════════════════ */
 
 export default function DashboardPage() {
+  const { t } = useLocale();
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -225,10 +227,15 @@ export default function DashboardPage() {
       {/* ═══ Welcome + Stats ═══ */}
       <div>
         <motion.h1 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-semibold text-text-primary mb-1">
-          {(() => { const h = new Date().getHours(); return h < 12 ? "早上好" : h < 18 ? "下午好" : "晚上好"; })()}，创作者 👋
+          {(() => {
+            const h = new Date().getHours();
+            return h < 12 ? t("dashboard.greetingMorning")
+              : h < 18 ? t("dashboard.greetingAfternoon")
+              : t("dashboard.greetingEvening");
+          })()}，{t("dashboard.creator")} 👋
         </motion.h1>
         <motion.p initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="text-text-secondary text-sm">
-          今天想创作些什么？
+          {t("dashboard.question")}
         </motion.p>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-6">
@@ -332,9 +339,9 @@ export default function DashboardPage() {
         {/* Recent Creations */}
         <div className="lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-text-primary">最近创作</h2>
+            <h2 className="text-lg font-semibold text-text-primary">{t("dashboard.recent")}</h2>
             <Link href="/explore" className="text-xs text-brand hover:text-brand-strong flex items-center gap-1 transition-colors">
-              查看全部 <ChevronRight className="w-3.5 h-3.5" />
+              {t("dashboard.all")} <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
@@ -398,7 +405,13 @@ export default function DashboardPage() {
             <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface p-12 text-center">
               <Sparkles className="w-10 h-10 text-text-disabled mx-auto mb-3" />
               <div className="text-text-tertiary text-sm">还没有作品</div>
-              <div className="text-text-disabled text-xs mt-1">你生成的资产会显示在这里</div>
+              <div className="text-text-disabled text-xs mt-1 mb-4">用推荐模板生成第一张图，约 30 秒完成</div>
+              <Link
+                href={`/create/image?onboard=1&prompt=${encodeURIComponent("一杯精品咖啡放在大理石桌面，清晨柔光，商业产品摄影，电影级质感")}`}
+                className="btn-primary"
+              >
+                <Sparkles className="w-4 h-4" /> 生成第一张作品
+              </Link>
             </div>
           )}
         </div>
@@ -406,7 +419,7 @@ export default function DashboardPage() {
         {/* Featured Tools */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-text-primary">快捷工具</h2>
+            <h2 className="text-lg font-semibold text-text-primary">{t("dashboard.quick")}</h2>
             <Link href="/tools" className="text-xs text-brand hover:text-brand-strong flex items-center gap-1 transition-colors">
               全部工具 <ChevronRight className="w-3.5 h-3.5" />
             </Link>

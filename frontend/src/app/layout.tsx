@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 import { ThemeScript } from "@/components/ThemeScript";
+import { LocaleScript } from "@/i18n/LocaleScript";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -102,6 +103,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <ThemeScript />
+        <LocaleScript />
       </head>
       <body className={cn("min-h-screen bg-cosmic-deep antialiased", inter.variable, "font-sans")}>
         <ClientLayout>{children}</ClientLayout>

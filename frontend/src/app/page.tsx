@@ -34,6 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
 import { API_BASE } from "@/lib/api";
+import { useLocale } from "@/i18n/LocaleProvider";
 
 // ─── Hero 演示轮播：由平台真实生成作品驱动（拉取 /gallery/，不用图库图）──
 type HeroCard = { prompt: string; model: string; type: "图片" | "视频"; image: string; video?: string };
@@ -704,6 +705,7 @@ function Footer() {
 
 export default function HomePage() {
   const router = useRouter();
+  const { t } = useLocale();
   const [heroInput, setHeroInput] = useState("");
   const [heroMode, setHeroMode] = useState<"agent" | "image" | "video">("agent");
   const [demoVideoIdx, setDemoVideoIdx] = useState(0);
@@ -784,27 +786,27 @@ export default function HomePage() {
               {/* Badge */}
               <div className="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-full bg-accent-cyan/[0.06] border border-accent-cyan/15 text-caption text-accent-cyan mb-6">
                 <Sparkles className="w-3 h-3" />
-                <span className="font-medium tracking-wide">全球 15+ 顶级 AI 模型 · 一站式专业创作平台</span>
+                <span className="font-medium tracking-wide">{t("home.badge")}</span>
               </div>
 
               {/* Title */}
               <h1 className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-semibold tracking-[-0.035em] leading-[1.08] mb-5">
-                让每个创意
+                {t("home.title1")}
                 <br className="hidden sm:block" />
-                <span className="text-gradient">一键成片</span>
+                <span className="text-gradient">{t("home.title2")}</span>
               </h1>
 
               {/* Subtitle */}
               <p className="text-lg md:text-xl text-text-secondary max-w-lg mb-8 leading-relaxed">
-                对接 Veo 3.1 · Sora 2 · Kling · Seedance 等顶级模型；只做导演，不写提示词 — 一句话描述，AI 自动规划→生成→精修
+                {t("home.subtitle")}
               </p>
 
               {/* Mode tabs */}
               <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-cosmic-surface/50 border border-cosmic-border/50 mb-3 self-start">
                 {([
-                  { key: "agent", label: "Agent", icon: Bot },
-                  { key: "image", label: "图片", icon: ImageIcon },
-                  { key: "video", label: "视频", icon: Video },
+                  { key: "agent", label: t("home.agent"), icon: Bot },
+                  { key: "image", label: t("home.image"), icon: ImageIcon },
+                  { key: "video", label: t("home.video"), icon: Video },
                 ] as const).map((m) => {
                   const active = heroMode === m.key;
                   return (
@@ -832,10 +834,10 @@ export default function HomePage() {
                   rows={3}
                   placeholder={
                     heroMode === "agent"
-                      ? "一句话说出想要的，例如：做一个 30 秒的咖啡产品宣传片，电影级画质，竖屏抖音。Agent 会自动规划→生成→精修…"
+                      ? t("home.placeholderAgent")
                       : heroMode === "video"
-                      ? "描述你想要的视频画面、运镜与时长…"
-                      : "描述你想要创作的图像，越具体越好…"
+                      ? t("home.placeholderVideo")
+                      : t("home.placeholderImage")
                   }
                 />
                 <div className="flex items-center justify-between px-3 pb-3 pt-1">
@@ -849,7 +851,7 @@ export default function HomePage() {
                   </div>
                   <button onClick={() => heroGo()} className="btn-primary h-10 px-5">
                     <Sparkles className="w-4 h-4" />
-                    {heroMode === "agent" ? "开始导演" : "开始创作"}
+                    {heroMode === "agent" ? t("home.startDirect") : t("home.startCreate")}
                   </button>
                 </div>
               </div>
