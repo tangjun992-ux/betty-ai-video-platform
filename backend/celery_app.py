@@ -5,11 +5,17 @@ app = Celery(
     "aivideo",
     broker="redis://localhost:6379/1",
     backend="redis://localhost:6379/2",
+    # Every module that defines an @app.task MUST be listed here, otherwise the
+    # worker process never registers the task and dispatched jobs hang forever
+    # (the API process imports them, but the worker does not import the API).
     include=[
         "app.tasks.image_tasks",
         "app.tasks.video_tasks",
         "app.tasks.pipeline_tasks",
         "app.tasks.director_tasks",
+        "app.tasks.lipsync_tasks",
+        "app.tasks.motion_tasks",
+        "app.tasks.timeline_tasks",
         "app.collector.tasks",
     ],
 )
@@ -28,6 +34,11 @@ app.conf.update(
     task_routes={
         "app.tasks.image_tasks.*": {"queue": "image_q"},
         "app.tasks.video_tasks.*": {"queue": "video_q"},
+        # Lipsync & motion are long video-style renders → share the video queue.
+        "app.tasks.lipsync_tasks.*": {"queue": "video_q"},
+        "app.tasks.motion_tasks.*": {"queue": "video_q"},
+        # Timeline compose is a multi-asset orchestration → pipeline queue.
+        "app.tasks.timeline_tasks.*": {"queue": "pipeline_q"},
         "app.tasks.pipeline_tasks.*": {"queue": "pipeline_q"},
         "app.tasks.director_tasks.*": {"queue": "director_q"},
         "app.collector.tasks.*": {"queue": "collector_q"},

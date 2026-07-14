@@ -8,7 +8,37 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Env keys these tests mutate via config reload; must be restored so the reload
+# does not leak an alternate STORAGE_PATH into later tests (e.g. timeline compose
+# renders media into settings.STORAGE_LOCAL_PATH and the live server must find it).
+_STORAGE_ENV_KEYS = (
+    "STORAGE_TYPE", "STORAGE_PATH", "MEDIA_CDN_BASE_URL",
+    "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION",
+    "S3_BUCKET", "S3_PUBLIC_BASE_URL",
+)
+
+
+@pytest.fixture(autouse=True)
+def _restore_storage_config():
+    """Snapshot storage env + config module, restore after each test."""
+    saved = {k: os.environ.get(k) for k in _STORAGE_ENV_KEYS}
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        import app.config as cfg
+        importlib.reload(cfg)
+        import app.services.storage as storage
+        importlib.reload(storage)
+        storage.reset_storage()
 
 
 def _reload_with(env: dict):

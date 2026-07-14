@@ -73,7 +73,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A celery_app worker -Q video_q,image_q,pipeline_q,celery --concurrency=4 --loglevel=info
+    command: celery -A celery_app worker -Q video_q,image_q,pipeline_q,director_q,celery --concurrency=4 --loglevel=info
 
   # ─── Collector Worker (VIS: Reddit/YouTube collection + analysis) ───
   celery-collector:

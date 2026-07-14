@@ -516,6 +516,7 @@ export default function AgentPage() {
           {/* Input — 旗舰画布输入 */}
           <div className="bg-cosmic-surface border border-cosmic-border rounded-2xl p-3 shadow-sm focus-within:border-brand/50 focus-within:shadow-[0_0_0_4px_hsl(var(--brand)/0.10)] transition-all mb-3">
             <textarea value={brief} onChange={(e) => setBrief(e.target.value)}
+              data-testid="agent-brief"
               onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); makePlan(); } }}
               placeholder="例如：做一个30秒的咖啡产品宣传片，电影级画质，竖屏抖音…（⌘/Ctrl + ⏎ 开始导演）"
               rows={3} className="w-full bg-transparent border-0 resize-none text-[15px] leading-relaxed placeholder:text-text-tertiary focus:outline-none" />
@@ -568,6 +569,7 @@ export default function AgentPage() {
                 </button>
               </div>
               <button onClick={() => makePlan()} disabled={!brief.trim() || phase === "planning"}
+                data-testid="agent-plan-btn"
                 className={cn("flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all",
                   brief.trim() && phase !== "planning" ? "bg-brand text-white hover:bg-brand-strong" : "bg-cosmic-surface text-text-secondary cursor-not-allowed")}>
                 {phase === "planning" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -625,7 +627,7 @@ export default function AgentPage() {
           {/* Plan view */}
           <AnimatePresence>
             {plan && (
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-5">
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-5" data-testid="agent-plan">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className="px-2.5 py-1 rounded-lg bg-brand/10 text-brand text-xs font-medium">
@@ -649,7 +651,7 @@ export default function AgentPage() {
                     const editing = editingId === s.id;
                     const opts = modelOptsFor(s.action);
                     return (
-                      <motion.div key={s.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: skipped ? 0.5 : 1, x: 0 }} transition={{ delay: i * 0.03 }}
+                      <motion.div key={s.id} data-testid="agent-step" initial={{ opacity: 0, x: -8 }} animate={{ opacity: skipped ? 0.5 : 1, x: 0 }} transition={{ delay: i * 0.03 }}
                         className={cn("rounded-xl border transition-colors",
                           isRunning ? "border-brand/40 bg-brand/[0.03]" : done ? "border-emerald-500/30 bg-emerald-500/[0.02]" : "border-cosmic-border/40 bg-cosmic-surface/30")}>
                         <div className="flex gap-3 p-3">

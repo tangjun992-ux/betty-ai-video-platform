@@ -561,9 +561,15 @@ export async function listTasks(token?: string, status?: string, limit = 50, off
   return res.json();
 }
 
-/** Fetch available models from backend */
-export async function listModels(): Promise<{ models: ModelInfo[] }> {
-  const res = await fetch(`${API_BASE}/models/`);
+/** Fetch available models from backend.
+ *  Defaults to verified/production-ready models only; pass includeBeta to also
+ *  surface lab models (kept separate in the `beta` field). */
+export async function listModels(includeBeta = false): Promise<{
+  models: ModelInfo[]; active?: ModelInfo[]; beta?: ModelInfo[];
+  active_count?: number; beta_count?: number;
+}> {
+  const q = includeBeta ? "?include_beta=true" : "?status=active";
+  const res = await fetch(`${API_BASE}/models/${q}`);
   if (!res.ok) throw new Error(`获取模型列表失败: ${res.status}`);
   return res.json();
 }

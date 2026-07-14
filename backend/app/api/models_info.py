@@ -256,19 +256,61 @@ MODELS = [
 ]
 
 
+# ─── Model governance: single source of truth for what is production-ready ───
+# "active" == verified working on the live gateway. Everything else is a lab
+# model that must never be surfaced by default nor silently used in production.
+
+def verified_model_ids() -> set[str]:
+    return {m.id for m in MODELS if m.status == "active"}
+
+
+def is_verified(model_id: str) -> bool:
+    return any(m.id == model_id and m.status == "active" for m in MODELS)
+
+
+def default_verified_model(media_type: str) -> str | None:
+    """Cheapest-first verified model for a media type (safe production fallback)."""
+    order = {"low": 0, "medium": 1, "high": 2}
+    candidates = [
+        m for m in MODELS
+        if m.status == "active" and media_type in m.capabilities.media_types
+    ]
+    candidates.sort(key=lambda m: order.get(m.cost_tier, 9))
+    return candidates[0].id if candidates else None
+
+
+def _serialize(m: ModelInfo) -> dict:
+    d = m.model_dump()
+    # Explicit, non-derivable-by-clients trust signal.
+    d["verified"] = m.status == "active"
+    return d
+
+
 @router.get("/", summary="获取可用模型列表")
-async def list_models(status: str | None = None):
-    """Return models. Use status=active for production-ready only, status=beta for lab."""
+async def list_models(status: str | None = None, include_beta: bool = False):
+    """List models with production-safe defaults.
+
+    - `status=active` → verified/production-ready only
+    - `status=beta` → lab/unverified only
+    - no `status`: returns verified only unless `include_beta=true` (and beta is
+      never bundled into the primary `models` array in production).
+    """
+    active = [_serialize(m) for m in MODELS if m.status == "active"]
+    beta = [_serialize(m) for m in MODELS if m.status != "active"]
+
     if status == "active":
-        active = [m for m in MODELS if m.status == "active"]
-        return {"models": active, "active": active, "beta": [], "active_count": len(active), "beta_count": 0}
+        return {"models": active, "active": active, "beta": [],
+                "active_count": len(active), "beta_count": 0}
     if status == "beta":
-        beta = [m for m in MODELS if m.status != "active"]
-        return {"models": beta, "active": [], "beta": beta, "active_count": 0, "beta_count": len(beta)}
-    active = [m for m in MODELS if m.status == "active"]
-    beta = [m for m in MODELS if m.status != "active"]
+        return {"models": beta, "active": [], "beta": beta,
+                "active_count": 0, "beta_count": len(beta)}
+
+    # Default listing is verified-only; beta is opt-in via include_beta and even
+    # then kept out of the primary array in production to avoid accidental use.
+    from app.config import settings
+    primary = active + beta if (include_beta and not settings.is_production) else active
     return {
-        "models": MODELS,
+        "models": primary,
         "active": active,
         "beta": beta,
         "active_count": len(active),

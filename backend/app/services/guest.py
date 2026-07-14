@@ -5,6 +5,7 @@ import logging
 import secrets
 
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_password_hash
@@ -69,8 +70,34 @@ async def migrate_legacy_guest_pool(db: AsyncSession) -> int:
     return moved
 
 
+async def _ensure_guest_balance(db: AsyncSession, user_id: int) -> None:
+    """Create the guest's starter balance once, tolerating concurrent creators."""
+    existing = await db.execute(
+        select(UserBalance).where(UserBalance.user_id == user_id)
+    )
+    if existing.scalar_one_or_none():
+        return
+    db.add(UserBalance(
+        user_id=user_id,
+        credits=GUEST_CREDITS,
+        daily_credits=GUEST_DAILY,
+        daily_credits_max=GUEST_DAILY,
+    ))
+    try:
+        await db.flush()
+    except IntegrityError:
+        # A parallel request for the same new guest already inserted the balance.
+        await db.rollback()
+
+
 async def get_or_create_guest_user(db: AsyncSession, guest_token: str) -> int:
-    """Map a stable client token (X-Guest-Id) to a dedicated User row."""
+    """Map a stable client token (X-Guest-Id) to a dedicated User row.
+
+    Concurrency-safe: the first page load fires several parallel API calls with
+    the same guest id; each runs in its own session and would otherwise race to
+    INSERT the same user/balance (UNIQUE violation → 500). We commit on create
+    and, on conflict, roll back and re-select the winner's row.
+    """
     token = (guest_token or "").strip()
     if len(token) < 8:
         token = secrets.token_hex(16)
@@ -80,6 +107,7 @@ async def get_or_create_guest_user(db: AsyncSession, guest_token: str) -> int:
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
     if user:
+        await _ensure_guest_balance(db, user.id)
         return user.id
 
     user = User(
@@ -90,14 +118,15 @@ async def get_or_create_guest_user(db: AsyncSession, guest_token: str) -> int:
         role="guest",
     )
     db.add(user)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        # Lost the race: another request created this guest. Re-select it.
+        await db.rollback()
+        result = await db.execute(select(User).where(User.username == username))
+        user = result.scalar_one()
+        await _ensure_guest_balance(db, user.id)
+        return user.id
 
-    balance = UserBalance(
-        user_id=user.id,
-        credits=GUEST_CREDITS,
-        daily_credits=GUEST_DAILY,
-        daily_credits_max=GUEST_DAILY,
-    )
-    db.add(balance)
-    await db.flush()
+    await _ensure_guest_balance(db, user.id)
     return user.id

@@ -248,14 +248,39 @@ class PromptRouter:
 
         return analysis
 
+    def _govern_user_model(self, user_model: str, analysis: PromptAnalysis) -> tuple[str, str]:
+        """Keep unverified (beta) models out of production generation.
+
+        In production a user-picked beta model is transparently downgraded to a
+        verified default for the target media type; in dev/demo the pick is
+        honoured (the demo provider renders anything locally). Returns the model
+        id to use plus a human-readable reason.
+        """
+        try:
+            from app.config import settings
+            from app.api.models_info import is_verified, default_verified_model
+        except Exception:
+            return user_model, f"用户指定模型: {user_model}"
+
+        if not settings.is_production or is_verified(user_model):
+            return user_model, f"用户指定模型: {user_model}"
+
+        media = analysis.media_type.value if analysis.media_type != MediaType.AUTO else "image"
+        fallback = default_verified_model(media) or user_model
+        logger.warning(
+            "Router downgraded unverified model %s → %s (production)", user_model, fallback
+        )
+        return fallback, f"{user_model} 未验证，已切换到已验证模型 {fallback}"
+
     def select_model(self, analysis: PromptAnalysis,
                      user_model: str = "auto") -> ModelScore:
         """Stage 2: Score models and select the best one."""
         if user_model != "auto":
+            resolved, reason = self._govern_user_model(user_model, analysis)
             return ModelScore(
-                model_id=user_model,
+                model_id=resolved,
                 score=100.0,
-                reasons=[f"用户指定模型: {user_model}"],
+                reasons=[reason],
                 recommended_media_type=analysis.media_type,
             )
 

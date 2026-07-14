@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Upload, Video, Image, Play, ArrowRight, RefreshCw, CheckCircle, Lightbulb } from "lucide-react";
 import { useCreationStore } from "@/lib/stores";
 import { API_BASE, type TaskResult } from "@/lib/api";
+import { CapabilityNotice } from "@/components/CapabilityNotice";
 import { cn } from "@/lib/utils";
 
 const MOTION_EXAMPLES = [
@@ -64,6 +65,7 @@ export default function MotionControlPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TaskResult | null>(null);
   const [tier, setTier] = useState<"demo" | "studio">("demo");
+  const [demoMode, setDemoMode] = useState(false);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -178,7 +180,9 @@ export default function MotionControlPage() {
     }
   };
 
-  const canSubmit = imageFile && videoFile && !submitting;
+  // Motion transfer has no demo fallback — it fails without provider keys, so
+  // block submission in demo mode instead of letting the request error out.
+  const canSubmit = imageFile && videoFile && !submitting && !demoMode;
   const wizardStep = !imageFile ? 1 : !videoFile ? 2 : 3;
 
   const applyExample = (ex: typeof MOTION_EXAMPLES[0]) => {
@@ -191,9 +195,10 @@ export default function MotionControlPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-bold mb-1 text-text-accent-cyan">运动控制</h1>
-        <p className="text-text-secondary text-sm mb-6">
+        <p className="text-text-secondary text-sm mb-4">
           上传人物图片和参考动作视频，AI 将动作精准迁移到目标人物
         </p>
+        <CapabilityNotice feature="motion" className="mb-6" onDemoChange={setDemoMode} />
       </motion.div>
 
       {/* Wizard progress */}
@@ -398,6 +403,11 @@ export default function MotionControlPage() {
               <>
                 <RefreshCw className="w-5 h-5 animate-spin" />
                 生成中...
+              </>
+            ) : demoMode ? (
+              <>
+                <Play className="w-5 h-5" />
+                需配置模型 Key 后可用
               </>
             ) : (
               <>

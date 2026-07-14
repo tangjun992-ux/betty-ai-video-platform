@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Mic, Music, Upload, Info, Loader2, RefreshCw, Play, Sparkles } from "lucide-react";
 import { ErrorState, Empty } from "@/components/StatusStates";
 import { useToast } from "@/components/Toast";
+import { CapabilityNotice } from "@/components/CapabilityNotice";
 import { cn } from "@/lib/utils";
 
 import { API_BASE } from "@/lib/api";
@@ -108,6 +109,7 @@ export default function LipsyncPage() {
         <p className="text-text-secondary text-sm mb-4">
           上传图片，输入文字，AI 自动生成口型同步的说话视频
         </p>
+        <CapabilityNotice feature="lipsync" className="mb-4" />
         <div className="grid grid-cols-2 gap-2 mb-6 max-w-md">
           {([
             { id: "demo" as const, label: "Demo", desc: "4 积分 · 标准唇形" },
