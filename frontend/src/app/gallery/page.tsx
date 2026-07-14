@@ -25,6 +25,8 @@ interface GalleryItem {
   avatar: string;
   likes: number;
   views: number;
+  is_seed?: boolean;
+  is_demo?: boolean;
 }
 
 interface StyleOption {
@@ -326,11 +328,16 @@ export default function GalleryPage() {
                   </button>
 
                   {/* Top badges */}
-                  <div className="absolute top-2.5 left-2.5 flex gap-1.5">
+                  <div className="absolute top-2.5 left-2.5 flex gap-1.5 flex-wrap max-w-[70%]">
                     {item.media_type === "video" && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-full text-[10px] text-white font-medium">
                         <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                         视频
+                      </span>
+                    )}
+                    {(item.is_seed || item.is_demo) && (
+                      <span className="px-2 py-0.5 bg-amber-500/80 backdrop-blur-md rounded-full text-[10px] text-black font-semibold" title="平台示例内容，非真实用户创作">
+                        示例
                       </span>
                     )}
                     <span className="px-2 py-0.5 bg-black/55 backdrop-blur-md rounded-full text-[10px] text-white/90 font-medium">
@@ -439,6 +446,9 @@ export default function GalleryPage() {
                 <div className="flex flex-wrap gap-1.5">
                   <span className="badge-cyan">{lightbox.model_used}</span>
                   {lightbox.media_type === "video" && <span className="badge-violet">视频</span>}
+                  {(lightbox.is_seed || lightbox.is_demo) && (
+                    <span className="badge-warning" title="平台示例内容">示例</span>
+                  )}
                   {lightbox.resolution && <span className="badge">{lightbox.resolution}</span>}
                   <span className="badge-warning">⚡{lightbox.credits_cost}</span>
                 </div>

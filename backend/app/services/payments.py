@@ -53,24 +53,30 @@ def qr_data_url(content: str) -> str:
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
+def _wxpay_client():
+    """Build a WeChat Pay v3 client when live credentials are configured."""
+    from wechatpayv3 import WeChatPay, WeChatPayType
+    with open(settings.WECHAT_PRIVATE_KEY_PATH) as f:
+        private_key = f.read()
+    return WeChatPay(
+        wechatpay_type=WeChatPayType.NATIVE,
+        mchid=settings.WECHAT_MCHID,
+        private_key=private_key,
+        cert_serial_no=settings.WECHAT_CERT_SERIAL_NO,
+        apiv3_key=settings.WECHAT_API_V3_KEY,
+        appid=settings.WECHAT_APPID,
+        notify_url=settings.PUBLIC_BASE_URL,
+    )
+
+
 # ── WeChat Pay Native ────────────────────────────────────
 def create_wechat_native(order_no: str, amount_cny: float, description: str, notify_url: str) -> tuple[str, bool]:
     """Return (qr_content, is_live). Uses WeChat Pay v3 Native when configured."""
     if not wechat_live():
         return _sandbox_qr("wechat", order_no), False
     try:
-        from wechatpayv3 import WeChatPay, WeChatPayType
-        with open(settings.WECHAT_PRIVATE_KEY_PATH) as f:
-            private_key = f.read()
-        wxpay = WeChatPay(
-            wechatpay_type=WeChatPayType.NATIVE,
-            mchid=settings.WECHAT_MCHID,
-            private_key=private_key,
-            cert_serial_no=settings.WECHAT_CERT_SERIAL_NO,
-            apiv3_key=settings.WECHAT_API_V3_KEY,
-            appid=settings.WECHAT_APPID,
-            notify_url=notify_url,
-        )
+        from wechatpayv3 import WeChatPayType
+        wxpay = _wxpay_client()
         code, message = wxpay.pay(
             description=description,
             out_trade_no=order_no,
@@ -132,15 +138,7 @@ def _sandbox_qr(provider: str, order_no: str) -> str:
 def query_wechat(order_no: str) -> str:
     """Return 'paid' | 'pending' | 'failed' for a live WeChat order."""
     try:
-        from wechatpayv3 import WeChatPay, WeChatPayType
-        with open(settings.WECHAT_PRIVATE_KEY_PATH) as f:
-            private_key = f.read()
-        wxpay = WeChatPay(
-            wechatpay_type=WeChatPayType.NATIVE, mchid=settings.WECHAT_MCHID,
-            private_key=private_key, cert_serial_no=settings.WECHAT_CERT_SERIAL_NO,
-            apiv3_key=settings.WECHAT_API_V3_KEY, appid=settings.WECHAT_APPID,
-            notify_url=settings.PUBLIC_BASE_URL,
-        )
+        wxpay = _wxpay_client()
         code, message = wxpay.query(out_trade_no=order_no)
         import json as _j
         state = (_j.loads(message).get("trade_state") if message else "") or ""
@@ -194,13 +192,22 @@ def verify_alipay_notify(form: dict) -> bool:
         return False
 
 
-def verify_wechat_notify(body: dict, headers: dict) -> bool:
-    """Verify WeChat Pay v3 notify. Returns False when live creds missing."""
+def verify_wechat_notify(headers: dict, body: str | bytes) -> dict | None:
+    """Verify and decrypt WeChat Pay v3 async notify. Returns parsed payload or None."""
     if not wechat_live():
-        return False
-    sig = headers.get("wechatpay-signature") or headers.get("Wechatpay-Signature")
-    serial = headers.get("wechatpay-serial") or headers.get("Wechatpay-Serial")
-    if not sig or not serial:
-        return False
-    logger.info("wechat notify: signature headers present (full cert verify pending)")
-    return True
+        return None
+    try:
+        wxpay = _wxpay_client()
+        data = wxpay.callback(headers, body)
+        if not data:
+            logger.warning("wechat notify: callback verification failed")
+            return None
+        resource = data.get("resource") or {}
+        if isinstance(resource, dict):
+            trade_state = resource.get("trade_state") or resource.get("trade_state_desc")
+            if trade_state and trade_state not in ("SUCCESS", "成功"):
+                logger.info("wechat notify: trade_state=%s", trade_state)
+        return data
+    except Exception as e:
+        logger.warning("wechat notify verify failed: %s", e)
+        return None

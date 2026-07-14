@@ -303,6 +303,7 @@ async def get_model(model_id: str):
 from pydantic import BaseModel as PydanticBase
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
+from app.auth import resolve_user_id
 from app.models.billing import UserBalance, Transaction, TransactionType
 
 PLANS_DATA = [
@@ -332,7 +333,7 @@ async def get_pricing_plans(cycle: str = "monthly"):
 
 
 @router.get("/pricing/user", summary="获取用户余额")
-async def get_user_balance(user_id: int = 0, db: AsyncSession = Depends(get_db)):
+async def get_user_balance(user_id: int = Depends(resolve_user_id), db: AsyncSession = Depends(get_db)):
     from sqlalchemy import select as sa_select
     from app.models.user import User
     r = await db.execute(sa_select(UserBalance).where(UserBalance.user_id == user_id))
@@ -355,7 +356,7 @@ async def get_user_balance(user_id: int = 0, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/pricing/subscribe", summary="订阅方案")
-async def subscribe(plan_id: str, user_id: int = 0, db: AsyncSession = Depends(get_db)):
+async def subscribe(plan_id: str, user_id: int = Depends(resolve_user_id), db: AsyncSession = Depends(get_db)):
     from app.config import settings
     if settings.is_production:
         raise HTTPException(status_code=404, detail="Not found")

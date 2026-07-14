@@ -446,15 +446,19 @@ async def pay_notify(provider: str, request: Request, db: AsyncSession = Depends
                     if not payments.verify_alipay_notify(form):
                         return {"code": "FAIL", "message": "signature verification failed"}
         else:  # wechat v3
-            body = await request.json()
-            order_no = body.get("out_trade_no")
-            paid = body.get("event_type", "").endswith("SUCCESS")
-            if settings.is_production and order_no:
-                r = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
-                order_probe = r.scalar_one_or_none()
-                if order_probe and order_probe.provider == "wechat":
-                    if not payments.verify_wechat_notify(body, dict(request.headers)):
-                        return {"code": "FAIL", "message": "signature verification failed"}
+            raw_body = await request.body()
+            headers = dict(request.headers)
+            decrypted = payments.verify_wechat_notify(headers, raw_body)
+            if settings.is_production and not decrypted:
+                return {"code": "FAIL", "message": "signature verification failed"}
+            body = decrypted or {}
+            resource = body.get("resource") or {}
+            order_no = resource.get("out_trade_no") or body.get("out_trade_no")
+            trade_state = resource.get("trade_state", "")
+            event_type = body.get("event_type", "")
+            paid = trade_state == "SUCCESS" or event_type.endswith("SUCCESS")
+            if settings.is_production and order_no and not decrypted:
+                return {"code": "FAIL", "message": "signature verification failed"}
         if not order_no:
             return {"code": "FAIL", "message": "missing out_trade_no"}
         r = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))

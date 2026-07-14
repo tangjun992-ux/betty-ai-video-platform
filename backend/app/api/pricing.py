@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
+from app.auth import resolve_user_id
 from app.models.user import User
 from app.models.billing import UserBalance
 
@@ -131,7 +132,7 @@ async def get_pricing_plans(cycle: str = "monthly"):
 
 
 @router.get("/user", summary="获取当前用户余额信息")
-async def get_user_balance(user_id: int = 0, db: AsyncSession = Depends(get_db)):
+async def get_user_balance(user_id: int = Depends(resolve_user_id), db: AsyncSession = Depends(get_db)):
     """Get the current user's balance and usage stats."""
     balance = None
     user = None
@@ -168,7 +169,7 @@ async def get_user_balance(user_id: int = 0, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/subscribe", summary="订阅方案（模拟）")
-async def subscribe(plan_id: str, user_id: int = 0, db: AsyncSession = Depends(get_db)):
+async def subscribe(plan_id: str, user_id: int = Depends(resolve_user_id), db: AsyncSession = Depends(get_db)):
     """Simulate subscribing to a plan — adds credits to user balance (dev only)."""
     from app.config import settings
     if settings.is_production:

@@ -45,6 +45,12 @@ async def lifespan(app: FastAPI):
     try:
         await init_db()
         print("[LIFESPAN] Database initialized")
+        from app.db import async_session
+        from app.services.guest import migrate_legacy_guest_pool
+        async with async_session() as db:
+            n = await migrate_legacy_guest_pool(db)
+            if n:
+                print(f"[LIFESPAN] Migrated {n} legacy guest rows to legacy_pool user")
     except Exception as e:
         print(f"[LIFESPAN] Error initializing database: {e}")
         raise

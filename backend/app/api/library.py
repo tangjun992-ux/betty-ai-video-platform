@@ -120,11 +120,8 @@ async def list_library(
 ):
     items: list = []
 
-    # Per-user isolation: logged-in users see only their own assets; the guest
-    # account (0) also sees legacy rows with NULL user_id.
+    # Per-user isolation: each resolved account sees only its own assets.
     def _own(col):
-        if user_id == 0:
-            return (col == 0) | (col.is_(None))
         return col == user_id
 
     if source in ("all", "upload"):

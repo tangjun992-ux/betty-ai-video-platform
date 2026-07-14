@@ -1,17 +1,72 @@
 """Per-browser guest accounts — isolated anonymous users instead of shared user_id=0."""
 from __future__ import annotations
 
+import logging
 import secrets
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_password_hash
 from app.models.billing import UserBalance
 from app.models.user import User
 
+logger = logging.getLogger(__name__)
+
 GUEST_CREDITS = 5
 GUEST_DAILY = 3
+LEGACY_POOL_USERNAME = "legacy_pool"
+
+
+async def get_or_create_legacy_pool_user(db: AsyncSession) -> int:
+    """Dedicated system user that owns pre-migration shared guest rows (user_id=0)."""
+    result = await db.execute(select(User).where(User.username == LEGACY_POOL_USERNAME))
+    user = result.scalar_one_or_none()
+    if user:
+        return user.id
+
+    user = User(
+        username=LEGACY_POOL_USERNAME,
+        email=f"{LEGACY_POOL_USERNAME}@betty.local",
+        hashed_password=get_password_hash(secrets.token_hex(32)),
+        display_name="历史共享数据",
+        role="system",
+    )
+    db.add(user)
+    await db.flush()
+    db.add(UserBalance(user_id=user.id, credits=0, daily_credits=0, daily_credits_max=0))
+    await db.flush()
+    return user.id
+
+
+async def migrate_legacy_guest_pool(db: AsyncSession) -> int:
+    """Reassign orphaned user_id=0 rows so new per-browser guests stay isolated."""
+    from app.models.asset import Asset
+    from app.models.director_session import DirectorSession
+    from app.models.payment_order import PaymentOrder
+    from app.models.project import Project
+    from app.models.task import Task
+    from app.models.timeline_project import TimelineProject
+
+    pool_id = await get_or_create_legacy_pool_user(db)
+    moved = 0
+    tables = [
+        (Task, Task.user_id),
+        (Asset, Asset.user_id),
+        (Project, Project.user_id),
+        (TimelineProject, TimelineProject.user_id),
+        (PaymentOrder, PaymentOrder.user_id),
+        (DirectorSession, DirectorSession.user_id),
+    ]
+    for model, col in tables:
+        r = await db.execute(
+            update(model).where((col == 0) | (col.is_(None))).values(user_id=pool_id)
+        )
+        moved += r.rowcount or 0
+    if moved:
+        await db.commit()
+        logger.info("migrated %s legacy guest rows to user_id=%s", moved, pool_id)
+    return moved
 
 
 async def get_or_create_guest_user(db: AsyncSession, guest_token: str) -> int:

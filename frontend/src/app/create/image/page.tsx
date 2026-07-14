@@ -17,14 +17,14 @@ import { CosmicParamPanel, CosmicSlider, CosmicSelect } from "@/components/cosmi
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { submitGeneration, getTaskStatus, trackOnboarding, type GenerateResponse, type TaskResult } from "@/lib/api";
+import { submitGeneration, getTaskStatus, trackOnboarding, type GenerateResponse, type TaskResult, API_BASE } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ═══════════════════════════════════════════════════════════
 // Constants
 // ═══════════════════════════════════════════════════════════
 
-const IMAGE_MODELS = [
+const IMAGE_MODELS_FALLBACK = [
   { id: "auto", name: "Auto", desc: "智能选择" },
   { id: "gpt-image-2-text-to-image", name: "GPT Image 2", desc: "最高质量", badge: "Pro" },
   { id: "nano-banana-2", name: "Nano Banana 2", desc: "快速生成", badge: "Fast" },
@@ -79,6 +79,30 @@ export default function CreateImagePage() {
 
   // Submission tracking for empty state logic
   const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [imageModels, setImageModels] = useState(IMAGE_MODELS_FALLBACK);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/models/?status=active`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        const active = (d.active || []).filter(
+          (m: { capabilities?: { media_types?: string[] } }) =>
+            m.capabilities?.media_types?.includes("image")
+        );
+        if (!active.length) return;
+        setImageModels([
+          IMAGE_MODELS_FALLBACK[0],
+          ...active.map((m: { id: string; display_name: string; description?: string; provider?: string }) => ({
+            id: m.id,
+            name: m.display_name,
+            desc: (m.description || m.provider || "").slice(0, 48),
+            badge: "已验证",
+          })),
+        ]);
+      })
+      .catch(() => {});
+  }, []);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -111,12 +135,12 @@ export default function CreateImagePage() {
     }
     if (remixModel) {
       const short = remixModel.split("/").pop() || remixModel;
-      const matched = IMAGE_MODELS.find(
+      const matched = imageModels.find(
         (m) => m.id === remixModel || m.id.endsWith(`/${short}`) || m.id.startsWith(short)
       );
       if (matched) setSelectedModel(matched.id);
     }
-  }, []); // Only on mount
+  }, [imageModels, setPrompt, setSelectedModel]); // remix pre-fill when models load
 
   // ── Elapsed timer during generation ──────────────────
   useEffect(() => {
@@ -716,7 +740,7 @@ export default function CreateImagePage() {
       {/* ── Right: Parameter Panel ───────────────────────── */}
       <div className="hidden xl:block w-72 p-4 pt-6 border-l border-cosmic-border/40 overflow-y-auto flex-shrink-0">
         <ParameterPanel
-          models={IMAGE_MODELS}
+          models={imageModels}
           selectedModel={selectedModel}
           onModelSelect={setSelectedModel}
           aspectRatio={aspectRatio}

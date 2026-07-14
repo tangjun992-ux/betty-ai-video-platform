@@ -3,11 +3,43 @@
 import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { Upload, Video, Image, Play, ArrowRight, RefreshCw, CheckCircle } from "lucide-react";
+import { Upload, Video, Image, Play, ArrowRight, RefreshCw, CheckCircle, Lightbulb } from "lucide-react";
 import { useCreationStore } from "@/lib/stores";
 import { API_BASE, type TaskResult } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
+const MOTION_EXAMPLES = [
+  {
+    id: "dance",
+    title: "街舞律动",
+    desc: "将街舞动作迁移到人物全身",
+    style: "realistic",
+    prompt: "街舞律动，全身动作，节奏感强，自然光影",
+    steps: ["上传正面全身照", "上传 5–10s 街舞参考", "选择写实风格生成"],
+  },
+  {
+    id: "product",
+    title: "产品展示",
+    desc: "模特转身展示服装细节",
+    style: "realistic",
+    prompt: "电商模特缓慢转身展示，专业棚拍灯光",
+    steps: ["上传模特正面图", "上传转身参考视频", "保持写实风格"],
+  },
+  {
+    id: "anime",
+    title: "二次元舞蹈",
+    desc: "动漫角色动作迁移",
+    style: "anime",
+    prompt: "二次元角色舞蹈，流畅肢体，赛璐璐风格",
+    steps: ["上传角色立绘", "上传舞蹈 MV 片段", "选择动漫风格"],
+  },
+];
 
+const WIZARD_STEPS = [
+  { n: 1, title: "目标人物", hint: "正面清晰、四肢完整" },
+  { n: 2, title: "参考动作", hint: "5–15 秒，动作连贯" },
+  { n: 3, title: "风格 & 生成", hint: "选择风格后一键提交" },
+];
 
 const STYLES = [
   { id: "realistic", label: "写实", desc: "自然真实的动作迁移" },
@@ -145,15 +177,71 @@ export default function MotionControlPage() {
   };
 
   const canSubmit = imageFile && videoFile && !submitting;
+  const wizardStep = !imageFile ? 1 : !videoFile ? 2 : 3;
+
+  const applyExample = (ex: typeof MOTION_EXAMPLES[0]) => {
+    setSelectedStyle(ex.style);
+    setPrompt(ex.prompt);
+    setError(null);
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-bold mb-1 text-text-accent-cyan">运动控制</h1>
-        <p className="text-text-secondary text-sm mb-8">
+        <p className="text-text-secondary text-sm mb-6">
           上传人物图片和参考动作视频，AI 将动作精准迁移到目标人物
         </p>
       </motion.div>
+
+      {/* Wizard progress */}
+      <div className="grid grid-cols-3 gap-2 mb-6">
+        {WIZARD_STEPS.map((s) => (
+          <div
+            key={s.n}
+            className={cn(
+              "rounded-xl border px-3 py-2.5 transition-all",
+              wizardStep === s.n
+                ? "border-brand/40 bg-brand/[0.06]"
+                : wizardStep > s.n
+                  ? "border-emerald-500/30 bg-emerald-500/[0.04]"
+                  : "border-cosmic-border bg-cosmic-subtle"
+            )}
+          >
+            <div className="text-[11px] font-semibold text-text-primary">
+              {wizardStep > s.n ? "✓ " : `${s.n}. `}{s.title}
+            </div>
+            <div className="text-[10px] text-text-secondary mt-0.5">{s.hint}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Examples */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-3">
+          <Lightbulb className="w-4 h-4 text-amber-400" />
+          <h2 className="text-sm font-semibold text-text-primary">示例场景</h2>
+          <span className="text-xs text-text-tertiary">点击快速填充风格与提示词</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {MOTION_EXAMPLES.map((ex) => (
+            <button
+              key={ex.id}
+              type="button"
+              onClick={() => applyExample(ex)}
+              className="text-left rounded-xl border border-cosmic-border bg-cosmic-subtle p-3 hover:border-brand/40 hover:bg-brand/[0.04] transition-all"
+            >
+              <div className="text-sm font-medium text-text-primary">{ex.title}</div>
+              <div className="text-xs text-text-secondary mt-1">{ex.desc}</div>
+              <ol className="mt-2 space-y-0.5">
+                {ex.steps.map((step, i) => (
+                  <li key={i} className="text-[10px] text-text-tertiary">{i + 1}. {step}</li>
+                ))}
+              </ol>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Uploads */}

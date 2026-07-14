@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { PayModal, type PayTarget } from "@/components/PayModal";
 
 const MEDIA_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
 const resolveMedia = (u?: string) => (!u ? "" : u.startsWith("/") ? `${MEDIA_ORIGIN}${u}` : u);
@@ -97,6 +98,22 @@ export default function AgentPage() {
   const [totalMs, setTotalMs] = useState<number | null>(null);
   const [realAvailable, setRealAvailable] = useState<boolean | null>(null);
   const [modeLabel, setModeLabel] = useState<string>("");
+  const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [userCredits, setUserCredits] = useState<number | null>(null);
+
+  const maybePromptUpgrade = useCallback(async (force = false) => {
+    if (!force && dryRunMode) return;
+    try {
+      const r = await fetch(`${API_BASE}/models/pricing/user`);
+      if (!r.ok) return;
+      const d = await r.json();
+      setUserCredits(d.credits);
+      if (d.credits < 20 || d.role === "guest" || d.role === "free") {
+        setShowUpgrade(true);
+      }
+    } catch {}
+  }, [dryRunMode]);
 
   // ── director mode (real vs preview) ──
   useEffect(() => {
@@ -308,6 +325,7 @@ export default function AgentPage() {
           if (typeof s.total_ms === "number") setTotalMs(s.total_ms);
           setPhase("done");
           setPlan((cur) => { if (cur) saveSession(cur, s.assets || []); return cur; });
+          void maybePromptUpgrade(true);
           break;
         }
       }
@@ -780,6 +798,27 @@ export default function AgentPage() {
                     </a>
                   </div>
                   <video src={fMedia} controls poster={resolveMedia(finalAsset.thumbnail)} className="w-full max-h-[52vh] bg-black object-contain" />
+                  {showUpgrade && !dryRunMode && (
+                    <div className="px-4 py-3 border-t border-brand/15 bg-gradient-to-r from-brand/[0.06] to-accent-violet/[0.04] flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-text-primary">🎉 成片已就绪 — 继续创作？</p>
+                        <p className="text-xs text-text-secondary mt-0.5">
+                          当前余额 {userCredits ?? "—"} 积分。升级套餐可解锁更多真实生成与商业授权。
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setPayTarget({ kind: "plan", id: "personal", cycle: "monthly" })}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand text-white text-xs font-semibold hover:bg-brand-strong transition-colors"
+                        >
+                          <Coins className="w-3.5 h-3.5" /> 升级套餐
+                        </button>
+                        <button onClick={() => setShowUpgrade(false)} className="px-3 py-2 rounded-xl text-xs text-text-secondary hover:bg-cosmic-subtle transition-colors">
+                          稍后
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               )}
 
@@ -835,6 +874,11 @@ export default function AgentPage() {
           })()}
         </div>
       </div>
+      <PayModal
+        target={payTarget}
+        onClose={() => setPayTarget(null)}
+        onPaid={() => { setShowUpgrade(false); void maybePromptUpgrade(); }}
+      />
     </div>
   );
 }
