@@ -40,9 +40,19 @@ export function guestId(): string {
   return id;
 }
 
-/** Install a one-time global fetch interceptor that attaches the bearer token
- *  to same-API requests, so every call site (api.ts + components) is scoped to
- *  the logged-in user without editing each fetch. */
+/** Headers for API calls — bearer when logged in, else stable guest id. */
+export function apiAuthHeaders(extra?: HeadersInit): Headers {
+  const headers = new Headers(extra);
+  const token = authToken();
+  if (token) {
+    if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
+  } else if (typeof window !== "undefined" && !headers.has("X-Guest-Id")) {
+    headers.set("X-Guest-Id", guestId());
+  }
+  return headers;
+}
+
+/** Install a one-time global fetch interceptor that attaches auth/guest headers. */
 export function installAuthFetch() {
   if (typeof window === "undefined") return;
   if ((window as any).__betty_auth_fetch) return;
@@ -52,13 +62,7 @@ export function installAuthFetch() {
     try {
       const url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as Request).url);
       if (url && url.includes("/api/v1/")) {
-        const token = authToken();
-        const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
-        if (token) {
-          if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
-        } else {
-          if (!headers.has("X-Guest-Id")) headers.set("X-Guest-Id", guestId());
-        }
+        const headers = apiAuthHeaders(init.headers || (input instanceof Request ? input.headers : undefined));
         init = { ...init, headers };
       }
     } catch {}
@@ -432,8 +436,61 @@ export async function listLibrary(params: { media_type?: string; source?: string
   if (params.media_type) q.set("media_type", params.media_type);
   if (params.source) q.set("source", params.source);
   q.set("limit", String(params.limit ?? 60));
-  const res = await fetch(`${API_BASE}/library/?${q.toString()}`);
+  const res = await fetch(`${API_BASE}/library/?${q.toString()}`, { headers: apiAuthHeaders() });
   if (!res.ok) throw new Error(`加载素材库失败: ${res.status}`);
+  return res.json();
+}
+
+export interface TimelineProject {
+  id: string;
+  name: string;
+  clips: { url: string; start?: number; end?: number; transition?: string; label?: string }[];
+  settings?: {
+    narration_url?: string | null;
+    with_audio?: boolean;
+    transition?: string;
+    subtitle_track?: { text: string; start?: number; end?: number }[];
+  };
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function listTimelineProjects(): Promise<{ projects: TimelineProject[]; total: number }> {
+  const res = await fetch(`${API_BASE}/timeline/projects`, { headers: apiAuthHeaders() });
+  if (!res.ok) throw new Error(`加载时间线项目失败: ${res.status}`);
+  return res.json();
+}
+
+export async function getTimelineProject(id: string): Promise<TimelineProject> {
+  const res = await fetch(`${API_BASE}/timeline/projects/${encodeURIComponent(id)}`, { headers: apiAuthHeaders() });
+  if (!res.ok) throw new Error(`加载项目失败: ${res.status}`);
+  return res.json();
+}
+
+export interface SaveTimelineProjectResponse {
+  id: string;
+  name: string;
+  clip_count: number;
+  total_duration: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function saveTimelineProject(payload: {
+  id?: string;
+  name: string;
+  clips: TimelineProject["clips"];
+  settings?: TimelineProject["settings"];
+}): Promise<SaveTimelineProjectResponse> {
+  const res = await fetch(`${API_BASE}/timeline/projects`, {
+    method: "POST",
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `保存项目失败: ${res.status}`);
+  }
   return res.json();
 }
 
@@ -449,7 +506,7 @@ export async function composeTimeline(
 ): Promise<{ url: string; thumbnail: string; clip_count: number; transition?: string }> {
   const res = await fetch(`${API_BASE}/timeline/compose`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       clips,
       narration_url: opts.narration_url ?? null,
@@ -632,4 +689,9 @@ export async function deleteApiKey(token: string, keyId: string) {
   });
   if (!res.ok) throw new Error("删除 API 密钥失败");
   return res.json();
+}
+
+// Ensure guest/auth headers are attached before any page-level data fetch runs.
+if (typeof window !== "undefined") {
+  installAuthFetch();
 }

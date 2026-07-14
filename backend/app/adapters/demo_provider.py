@@ -354,13 +354,65 @@ def _probe_duration(path: str) -> float:
         return 5.0
 
 
+def _srt_timestamp(seconds: float) -> str:
+    s = max(0.0, float(seconds))
+    h = int(s // 3600)
+    m = int((s % 3600) // 60)
+    sec = int(s % 60)
+    ms = int(round((s - int(s)) * 1000))
+    return f"{h:02d}:{m:02d}:{sec:02d},{ms:03d}"
+
+
+def _write_srt(subtitle_track: list[dict], path: Path) -> None:
+    lines: list[str] = []
+    for i, sub in enumerate(subtitle_track, 1):
+        text = (sub.get("text") or "").strip()
+        if not text:
+            continue
+        start = float(sub.get("start", 0))
+        end = float(sub.get("end", start + 5))
+        if end <= start:
+            end = start + 3
+        lines.append(str(i))
+        lines.append(f"{_srt_timestamp(start)} --> {_srt_timestamp(end)}")
+        lines.append(text)
+        lines.append("")
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _burn_subtitles(video_path: Path, subtitle_track: list[dict]) -> Path:
+    """Burn SRT subtitles into the composed video (bottom-center)."""
+    if not subtitle_track:
+        return video_path
+    srt_path = video_path.with_suffix(".srt")
+    _write_srt(subtitle_track, srt_path)
+    if not srt_path.exists() or srt_path.stat().st_size == 0:
+        return video_path
+    out_path = video_path.with_name(f"{video_path.stem}_sub.mp4")
+    srt_esc = str(srt_path).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+    vf = (
+        f"subtitles=filename='{srt_esc}':"
+        "force_style='FontSize=22,PrimaryColour=&HFFFFFF&,"
+        "OutlineColour=&H000000&,BorderStyle=3,Outline=2,Alignment=2,MarginV=36'"
+    )
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(video_path),
+         "-vf", vf, "-c:a", "copy", str(out_path)],
+        check=True, capture_output=True, timeout=180,
+    )
+    return out_path
+
+
 def compose_final_video(video_urls: list[str], style: Optional[str] = None,
-                        with_audio: bool = True, narration_url: Optional[str] = None) -> tuple[str, str]:
+                        with_audio: bool = True, narration_url: Optional[str] = None,
+                        *, transitions: Optional[list[str]] = None,
+                        subtitle_track: Optional[list[dict]] = None) -> tuple[str, str]:
     """
     Stitch multiple shot videos into ONE final film (the Director Agent's hero
     deliverable). Scales/pads every shot to the first shot's canvas, concatenates
     with ffmpeg, and muxes audio: a real TTS narration track when provided
-    (narration_url), otherwise a soft procedural ambient bed. Returns
+    (narration_url), otherwise a soft procedural ambient bed. Optional subtitle_track
+    is burned into the final MP4 via ffmpeg subtitles filter. Returns
     (final_video_url, poster_url).
     """
     paths = [p for p in (_local_media_path(u) for u in video_urls) if p]
@@ -419,6 +471,15 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
         stderr = getattr(e, "stderr", b"")
         logger.error("[demo] compose failed: %s", stderr[:600] if stderr else e)
         raise RuntimeError(f"Final compose failed: {e}")
+
+    if subtitle_track:
+        try:
+            burned = _burn_subtitles(out_path, subtitle_track)
+            if burned != out_path and burned.exists():
+                out_path = burned
+                out_name = out_path.name
+        except Exception as e:
+            logger.warning("[demo] subtitle burn failed (video still usable): %s", e)
 
     # Poster = first frame of the final film
     poster_name = f"finalposter_{uuid.uuid4().hex[:12]}.jpg"

@@ -52,3 +52,18 @@ async def init_db():
     import app.collector.models  # noqa: F401 - registers TrendingTopic/ViralSignal/TrendReport with Base.metadata
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_migrate_timeline_settings_column)
+
+
+def _migrate_timeline_settings_column(connection):
+    """Add settings column to timeline_projects when upgrading an existing DB."""
+    from sqlalchemy import inspect, text
+    try:
+        insp = inspect(connection)
+        if "timeline_projects" not in insp.get_table_names():
+            return
+        cols = {c["name"] for c in insp.get_columns("timeline_projects")}
+        if "settings" not in cols:
+            connection.execute(text("ALTER TABLE timeline_projects ADD COLUMN settings JSON"))
+    except Exception:
+        pass

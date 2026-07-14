@@ -1,12 +1,22 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Trash2, ChevronLeft, ChevronRight, Film, Loader2,
   Sparkles, Download, Music, ImageIcon, Video as VideoIcon, Type as TypeIcon,
+  Save, FolderOpen,
 } from "lucide-react";
-import { listLibrary, composeTimeline, API_BASE } from "@/lib/api";
+import {
+  listLibrary,
+  composeTimeline,
+  listTimelineProjects,
+  getTimelineProject,
+  saveTimelineProject,
+  API_BASE,
+  type TimelineProject,
+} from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +36,27 @@ const TRANSITIONS: { id: Transition; label: string }[] = [
   { id: "dissolve", label: "叠化 Dissolve" },
 ];
 
-export default function TimelinePage() {
+function clipFromUrl(
+  url: string,
+  lib: LibItem[],
+  idx: number,
+  label?: string,
+): Clip {
+  const hit = lib.find((v) => v.url === url);
+  return {
+    key: `clip-${idx}-${url.slice(-12)}`,
+    url,
+    thumbnail: hit?.thumbnail,
+    title: label || hit?.title || `片段 ${idx + 1}`,
+  };
+}
+
+function TimelineEditorContent() {
   const toast = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkProject = searchParams.get("project");
+
   const [videos, setVideos] = useState<LibItem[]>([]);
   const [audios, setAudios] = useState<LibItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,22 +69,97 @@ export default function TimelinePage() {
   const [subtitleText, setSubtitleText] = useState("");
   const [showSubtitleTrack, setShowSubtitleTrack] = useState(true);
 
+  const [projects, setProjects] = useState<TimelineProject[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState("未命名项目");
+  const [saving, setSaving] = useState(false);
+  const [loadingProject, setLoadingProject] = useState(false);
+  const loadedProjectRef = useRef<string | null>(null);
+  const mediaLoadedRef = useRef(false);
+
+  const applyProject = useCallback((
+    proj: TimelineProject,
+    libVideos: LibItem[],
+    libAudios: LibItem[],
+  ) => {
+    const settings = proj.settings || {};
+    const tr = (settings.transition as Transition) || "fade";
+    setProjectId(proj.id);
+    setProjectName(proj.name || "未命名项目");
+    setTransition(tr);
+    setWithAudio(settings.with_audio ?? true);
+    setTrack(
+      (proj.clips || []).map((c, i) =>
+        clipFromUrl(c.url, libVideos, i, c.label || undefined),
+      ),
+    );
+    const narrUrl = settings.narration_url;
+    setNarration(narrUrl ? libAudios.find((a) => a.url === narrUrl) || null : null);
+    const subs = settings.subtitle_track;
+    setSubtitleText(subs?.[0]?.text?.trim() || "");
+    setResult(null);
+  }, []);
+
+  const refreshProjects = useCallback(async () => {
+    try {
+      const { projects: list } = await listTimelineProjects();
+      setProjects(list || []);
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
+  const loadProjectById = useCallback(async (
+    id: string,
+    libVideos: LibItem[],
+    libAudios: LibItem[],
+    pushUrl = true,
+  ) => {
+    if (loadedProjectRef.current === id) return;
+    setLoadingProject(true);
+    try {
+      const proj = await getTimelineProject(id);
+      applyProject(proj, libVideos, libAudios);
+      loadedProjectRef.current = id;
+      if (pushUrl) {
+        router.replace(`/create/timeline?project=${encodeURIComponent(id)}`, { scroll: false });
+      }
+    } catch (e: any) {
+      toast.error("加载项目失败", e.message || "");
+    } finally {
+      setLoadingProject(false);
+    }
+  }, [applyProject, router, toast]);
+
   useEffect(() => {
+    if (mediaLoadedRef.current) return;
+    mediaLoadedRef.current = true;
     (async () => {
       try {
         const [v, a] = await Promise.all([
           listLibrary({ media_type: "video", limit: 60 }),
           listLibrary({ media_type: "audio", limit: 30 }),
         ]);
-        setVideos((v.items || []).filter((i: LibItem) => i.url));
-        setAudios((a.items || []).filter((i: LibItem) => i.url));
+        const vItems = (v.items || []).filter((i: LibItem) => i.url);
+        const aItems = (a.items || []).filter((i: LibItem) => i.url);
+        setVideos(vItems);
+        setAudios(aItems);
+        await refreshProjects();
+        if (deepLinkProject) {
+          await loadProjectById(deepLinkProject, vItems, aItems, false);
+        }
       } catch (e: any) {
         toast.error("加载素材库失败", e.message || "");
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [deepLinkProject, loadProjectById, refreshProjects, toast]);
+
+  useEffect(() => {
+    if (!deepLinkProject || loading || loadedProjectRef.current === deepLinkProject) return;
+    loadProjectById(deepLinkProject, videos, audios, false);
+  }, [deepLinkProject, loading, videos, audios, loadProjectById]);
 
   const addClip = useCallback((item: LibItem) => {
     setTrack((t) => [...t, { key: `${item.id}-${Date.now()}`, url: item.url, thumbnail: item.thumbnail, title: item.title }]);
@@ -72,14 +176,56 @@ export default function TimelinePage() {
     setResult(null);
   };
 
+  const buildSubtitleTrack = () => {
+    if (!subtitleText.trim()) return [];
+    return [{ text: subtitleText.trim(), start: 0, end: Math.max(track.length * 5, 5) }];
+  };
+
+  const buildSavePayload = () => ({
+    id: projectId || undefined,
+    name: projectName.trim() || "未命名项目",
+    clips: track.map((c) => ({
+      url: c.url,
+      start: 0,
+      end: 5,
+      transition,
+      label: c.title,
+    })),
+    settings: {
+      narration_url: narration?.url ?? null,
+      with_audio: withAudio,
+      transition,
+      subtitle_track: buildSubtitleTrack(),
+    },
+  });
+
+  const saveProject = async () => {
+    if (track.length < 1) {
+      toast.error("无法保存", "请至少添加一个视频片段");
+      return;
+    }
+    setSaving(true);
+    try {
+      const saved = await saveTimelineProject(buildSavePayload());
+      const id = saved.id;
+      setProjectId(id);
+      loadedProjectRef.current = id;
+      await refreshProjects();
+      router.replace(`/create/timeline?project=${encodeURIComponent(id)}`, { scroll: false });
+      toast.success("项目已保存", `${saved.name || projectName} · ${saved.clip_count ?? track.length} 镜`);
+    } catch (e: any) {
+      toast.error("保存失败", e.message || "请稍后重试");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const compose = async () => {
     if (track.length < 1) { toast.error("请先添加片段", "从下方素材库添加视频到时间线"); return; }
     setComposing(true);
     setResult(null);
     try {
-      const subtitle_track = subtitleText.trim()
-        ? [{ text: subtitleText.trim(), start: 0, end: Math.max(track.length * 5, 5) }]
-        : [];
+      const subtitle_track = buildSubtitleTrack();
       const res = await composeTimeline(
         track.map((c) => ({ url: c.url, transition })),
         {
@@ -90,7 +236,7 @@ export default function TimelinePage() {
         },
       );
       setResult({ url: resolveMedia(res.url), thumbnail: resolveMedia(res.thumbnail) });
-      toast.success("合成完成", `${res.clip_count} 个片段 · 转场 ${transition}`);
+      toast.success("合成完成", `${res.clip_count} 个片段 · 转场 ${transition}${subtitle_track.length ? " · 已烧录字幕" : ""}`);
     } catch (e: any) {
       toast.error("合成失败", e.message || "请稍后重试");
     } finally {
@@ -99,24 +245,75 @@ export default function TimelinePage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8" data-testid="timeline-page">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 mb-6">
         <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-soft border border-cosmic-border text-brand">
           <Film className="w-5 h-5" />
         </span>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-display font-bold">时间线编辑器</h1>
-          <p className="text-text-secondary text-sm">多轨编排：视频轨 · 旁白轨 · 字幕轨，提交时携带转场字段</p>
+          <p className="text-text-secondary text-sm">多轨编排 · 项目持久化 · 字幕烧录合成</p>
         </div>
       </motion.div>
 
+      {/* Project bar */}
+      <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface p-4 mb-5 flex flex-wrap items-center gap-3" data-testid="timeline-project-bar">
+        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+          <FolderOpen className="w-4 h-4 text-brand shrink-0" />
+          <input
+            data-testid="timeline-project-name"
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            className="flex-1 min-w-0 bg-cosmic-subtle border border-cosmic-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand/40"
+            placeholder="项目名称"
+          />
+        </div>
+        <select
+          data-testid="timeline-project-select"
+          value={projectId || ""}
+          onChange={(e) => {
+            const id = e.target.value;
+            if (id) {
+              loadedProjectRef.current = null;
+              loadProjectById(id, videos, audios);
+            } else {
+              loadedProjectRef.current = null;
+              setProjectId(null);
+              setProjectName("未命名项目");
+              router.replace("/create/timeline", { scroll: false });
+            }
+          }}
+          disabled={loadingProject}
+          className="bg-cosmic-subtle border border-cosmic-border rounded-lg px-3 py-1.5 text-sm min-w-[160px] max-w-[220px]"
+        >
+          <option value="">新建项目…</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name} ({p.clips?.length ?? 0}镜)</option>
+          ))}
+        </select>
+        <button
+          data-testid="timeline-save-project"
+          onClick={saveProject}
+          disabled={saving || track.length < 1}
+          className="btn-secondary h-9 px-4 text-sm"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          保存项目
+        </button>
+        {loadingProject && (
+          <span className="text-xs text-text-tertiary flex items-center gap-1">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> 加载项目…
+          </span>
+        )}
+      </div>
+
       {/* Preview / result */}
       <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface overflow-hidden mb-5">
-        <div className="aspect-video bg-black flex items-center justify-center">
+        <div className="aspect-video bg-black flex items-center justify-center" data-testid="timeline-preview">
           {composing ? (
             <div className="text-center text-white/80"><Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />正在合成成片…</div>
           ) : result ? (
-            <video src={result.url} poster={result.thumbnail} controls autoPlay className="w-full h-full object-contain" />
+            <video data-testid="timeline-result-video" src={result.url} poster={result.thumbnail} controls autoPlay className="w-full h-full object-contain" />
           ) : (
             <div className="text-center text-text-tertiary/60">
               <Film className="w-10 h-10 mx-auto mb-2" />
@@ -136,7 +333,7 @@ export default function TimelinePage() {
       <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface p-4 mb-5">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
           <span className="text-sm font-semibold text-text-primary">转场 Transition</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2" data-testid="timeline-transitions">
             {TRANSITIONS.map((t) => (
               <button key={t.id} onClick={() => { setTransition(t.id); setResult(null); }}
                 className={cn(
@@ -161,19 +358,19 @@ export default function TimelinePage() {
               <label className="flex items-center gap-1.5 text-xs text-text-secondary cursor-pointer">
                 <input type="checkbox" checked={withAudio} onChange={(e) => setWithAudio(e.target.checked)} className="accent-brand" /> 混入音轨
               </label>
-              <button onClick={compose} disabled={composing || track.length < 1} className="btn-primary h-9 px-4 text-sm">
+              <button data-testid="timeline-compose" onClick={compose} disabled={composing || track.length < 1} className="btn-primary h-9 px-4 text-sm">
                 {composing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} 合成成片
               </button>
             </div>
           </div>
           {track.length === 0 ? (
-            <div className="h-24 rounded-xl border border-dashed border-cosmic-border flex items-center justify-center text-sm text-text-tertiary">
+            <div data-testid="timeline-empty-track" className="h-24 rounded-xl border border-dashed border-cosmic-border flex items-center justify-center text-sm text-text-tertiary">
               从下方素材库点击视频，加入时间线
             </div>
           ) : (
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div className="flex gap-2 overflow-x-auto pb-2" data-testid="timeline-track">
               {track.map((c, i) => (
-                <div key={c.key} className="relative flex-shrink-0 w-40 group">
+                <div key={c.key} className="relative flex-shrink-0 w-40 group" data-testid="timeline-clip">
                   <div className="aspect-video rounded-lg overflow-hidden ring-1 ring-cosmic-border bg-black">
                     {c.thumbnail ? <img src={resolveMedia(c.thumbnail)} alt="" className="w-full h-full object-cover" />
                       : <video src={resolveMedia(c.url)} muted className="w-full h-full object-cover" />}
@@ -228,14 +425,15 @@ export default function TimelinePage() {
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                 <div className="rounded-xl border border-dashed border-cosmic-border bg-cosmic-subtle/50 p-3">
                   <textarea
+                    data-testid="timeline-subtitle-input"
                     value={subtitleText}
                     onChange={(e) => setSubtitleText(e.target.value)}
                     rows={2}
-                    placeholder="输入成片字幕文案（可选，将随 transition 一并提交给 compose）"
+                    placeholder="输入成片字幕文案（合成时将烧录进视频）"
                     className="w-full bg-transparent text-sm resize-none focus:outline-none placeholder:text-text-tertiary"
                   />
                   {subtitleText.trim() && (
-                    <div className="mt-2 h-8 rounded-lg bg-black/80 text-white text-xs flex items-center justify-center px-3 truncate">
+                    <div className="mt-2 h-8 rounded-lg bg-black/80 text-white text-xs flex items-center justify-center px-3 truncate" data-testid="timeline-subtitle-preview">
                       {subtitleText.trim()}
                     </div>
                   )}
@@ -258,14 +456,14 @@ export default function TimelinePage() {
             {[...Array(6)].map((_, i) => <div key={i} className="aspect-video rounded-lg skeleton" />)}
           </div>
         ) : videos.length === 0 ? (
-          <div className="h-28 rounded-xl border border-dashed border-cosmic-border flex flex-col items-center justify-center text-sm text-text-tertiary gap-2">
+          <div data-testid="timeline-library-empty" className="h-28 rounded-xl border border-dashed border-cosmic-border flex flex-col items-center justify-center text-sm text-text-tertiary gap-2">
             <ImageIcon className="w-6 h-6" />
             素材库暂无视频。先去 <a href="/create/video" className="text-brand underline">视频创作</a> 或 <a href="/agent" className="text-brand underline">Agent</a> 生成一些片段。
           </div>
         ) : (
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3" data-testid="timeline-library-grid">
             {videos.map((v) => (
-              <button key={v.id} onClick={() => addClip(v)} title={v.title}
+              <button key={v.id} data-testid="timeline-library-item" onClick={() => addClip(v)} title={v.title}
                 className="group relative aspect-video rounded-lg overflow-hidden ring-1 ring-cosmic-border hover:ring-brand/50 transition-all">
                 {v.thumbnail ? <img src={resolveMedia(v.thumbnail)} alt="" className="w-full h-full object-cover" />
                   : <video src={resolveMedia(v.url)} muted className="w-full h-full object-cover" />}
@@ -278,5 +476,18 @@ export default function TimelinePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function TimelinePage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-6xl mx-auto px-4 py-16 text-center text-text-secondary">
+        <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-brand" />
+        加载时间线编辑器…
+      </div>
+    }>
+      <TimelineEditorContent />
+    </Suspense>
   );
 }

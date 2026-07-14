@@ -33,11 +33,19 @@ class ClipItem(BaseModel):
     label: Optional[str] = Field(None, description="片段标签/备注")
 
 
+class TimelineSettings(BaseModel):
+    narration_url: Optional[str] = None
+    with_audio: bool = True
+    transition: str = Field("fade", description="cut | fade | dissolve")
+    subtitle_track: Optional[List[dict]] = Field(default=None, description="[{text,start,end}]")
+
+
 class SaveProjectRequest(BaseModel):
     """创建/保存项目请求"""
     id: Optional[str] = Field(None, description="项目ID，不传则新建")
     name: str = Field("未命名项目", description="项目名称")
     clips: List[ClipItem] = Field(..., description="时间线片段列表")
+    settings: Optional[TimelineSettings] = None
 
 
 class SaveProjectResponse(BaseModel):
@@ -119,6 +127,7 @@ async def save_project(
     - **clips**: 时间线片段数组
     """
     clips_data = [c.model_dump() for c in req.clips]
+    settings_data = req.settings.model_dump() if req.settings else {}
     total_duration = sum(max(0, c.end - c.start) for c in req.clips)
 
     if req.id:
@@ -130,7 +139,9 @@ async def save_project(
                 raise HTTPException(status_code=403, detail="无权访问此项目")
             row.name = req.name
             row.clips = clips_data
+            row.settings = settings_data
             flag_modified(row, "clips")
+            flag_modified(row, "settings")
             await db.commit()
             await db.refresh(row)
             logger.info(
@@ -152,6 +163,7 @@ async def save_project(
         user_id=user_id,
         name=req.name,
         clips=clips_data,
+        settings=settings_data,
     )
     db.add(row)
     await db.commit()
@@ -217,7 +229,14 @@ async def compose_timeline(req: ComposeRequest):
     ]
     try:
         final_url, poster = await _a.to_thread(
-            compose_final_video, urls, None, req.with_audio, req.narration_url)
+            compose_final_video,
+            urls,
+            None,
+            req.with_audio,
+            req.narration_url,
+            transitions=transitions,
+            subtitle_track=req.subtitle_track or [],
+        )
     except Exception as e:
         logger.error("timeline compose failed: %s", e)
         raise HTTPException(status_code=500, detail=f"合成失败: {e}")

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { installAuthFetch } from "@/lib/api";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuthStore, useCreationStore, useUIStore } from "@/lib/stores";
@@ -16,6 +17,10 @@ import { FirstWorkOnboarding } from "@/components/FirstWorkOnboarding";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import { AppShell } from "@/components/AppShell";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
+
+if (typeof window !== "undefined") {
+  installAuthFetch();
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
