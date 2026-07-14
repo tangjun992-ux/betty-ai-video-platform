@@ -81,6 +81,22 @@ def check_prompt(text: str) -> ModerationResult:
     if not text:
         return ModerationResult(allowed=True, risk_score=0.0, categories=[])
 
+    # Layer 1: fast keyword policy
+    keyword = _check_keywords(text)
+    if not keyword.allowed:
+        return keyword
+
+    # Layer 2: OpenAI Moderation API when configured (classification model)
+    ml = _check_openai_moderation(text)
+    if ml and not ml.allowed:
+        return ml
+
+    return ModerationResult(allowed=True, risk_score=0.0, categories=[])
+
+
+def _check_keywords(text: str) -> ModerationResult:
+    if not text:
+        return ModerationResult(allowed=True, risk_score=0.0, categories=[])
     hits: list[tuple[str, str]] = []
     for category, reason, patterns in _COMPILED:
         for pat in patterns:
@@ -105,6 +121,39 @@ def check_prompt(text: str) -> ModerationResult:
         risk_score=risk,
         categories=categories,
     )
+
+
+def _check_openai_moderation(text: str) -> ModerationResult | None:
+    """Optional ML classifier via OpenAI Moderation API."""
+    try:
+        from app.config import settings
+        key = getattr(settings, "OPENAI_API_KEY", None)
+        if not key:
+            return None
+        import httpx
+        base = (getattr(settings, "OPENAI_BASE_URL", None) or "https://api.openai.com/v1").rstrip("/")
+        resp = httpx.post(
+            f"{base}/moderations",
+            headers={"Authorization": f"Bearer {key}"},
+            json={"input": text},
+            timeout=8.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        result = (data.get("results") or [{}])[0]
+        if result.get("flagged"):
+            cats = [k for k, v in (result.get("categories") or {}).items() if v]
+            score = float((result.get("category_scores") or {}).get(cats[0], 0.85) if cats else 0.85)
+            return ModerationResult(
+                allowed=False,
+                category=cats[0] if cats else "policy",
+                reason="内容不合规：AI 安全模型检测到潜在违规内容，请修改后重试。",
+                risk_score=min(1.0, score),
+                categories=cats,
+            )
+    except Exception:
+        return None
+    return None
 
 
 def is_safe(text: str) -> bool:

@@ -309,7 +309,7 @@ async def generate_speech(req: SpeechRequest):
     import asyncio as _a
     out = (await _a.to_thread(persist_results, [out]))[0]
     return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
-            "media_type": "audio", "model": res.model, "cost": res.cost}
+            "media_type": "audio", "model": res.model, "cost": res.cost, "demo": False}
 
 
 @router.post("/edit", summary="AI 图像工具 (编辑/超分/抠图/扩图)",

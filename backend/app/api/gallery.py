@@ -168,9 +168,12 @@ async def explore_gallery(
     sort: str = Query(default="popular"),
     limit: int = Query(default=32, le=100),
     offset: int = Query(default=0),
+    include_seed: bool = Query(default=False, description="开发环境可展示种子示例"),
     db: AsyncSession = Depends(get_db),
 ):
     """Return gallery items from completed tasks with real media."""
+    from app.config import settings
+    show_seed = include_seed or not settings.is_production
     # Join User for real author fields (outer — guest/orphan tasks still show)
     q = (
         select(Task, User)
@@ -230,6 +233,10 @@ async def explore_gallery(
                     filtered_count += 1
                     continue
 
+                is_seed_item = params.get("seed_marker") == "demo_seed_v1"
+                if is_seed_item and not show_seed:
+                    continue
+
                 ts = t.completed_at or t.created_at
                 item_key = f"{t.task_id}_{len(items)}"
                 if item_key in hidden:
@@ -254,8 +261,8 @@ async def explore_gallery(
                     "avatar": author["avatar"],
                     "likes": likes,
                     "views": views_map.get(item_key, 0),
-                    "is_seed": params.get("seed_marker") == "demo_seed_v1",
-                    "is_demo": params.get("seed_marker") == "demo_seed_v1" or bool(r.get("demo")),
+                    "is_seed": is_seed_item,
+                    "is_demo": is_seed_item or bool(r.get("demo")),
                 })
             except Exception:
                 # One malformed legacy row must never break the whole gallery

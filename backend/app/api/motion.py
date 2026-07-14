@@ -30,6 +30,7 @@ class MotionRequest(BaseModel):
     video_url: str = Field(..., description="参考动作视频URL")
     prompt: Optional[str] = Field(default=None, max_length=2000, description="可选提示词，描述期望效果")
     style: Optional[str] = Field(default=None, description="风格偏好: realistic | anime | cartoon")
+    tier: str = Field(default="demo", description="demo | studio — Studio 需 Personal+ 套餐")
 
 
 class MotionResponse(BaseModel):
@@ -141,7 +142,25 @@ async def submit_motion(
     if not req.video_url.strip():
         raise HTTPException(status_code=400, detail="请提供参考动作视频URL (video_url)")
 
-    model = "motion-control"
+    from app.services.moderation import check_prompt
+    from app.services.entitlements import motion_cost, require_studio_tier
+    from app.models.user import User
+    from sqlalchemy import select as sa_select
+
+    if req.prompt:
+        m = check_prompt(req.prompt)
+        if not m.allowed:
+            raise HTTPException(status_code=400, detail=m.reason)
+
+    tier = (req.tier or "demo").strip().lower()
+    if tier not in ("demo", "studio"):
+        raise HTTPException(status_code=400, detail="tier 必须是 demo 或 studio")
+    u = (await db.execute(sa_select(User).where(User.id == user_id))).scalar_one_or_none()
+    if tier == "studio":
+        require_studio_tier(u.role if u else "guest", "Motion Studio")
+    cost = motion_cost(tier)
+
+    model = "motion-control" if tier == "demo" else "motion-control-studio"
 
     # Build parameters
     params = {
@@ -160,7 +179,7 @@ async def submit_motion(
         requested_model=model,
         selected_model=model,
         parameters=params,
-        estimated_cost=MOTION_COST,
+        estimated_cost=cost,
         status="queued",
     )
     db.add(task)
@@ -168,7 +187,7 @@ async def submit_motion(
 
     # Check and deduct credits
     credits_ok = await _check_and_deduct_credits(
-        db=db, user_id=user_id, cost=MOTION_COST,
+        db=db, user_id=user_id, cost=cost,
         task_id=task_id, model=model,
     )
     if not credits_ok:
@@ -179,7 +198,7 @@ async def submit_motion(
             task_id=task_id,
             status="failed",
             estimated_time_seconds=0,
-            estimated_cost_credits=MOTION_COST,
+            estimated_cost_credits=cost,
             poll_url=f"/api/v1/tasks/{task_id}",
         )
 
@@ -204,6 +223,6 @@ async def submit_motion(
         task_id=task_id,
         status="queued",
         estimated_time_seconds=MOTION_ESTIMATED_TIME,
-        estimated_cost_credits=MOTION_COST,
+        estimated_cost_credits=cost,
         poll_url=f"/api/v1/tasks/{task_id}",
     )

@@ -63,6 +63,7 @@ export default function MotionControlPage() {
   const [phase, setPhase] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TaskResult | null>(null);
+  const [tier, setTier] = useState<"demo" | "studio">("demo");
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +124,7 @@ export default function MotionControlPage() {
           video_url: videoUrl,
           prompt: prompt || undefined,
           style: selectedStyle,
+          tier,
         }),
       });
       if (!res.ok) {
@@ -302,6 +304,21 @@ export default function MotionControlPage() {
         {/* Right: Controls */}
         <div className="space-y-4">
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}>
+          <div>
+            <span className="text-sm font-medium text-text-accent-cyan mb-2 block">产品档位</span>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {([
+                { id: "demo" as const, label: "Demo", desc: "6 积分 · 标准动作迁移" },
+                { id: "studio" as const, label: "Studio", desc: "14 积分 · 高保真 · Personal+" },
+              ]).map((t) => (
+                <button key={t.id} type="button" onClick={() => setTier(t.id)}
+                  className={cn("p-3 rounded-xl border text-left transition-all",
+                    tier === t.id ? "border-brand/40 bg-brand/[0.06]" : "border-cosmic-border bg-cosmic-subtle")}>
+                  <div className="text-sm font-semibold">{t.label}</div>
+                  <div className="text-[10px] text-text-secondary mt-0.5">{t.desc}</div>
+                </button>
+              ))}
+            </div>
             <span className="text-sm font-medium text-text-accent-cyan mb-2 block">3. 选择风格</span>
             <div className="grid grid-cols-2 gap-2">
               {STYLES.map((s) => (
@@ -321,6 +338,7 @@ export default function MotionControlPage() {
                 </button>
               ))}
             </div>
+          </div>
           </motion.div>
 
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>

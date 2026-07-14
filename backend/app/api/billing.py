@@ -1,10 +1,8 @@
 """
 Billing API — credits lifecycle (对标 Yapper 的订阅/积分).
 
-Checkout is Stripe-ready: when settings.STRIPE_API_KEY is configured it creates a
-real Stripe Checkout Session; otherwise it runs in dev-grant mode, crediting the
-account immediately and recording a PURCHASE transaction. The whole app shares
-the guest account (user_id=0), matching how generation deducts credits.
+Checkout is Stripe-ready; QR payments use WeChat/Alipay when configured.
+Credits are scoped per user via resolve_user_id (isolated guest accounts).
 """
 import logging
 import os
@@ -326,16 +324,19 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
 # ─── QR-based payment (WeChat / Alipay) ──────────────────
 async def _grant_order(db: AsyncSession, order: PaymentOrder, *, email: Optional[str] = None) -> int:
     """Idempotently credit a PAID order and record a PURCHASE transaction."""
+    uid = order.user_id
+    if not uid:
+        raise HTTPException(status_code=400, detail="订单缺少 user_id，无法发放积分")
     if order.granted or order.status != "paid":
-        bal = await _get_balance(db, order.user_id or GUEST_USER_ID)
+        bal = await _get_balance(db, uid)
         return bal.credits + bal.daily_credits
-    bal = await _get_balance(db, order.user_id or GUEST_USER_ID)
+    bal = await _get_balance(db, uid)
     before = bal.credits + bal.daily_credits
     bal.credits += order.credits
     bal.total_purchased += order.credits
     after = bal.credits + bal.daily_credits
     db.add(Transaction(
-        user_id=order.user_id or GUEST_USER_ID,
+        user_id=uid,
         type=TransactionType.PURCHASE.value, amount=order.credits,
         balance_before=before, balance_after=after, amount_usd=order.amount_usd,
         payment_method=order.provider, payment_id=order.order_no,

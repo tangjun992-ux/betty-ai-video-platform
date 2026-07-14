@@ -35,6 +35,7 @@ export function guestId(): string {
       ? crypto.randomUUID().replace(/-/g, "")
       : `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
     localStorage.setItem("betty-guest-id", id);
+    document.cookie = `betty_guest_id=${encodeURIComponent(id)};path=/;max-age=31536000;SameSite=Lax`;
   }
   return id;
 }
@@ -258,11 +259,11 @@ export async function enhancePrompt(
   return res.json();
 }
 
-/** Generate a voiceover (TTS) from text — real ElevenLabs via KIE */
+/** Generate a voiceover (TTS) from text — real provider when keys configured; demo tone otherwise */
 export async function generateSpeech(
   text: string,
   voice: string = "Rachel"
-): Promise<{ url: string; media_type: string; model: string; cost?: number }> {
+): Promise<{ url: string; media_type: string; model: string; cost?: number; demo?: boolean }> {
   const res = await fetch(`${API_BASE}/generate/speech`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -17,6 +17,20 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+BRAIN_MODES: dict[str, dict[str, str | None]] = {
+    "fast": {"label": "快速", "model": "gpt-4o-mini", "description": "低延迟创意发散"},
+    "quality": {"label": "深度", "model": "gpt-4o", "description": "更高质量分镜与迭代"},
+    "rules": {"label": "规则", "model": None, "description": "纯本地规则引擎（无 LLM）"},
+}
+
+
+def resolve_brain_model(brain: str | None) -> str | None:
+    key = (brain or "fast").strip().lower()
+    if key == "rules":
+        return None
+    spec = BRAIN_MODES.get(key) or BRAIN_MODES["fast"]
+    return spec.get("model")
+
 
 def _llm_credentials() -> Optional[tuple[str, str]]:
     """Return (api_key, base_url) when a chat provider is configured."""
@@ -29,11 +43,12 @@ def _llm_credentials() -> Optional[tuple[str, str]]:
     return None
 
 
-async def _chat_json(system: str, user: str) -> Optional[Any]:
+async def _chat_json(system: str, user: str, model: str | None = None) -> Optional[Any]:
     creds = _llm_credentials()
     if not creds:
         return None
     api_key, base_url = creds
+    llm_model = model or "gpt-4o-mini"
     try:
         async with httpx.AsyncClient(timeout=45) as client:
             resp = await client.post(
@@ -43,7 +58,7 @@ async def _chat_json(system: str, user: str) -> Optional[Any]:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "gpt-4o-mini",
+                    "model": llm_model,
                     "messages": [
                         {"role": "system", "content": system},
                         {"role": "user", "content": user},
@@ -74,7 +89,7 @@ def _rule_ideate(brief: str) -> list[dict]:
     return [{"title": t, "brief": br} for t, br in angles]
 
 
-async def ideate(brief: str) -> list[dict]:
+async def ideate(brief: str, *, brain: str | None = None) -> list[dict]:
     """Expand a rough idea into 5 distinct creative concepts `{title, brief}`."""
     b = (brief or "").strip()
     if not b:
@@ -86,7 +101,7 @@ async def ideate(brief: str) -> list[dict]:
         '{"concepts":[{"title":"短标题","brief":"完整可执行的创作 brief"}, ...]}，'
         "恰好 5 条，title 简洁有辨识度，brief 保留原意图并强化风格差异。"
     )
-    result = await _chat_json(system, f"Brief: {b}")
+    result = await _chat_json(system, f"Brief: {b}", model=resolve_brain_model(brain))
     if isinstance(result, dict):
         concepts = result.get("concepts") or []
         out: list[dict] = []
@@ -105,7 +120,7 @@ async def ideate(brief: str) -> list[dict]:
     return _rule_ideate(b)
 
 
-async def refine_with_llm(plan_dict: dict, directive: str) -> tuple[dict, list[str]]:
+async def refine_with_llm(plan_dict: dict, directive: str, *, brain: str | None = None) -> tuple[dict, list[str]]:
     """Return (updated_plan_dict, changes). Falls back to refine_plan on failure."""
     from app.director import plan_from_dict, refine_plan
 
@@ -119,7 +134,7 @@ async def refine_with_llm(plan_dict: dict, directive: str) -> tuple[dict, list[s
         "只改指令相关部分，不要无故删除步骤。"
     )
     user_payload = json.dumps({"plan": plan_dict, "directive": d}, ensure_ascii=False)
-    result = await _chat_json(system, user_payload)
+    result = await _chat_json(system, user_payload, model=resolve_brain_model(brain))
     if isinstance(result, dict):
         plan = result.get("plan")
         changes = result.get("changes") or []

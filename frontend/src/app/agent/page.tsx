@@ -101,6 +101,9 @@ export default function AgentPage() {
   const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [userCredits, setUserCredits] = useState<number | null>(null);
+  const [brain, setBrain] = useState<"fast" | "quality" | "rules">("fast");
+  const [creditGateOpen, setCreditGateOpen] = useState(false);
+  const [creditNeeded, setCreditNeeded] = useState(0);
 
   const maybePromptUpgrade = useCallback(async (force = false) => {
     if (!force && dryRunMode) return;
@@ -129,11 +132,15 @@ export default function AgentPage() {
       });
   }, []);
 
-  // ── models catalog (for per-step model swap) ──
+  // ── models catalog (active only, for per-step model swap) ──
   useEffect(() => {
-    fetch(`${API_BASE}/models/`).then((r) => r.json()).then((d) => {
+    fetch(`${API_BASE}/models/?status=active`).then((r) => r.json()).then((d) => {
       const img: ModelOpt[] = [], vid: ModelOpt[] = [];
-      for (const m of d.models || []) {
+      const pool = [...(d.active || []), ...(d.models || []).filter((m: any) => m.status === "active")];
+      const seen = new Set<string>();
+      for (const m of pool) {
+        if (seen.has(m.id)) continue;
+        seen.add(m.id);
         const opt = { id: m.id, name: m.display_name || m.name || m.id };
         if (m.capabilities?.media_types?.includes("video")) vid.push(opt);
         else img.push(opt);
@@ -160,14 +167,24 @@ export default function AgentPage() {
   const loadSession = useCallback(async (uid: string) => {
     try {
       const res = await fetch(`${API_BASE}/director/sessions/${uid}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        setErr(res.status === 403 ? "无权访问此会话" : `无法加载会话 (HTTP ${res.status})`);
+        return;
+      }
       const s = await res.json();
       setActiveUid(uid);
+      setActiveSession(uid);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("session", uid);
+        window.history.replaceState({}, "", url.toString());
+      }
       if (s.brief) setBrief(s.brief);
       const p = s.plan && s.plan.steps ? s.plan as Plan : null;
       const a = Array.isArray(s.assets) ? s.assets as Asset[] : [];
       if (p) { setPlan(p); setAssets(a); setPhase(a.length ? "done" : "planned"); }
-    } catch {}
+      else if (s.brief) { setPhase("idle"); }
+    } catch { setErr("加载会话失败"); }
   }, []);
   useEffect(() => {
     const uid = new URLSearchParams(window.location.search).get("session");
@@ -239,7 +256,7 @@ export default function AgentPage() {
     try {
       const r = await fetch(`${API_BASE}/director/ideate`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief: brief.trim() }),
+        body: JSON.stringify({ brief: brief.trim(), brain }),
       });
       const d = await r.json();
       setConcepts(d.concepts || []);
@@ -261,7 +278,7 @@ export default function AgentPage() {
     try {
       const res = await fetch(`${API_BASE}/director/refine`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, directive: dir }),
+        body: JSON.stringify({ plan, directive: dir, brain }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const d = await res.json();
@@ -332,9 +349,33 @@ export default function AgentPage() {
     } catch (e: any) { setErr(`执行失败 (${e?.message})`); setPhase("planned"); }
   };
 
+  const ensureCreditsForReal = async (needed: number): Promise<boolean> => {
+    try {
+      const r = await fetch(`${API_BASE}/models/pricing/user`);
+      if (!r.ok) return true;
+      const d = await r.json();
+      setUserCredits(d.credits);
+      if (d.credits < needed) {
+        setCreditNeeded(needed);
+        setCreditGateOpen(true);
+        setPayTarget({ kind: "plan", id: "personal", cycle: "monthly" });
+        return false;
+      }
+      return true;
+    } catch { return true; }
+  };
+
   // ── streaming execution ──
   const execute = async (dryRun = true) => {
     if (!plan) return;
+    if (!dryRun) {
+      const needed = plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0);
+      const ok = await ensureCreditsForReal(needed);
+      if (!ok) {
+        setErr(`积分不足：真实生成约需 ${needed} 积分，请先充值或升级`);
+        return;
+      }
+    }
     setDryRunMode(dryRun);
     setPhase("running"); setErr(null); setAssets([]); setChanges([]); setStepTimes({}); setTotalMs(null);
     // reset live statuses
@@ -503,6 +544,20 @@ export default function AgentPage() {
                   </select>
                 </div>
                 {/* composer modes — 对标 yapper Help Prompt / Help Ideate */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] text-text-tertiary mr-1">导演大脑</span>
+                  {([
+                    { id: "fast", label: "快速" },
+                    { id: "quality", label: "深度" },
+                    { id: "rules", label: "规则" },
+                  ] as const).map((b) => (
+                    <button key={b.id} type="button" onClick={() => setBrain(b.id)}
+                      className={cn("px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all",
+                        brain === b.id ? "bg-brand/10 text-brand border-brand/30" : "border-cosmic-border text-text-secondary hover:text-text-primary")}>
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
                 <button onClick={polishBrief} disabled={!brief.trim() || !!composerBusy}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40">
                   {composerBusy === "polish" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} 润色

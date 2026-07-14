@@ -31,6 +31,7 @@ export default function LipsyncPage() {
   const [inputMode, setInputMode] = useState<"text" | "audio">("text");
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioName, setAudioName] = useState("");
+  const [tier, setTier] = useState<"demo" | "studio">("demo");
 
   const handleAudioUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -64,6 +65,7 @@ export default function LipsyncPage() {
         formData.append("audio_file", audioFile);
       }
       formData.append("voice_id", voiceId);
+      formData.append("tier", tier);
 
       const res = await fetch(`${API_BASE}/lipsync`, { method: "POST", body: formData });
       if (!res.ok) {
@@ -103,9 +105,22 @@ export default function LipsyncPage() {
     <div className="max-w-4xl mx-auto px-4 py-8">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-bold mb-2 gradient-text-static">唇形同步</h1>
-        <p className="text-text-secondary text-sm mb-8">
+        <p className="text-text-secondary text-sm mb-4">
           上传图片，输入文字，AI 自动生成口型同步的说话视频
         </p>
+        <div className="grid grid-cols-2 gap-2 mb-6 max-w-md">
+          {([
+            { id: "demo" as const, label: "Demo", desc: "4 积分 · 标准唇形" },
+            { id: "studio" as const, label: "Studio", desc: "10 积分 · 高保真 · Personal+" },
+          ]).map((t) => (
+            <button key={t.id} type="button" onClick={() => setTier(t.id)}
+              className={cn("p-3 rounded-xl border text-left transition-all",
+                tier === t.id ? "border-brand/40 bg-brand/[0.06]" : "border-cosmic-border bg-cosmic-subtle")}>
+              <div className="text-sm font-semibold">{t.label}</div>
+              <div className="text-[10px] text-text-secondary mt-0.5">{t.desc}</div>
+            </button>
+          ))}
+        </div>
       </motion.div>
 
       {error && !submitting && (

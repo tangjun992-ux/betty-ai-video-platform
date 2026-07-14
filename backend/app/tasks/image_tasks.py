@@ -164,14 +164,15 @@ def generate_image_task(
 
         for r in results:
             rd = r.to_dict()
-            out = {
+            from app.services.demo_tag import demo_mode_active, tag_result
+            out = tag_result({
                 "type": "image",
                 "url": rd.get("media_url", ""),
                 "model": rd.get("model", model),
                 "resolution": rd.get("resolution", size),
                 "cost": rd.get("cost", 0),
                 "seed": seed,
-            }
+            }, demo=demo_mode_active() or rd.get("demo"))
             if rd.get("error"):
                 has_error = True
                 error_msg = rd["error"]

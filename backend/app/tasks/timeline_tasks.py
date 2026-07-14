@@ -163,7 +163,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
         if _is_local_file(url):
             local_clips.append(c)
         else:
-            logger.info(f"Clip uses external URL, will simulate: {url[:60]}...")
+            logger.info("Clip uses external URL (skipped): %s...", url[:60])
 
     try:
         output_dir = STORAGE_DIR / "renders"
@@ -282,32 +282,6 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
     except Exception as e:
         logger.error(f"Timeline render error: {e}")
         return _mark_failed(db_task_id, str(e))
-
-
-def _simulate_render(db_task_id: str):
-    """Fallback simulation with progress updates."""
-    steps = [
-        (10, "preparing", "初始化渲染引擎..."),
-        (25, "loading", "加载素材片段..."),
-        (45, "compositing", "合成转场效果..."),
-        (65, "rendering", "视频渲染中..."),
-        (85, "finalizing", "最终编码压缩..."),
-    ]
-    for pct, stage, msg in steps:
-        _broadcast_progress(db_task_id, pct, stage, msg)
-        _update_task(db_task_id, status="generating", progress=pct, current_stage=stage)
-        time.sleep(1)
-
-    result_url = ""
-    _update_task(
-        db_task_id, status="completed", progress=100, current_stage="completed",
-        completed_at=datetime.now(timezone.utc),
-        result_url=result_url,
-        results=json.dumps({"mode": "simulation", "output_url": result_url}),
-        actual_cost=4,
-    )
-    _broadcast_progress(db_task_id, 100, "completed", "渲染完成（模拟模式）")
-    return {"status": "completed", "mode": "simulation"}
 
 
 def _mark_failed(db_task_id: str, error_msg: str) -> dict:

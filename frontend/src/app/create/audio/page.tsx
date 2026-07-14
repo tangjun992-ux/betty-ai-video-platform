@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { Sparkles, Loader2, Mic, Download, Play } from "lucide-react";
+import { Sparkles, Loader2, Mic, Download, Play, AlertTriangle } from "lucide-react";
 import { generateSpeech, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,20 @@ export default function AudioPage() {
   const [loading, setLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string>("");
   const [model, setModel] = useState<string>("");
+  const [isDemo, setIsDemo] = useState<boolean | null>(null);
+  const [demoLabel, setDemoLabel] = useState("");
+
+  useEffect(() => {
+    fetch(`${API_BASE}/system/capabilities`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        const demo = !!d.demo_mode || !d.real_generation_available;
+        setIsDemo(demo);
+        setDemoLabel(d.label || "预览模式：未配置 TTS Key");
+      })
+      .catch(() => setIsDemo(true));
+  }, []);
 
   const handleGenerate = async () => {
     if (!text.trim()) {
@@ -50,13 +64,18 @@ export default function AudioPage() {
       const res = await generateSpeech(text.trim(), voice);
       setAudioUrl(resolveMedia(res.url));
       setModel(res.model);
-      toast.success("配音完成", "音频已生成，可试听或下载");
+      setIsDemo(!!res.demo || res.model?.startsWith("demo"));
+      toast.success("配音完成", res.demo ? "演示音频已生成" : "音频已生成，可试听或下载");
     } catch (e: any) {
       toast.error("配音失败", e.message || "请稍后重试");
     } finally {
       setLoading(false);
     }
   };
+
+  const subtitle = isDemo
+    ? "演示模式 · 本地合成音（非真实 ElevenLabs）"
+    : "文字转语音 · 已验证 TTS 模型";
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
@@ -65,13 +84,18 @@ export default function AudioPage() {
           <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-50 border border-cosmic-border text-2xl">🎙️</span>
           <div>
             <h1 className="text-2xl font-bold gradient-text-static">AI 配音</h1>
-            <p className="text-text-secondary text-sm">文字转语音 · 真实 ElevenLabs 多语言模型</p>
+            <p className="text-text-secondary text-sm">{subtitle}</p>
           </div>
         </div>
+        {isDemo && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>{demoLabel || "配置 API Key 后可启用真实多语言 TTS"}</span>
+          </div>
+        )}
       </motion.div>
 
       <div className="mt-8 space-y-5">
-        {/* Text input */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-text-primary">配音文本</span>
@@ -97,9 +121,10 @@ export default function AudioPage() {
           </div>
         </div>
 
-        {/* Voice selector */}
         <div>
-          <span className="text-sm font-medium text-text-primary mb-2 block">选择音色</span>
+          <span className="text-sm font-medium text-text-primary mb-2 block">
+            选择音色 {isDemo ? <span className="text-text-tertiary font-normal">（演示模式仅本地合成）</span> : null}
+          </span>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {VOICES.map((v) => (
               <button
@@ -124,7 +149,6 @@ export default function AudioPage() {
           </div>
         </div>
 
-        {/* Generate */}
         <button onClick={handleGenerate} disabled={loading || !text.trim()} className="btn-primary w-full">
           {loading ? (
             <>
@@ -134,12 +158,11 @@ export default function AudioPage() {
           ) : (
             <>
               <Mic className="w-5 h-5" />
-              生成配音
+              {isDemo ? "生成演示配音" : "生成配音"}
             </>
           )}
         </button>
 
-        {/* Result */}
         {audioUrl && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -150,8 +173,13 @@ export default function AudioPage() {
               <span className="text-sm font-medium text-text-primary flex items-center gap-2">
                 <Play className="w-4 h-4 text-brand" /> 生成结果
               </span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-cosmic-surface border border-cosmic-border text-text-tertiary">
-                {model}
+              <span className={cn(
+                "text-[11px] px-2 py-0.5 rounded-full border",
+                isDemo || model?.startsWith("demo")
+                  ? "bg-amber-500/15 border-amber-400/40 text-amber-700 dark:text-amber-200"
+                  : "bg-cosmic-surface border-cosmic-border text-text-tertiary"
+              )}>
+                {isDemo || model?.startsWith("demo") ? "演示 demo" : model}
               </span>
             </div>
             <audio src={audioUrl} controls className="w-full" />

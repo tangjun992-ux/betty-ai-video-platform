@@ -163,14 +163,15 @@ def generate_video_task(
         if error:
             return _handle_retryable(self, db_task_id, model, error, prompt, image_url, duration, resolution)
 
-        output = [{
+        from app.services.demo_tag import demo_mode_active, tag_result
+        output = [tag_result({
             "type": "video", "url": rd.get("media_url", ""),
             "thumbnail": rd.get("thumbnail_url", ""),
             "model": rd.get("model", model),
             "resolution": rd.get("resolution", resolution),
             "duration": rd.get("duration", duration),
             "cost": rd.get("cost", 0),
-        }]
+        }, demo=demo_mode_active() or rd.get("demo"))]
         cost = rd.get("cost", 0)
 
         output = persist_results(output)

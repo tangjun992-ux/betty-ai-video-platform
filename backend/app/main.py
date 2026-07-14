@@ -51,6 +51,10 @@ async def lifespan(app: FastAPI):
             n = await migrate_legacy_guest_pool(db)
             if n:
                 print(f"[LIFESPAN] Migrated {n} legacy guest rows to legacy_pool user")
+            from app.services.gallery_seed import maybe_seed_gallery_dev
+            seeded = await maybe_seed_gallery_dev(db)
+            if seeded:
+                print("[LIFESPAN] Dev gallery seed initialized")
     except Exception as e:
         print(f"[LIFESPAN] Error initializing database: {e}")
         raise

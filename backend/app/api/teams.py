@@ -66,6 +66,11 @@ async def create_team(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    if user.role not in ("creator", "pro", "admin"):
+        raise HTTPException(
+            status_code=402,
+            detail="团队协作需要 Creator 及以上套餐。请升级后创建团队。",
+        )
     vis = req.default_visibility if req.default_visibility in ("private", "team", "public") else "team"
     team = Team(
         team_id=str(uuid.uuid4()),
@@ -235,3 +240,29 @@ async def update_visibility(
     team.default_visibility = req.visibility
     await db.commit()
     return {"team_id": team_id, "default_visibility": team.default_visibility}
+
+
+@router.delete("/{team_id}/members/{member_user_id}", summary="移除团队成员")
+async def remove_member(
+    team_id: str,
+    member_user_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    me = await db.execute(select(TeamMember).where(
+        and_(TeamMember.team_id == team_id, TeamMember.user_id == user.id)))
+    my = me.scalar_one_or_none()
+    if not my or my.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="仅 owner/admin 可移除成员")
+    if member_user_id == user.id:
+        raise HTTPException(status_code=400, detail="不能移除自己，请转让所有权后退出")
+    target = await db.execute(select(TeamMember).where(
+        and_(TeamMember.team_id == team_id, TeamMember.user_id == member_user_id)))
+    row = target.scalar_one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="成员不存在")
+    if row.role == "owner":
+        raise HTTPException(status_code=400, detail="不能移除团队所有者")
+    await db.delete(row)
+    await db.commit()
+    return {"removed": member_user_id, "team_id": team_id}

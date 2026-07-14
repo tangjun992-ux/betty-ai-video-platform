@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.director import planner, DirectorExecutor, DirectorPlanner, plan_from_dict, DirectorStep
 from app.db import get_db
 from app.models.director_session import DirectorSession
-from app.auth import resolve_user_id, get_optional_user, GUEST_USER_ID
+from app.auth import resolve_user_id
 from app.models.user import User
 from app.services.director_brain import ideate as brain_ideate, refine_with_llm
 
@@ -92,29 +92,36 @@ async def make_plan(req: PlanRequest):
 class RefineRequest(BaseModel):
     plan: dict = Field(..., description="当前计划")
     directive: str = Field(..., description="导演指令，如：把第2镜改暖一点 / 加一个镜头 / 换成 Veo 3.1 / 竖屏")
+    brain: str = Field(default="fast", description="fast | quality | rules")
 
 
 class IdeateRequest(BaseModel):
     brief: str = Field(..., min_length=1)
+    brain: str = Field(default="fast", description="fast | quality | rules")
+
+@router.get("/brain/modes", summary="导演大脑模式列表")
+async def brain_modes():
+    from app.services.director_brain import BRAIN_MODES
+    return {"modes": BRAIN_MODES}
 
 
 @router.post("/ideate", summary="帮我构思：从一句话发散多个创意方向")
 async def ideate(req: IdeateRequest):
     """Expand a rough idea into several distinct creative concepts to pick from
     (对标 yapper 'Help Ideate'). Uses LLM when a key is configured, else rules."""
-    concepts = await brain_ideate(req.brief.strip())
-    return {"concepts": concepts}
+    concepts = await brain_ideate(req.brief.strip(), brain=req.brain)
+    return {"concepts": concepts, "brain": req.brain}
 
 
 @router.post("/refine", summary="对话式导演：用自然语言迭代计划")
 async def refine(req: RefineRequest):
     """LLM refine when a key is available; falls back to the rule engine."""
-    plan_dict, changes = await refine_with_llm(req.plan, req.directive)
-    return {"plan": plan_dict, "changes": changes}
+    plan_dict, changes = await refine_with_llm(req.plan, req.directive, brain=req.brain)
+    return {"plan": plan_dict, "changes": changes, "brain": req.brain}
 
 
 @router.post("/run", summary="执行导演计划，产出多资产 (非流式)")
-async def run_plan(req: RunRequest):
+async def run_plan(req: RunRequest, user_id: int = Depends(resolve_user_id)):
     plan = _resolve_plan(req)
     dry = _dry_run_default() if req.dry_run is None else req.dry_run
     executor = DirectorExecutor(dry_run=dry)
@@ -122,7 +129,7 @@ async def run_plan(req: RunRequest):
 
 
 @router.post("/run/stream", summary="流式执行导演计划 (SSE)")
-async def run_plan_stream(req: RunRequest):
+async def run_plan_stream(req: RunRequest, user_id: int = Depends(resolve_user_id)):
     """Stream per-step events (SSE). Frontend reads the body incrementally to
     animate the director's progress and surface assets as each shot completes."""
     plan = _resolve_plan(req)
@@ -178,17 +185,20 @@ async def run_progress(
     user_id: int = Depends(resolve_user_id),
 ):
     from app.tasks.director_tasks import read_progress
+    from app.config import settings
     state = read_progress(job_id)
     if state is None:
         raise HTTPException(status_code=404, detail="job not found or expired")
     owner = state.get("user_id")
+    if owner is None and settings.is_production:
+        raise HTTPException(status_code=403, detail="无权查看此任务进度")
     if owner is not None and int(owner) != user_id:
         raise HTTPException(status_code=403, detail="无权查看此任务进度")
     return state
 
 
 @router.post("/step/rerun", summary="重新执行单个步骤 (per-step 重生成)")
-async def rerun_step(req: StepRerunRequest):
+async def rerun_step(req: StepRerunRequest, user_id: int = Depends(resolve_user_id)):
     dry = _dry_run_default() if req.dry_run is None else req.dry_run
     executor = DirectorExecutor(dry_run=dry)
     data = dict(req.step)

@@ -311,6 +311,17 @@ export default function SessionsPage() {
 
                   {/* Chevron */}
                   <ChevronRight className="w-4 h-4 text-text-disabled group-hover:text-brand transition-colors flex-shrink-0" />
+                  <button
+                    type="button"
+                    title="复制深链"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigator.clipboard.writeText(`${window.location.origin}/agent?session=${session.session_uid}`);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-[10px] px-2 py-1 rounded-md border border-cosmic-border text-text-tertiary hover:text-brand transition-all flex-shrink-0"
+                  >
+                    复制链接
+                  </button>
                 </div>
               </motion.button>
             );
