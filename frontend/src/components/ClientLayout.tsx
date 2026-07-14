@@ -15,6 +15,7 @@ import { PWARegister } from "@/components/PWARegister";
 import { FirstWorkOnboarding } from "@/components/FirstWorkOnboarding";
 import { LocaleProvider } from "@/i18n/LocaleProvider";
 import { AppShell } from "@/components/AppShell";
+import { DemoModeBanner } from "@/components/DemoModeBanner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -74,6 +75,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
             ) : (
               // Single unified shell for the whole app (dashboard included)
               <AppShell>
+                <DemoModeBanner />
                 <ScrollProgress />
                 <PageTransition>{children}</PageTransition>
                 <ToastContainer />

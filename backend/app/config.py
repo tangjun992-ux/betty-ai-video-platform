@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     # Billing — Stripe (optional). When STRIPE_API_KEY is set, checkout uses real
     # Stripe Checkout; otherwise a dev-grant mode credits the account directly.
     STRIPE_API_KEY: str = os.getenv("STRIPE_API_KEY", "")
+    STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
     STRIPE_SUCCESS_URL: str = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:3000/billing?status=success")
     STRIPE_CANCEL_URL: str = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/pricing?status=cancel")
 

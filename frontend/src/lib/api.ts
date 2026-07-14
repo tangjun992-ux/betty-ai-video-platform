@@ -26,6 +26,19 @@ export function authToken(): string | null {
   }
 }
 
+/** Stable per-browser guest id for isolated anonymous accounts. */
+export function guestId(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem("betty-guest-id");
+  if (!id) {
+    id = (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID().replace(/-/g, "")
+      : `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem("betty-guest-id", id);
+  }
+  return id;
+}
+
 /** Install a one-time global fetch interceptor that attaches the bearer token
  *  to same-API requests, so every call site (api.ts + components) is scoped to
  *  the logged-in user without editing each fetch. */
@@ -39,11 +52,13 @@ export function installAuthFetch() {
       const url = typeof input === "string" ? input : (input instanceof URL ? input.href : (input as Request).url);
       if (url && url.includes("/api/v1/")) {
         const token = authToken();
+        const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
         if (token) {
-          const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
           if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
-          init = { ...init, headers };
+        } else {
+          if (!headers.has("X-Guest-Id")) headers.set("X-Guest-Id", guestId());
         }
+        init = { ...init, headers };
       }
     } catch {}
     return orig(input as any, init);

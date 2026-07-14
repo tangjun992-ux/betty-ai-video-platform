@@ -356,6 +356,9 @@ async def get_user_balance(user_id: int = 0, db: AsyncSession = Depends(get_db))
 
 @router.post("/pricing/subscribe", summary="订阅方案")
 async def subscribe(plan_id: str, user_id: int = 0, db: AsyncSession = Depends(get_db)):
+    from app.config import settings
+    if settings.is_production:
+        raise HTTPException(status_code=404, detail="Not found")
     from sqlalchemy import select as sa_select
     plan = next((p for p in PLANS_DATA if p["id"] == plan_id), None)
     if not plan:

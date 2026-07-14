@@ -428,22 +428,33 @@ async def pay_mock_confirm(order_no: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/pay/notify/{provider}", summary="支付异步回调（微信/支付宝）")
 async def pay_notify(provider: str, request: Request, db: AsyncSession = Depends(get_db)):
-    """Async payment notification from WeChat/Alipay. In production this endpoint
-    must be public HTTPS. Signature verification is performed via the SDK; on
-    success the order is marked paid and credits granted idempotently."""
+    """Async payment notification from WeChat/Alipay. In production, live orders
+    require signature verification before crediting."""
+    from app.services import payments
     order_no = None
+    paid = False
     try:
         if provider == "alipay":
             form = dict((await request.form()))
             order_no = form.get("out_trade_no")
             trade_status = form.get("trade_status")
             paid = trade_status in ("TRADE_SUCCESS", "TRADE_FINISHED")
-            # NOTE: verify form signature with AliPay.verify(...) before trusting.
-        else:  # wechat v3 — JSON body, resource is AES-GCM encrypted
+            if settings.is_production and order_no:
+                r = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
+                order_probe = r.scalar_one_or_none()
+                if order_probe and order_probe.provider == "alipay":
+                    if not payments.verify_alipay_notify(form):
+                        return {"code": "FAIL", "message": "signature verification failed"}
+        else:  # wechat v3
             body = await request.json()
-            res = (body.get("resource") or {})
-            order_no = body.get("out_trade_no")  # after decrypt in prod
+            order_no = body.get("out_trade_no")
             paid = body.get("event_type", "").endswith("SUCCESS")
+            if settings.is_production and order_no:
+                r = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
+                order_probe = r.scalar_one_or_none()
+                if order_probe and order_probe.provider == "wechat":
+                    if not payments.verify_wechat_notify(body, dict(request.headers)):
+                        return {"code": "FAIL", "message": "signature verification failed"}
         if not order_no:
             return {"code": "FAIL", "message": "missing out_trade_no"}
         r = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
@@ -464,7 +475,11 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     import json
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
-    secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    secret = settings.STRIPE_WEBHOOK_SECRET or os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    if settings.is_production and not secret:
+        raise HTTPException(status_code=503, detail="Stripe webhook secret not configured")
+    if settings.is_production and not sig:
+        raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
     try:
         if secret and settings.STRIPE_API_KEY:
             import stripe
@@ -472,6 +487,8 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             event = stripe.Webhook.construct_event(payload, sig, secret)
             etype = event["type"]
             data_obj = event["data"]["object"]
+        elif settings.is_production:
+            raise HTTPException(status_code=503, detail="Stripe not configured")
         else:
             event = json.loads(payload.decode("utf-8"))
             etype = event.get("type")

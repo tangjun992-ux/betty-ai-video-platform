@@ -162,21 +162,28 @@ async def run_plan_async(
     # Seed a 'queued' snapshot so the first poll always returns something.
     write_progress(job_id, {
         "job_id": job_id, "status": "queued", "done": False, "dry_run": dry,
+        "user_id": user_id,
         "session_uid": session_uid,
         "plan": plan.to_dict(),
         "steps": [{"id": s.id, "status": "skipped" if s.skip else "pending", "title": s.title, "elapsed_ms": None} for s in plan.steps],
         "assets": [], "asset_count": 0, "total_ms": None,
     })
-    run_director.delay(job_id, plan.to_dict(), dry, session_uid)
+    run_director.delay(job_id, plan.to_dict(), dry, session_uid, user_id)
     return {"job_id": job_id, "plan": plan.to_dict(), "dry_run": dry, "session_uid": session_uid}
 
 
 @router.get("/progress/{job_id}", summary="查询异步执行进度")
-async def run_progress(job_id: str):
+async def run_progress(
+    job_id: str,
+    user_id: int = Depends(resolve_user_id),
+):
     from app.tasks.director_tasks import read_progress
     state = read_progress(job_id)
     if state is None:
         raise HTTPException(status_code=404, detail="job not found or expired")
+    owner = state.get("user_id")
+    if owner is not None and int(owner) != user_id:
+        raise HTTPException(status_code=403, detail="无权查看此任务进度")
     return state
 
 

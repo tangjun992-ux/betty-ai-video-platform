@@ -34,6 +34,8 @@ async def lifespan(app: FastAPI):
     from app.observability import configure_logging, init_sentry
     configure_logging()
     init_sentry()
+    if settings.is_production and settings.JWT_SECRET == "dev-secret-change-in-production-please!":
+        raise RuntimeError("JWT_SECRET must be set to a strong value in production")
     print(f"[LIFESPAN] Starting AI Video Platform v{settings.APP_VERSION}")
     print(f"[LIFESPAN] Environment: {settings.ENV}")
 

@@ -1,7 +1,7 @@
 """
 Pricing plans API — subscription tiers and credits bundles.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy import select
@@ -169,7 +169,10 @@ async def get_user_balance(user_id: int = 0, db: AsyncSession = Depends(get_db))
 
 @router.post("/subscribe", summary="订阅方案（模拟）")
 async def subscribe(plan_id: str, user_id: int = 0, db: AsyncSession = Depends(get_db)):
-    """Simulate subscribing to a plan — adds credits to user balance."""
+    """Simulate subscribing to a plan — adds credits to user balance (dev only)."""
+    from app.config import settings
+    if settings.is_production:
+        raise HTTPException(status_code=404, detail="Not found")
     plan = next((p for p in PLANS if p.id == plan_id), None)
     if not plan:
         return {"error": f"Plan '{plan_id}' not found"}, 404

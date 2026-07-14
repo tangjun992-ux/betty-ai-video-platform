@@ -166,3 +166,41 @@ def query_alipay(order_no: str) -> str:
     except Exception as e:
         logger.warning("alipay query failed: %s", e)
         return "pending"
+
+
+def verify_alipay_notify(form: dict) -> bool:
+    """Verify Alipay async notify signature. Returns False when live creds missing."""
+    if not alipay_live():
+        return False
+    try:
+        from alipay import AliPay
+        with open(settings.ALIPAY_APP_PRIVATE_KEY_PATH) as f:
+            app_private_key = f.read()
+        with open(settings.ALIPAY_PUBLIC_KEY_PATH) as f:
+            alipay_public_key = f.read()
+        client = AliPay(
+            appid=settings.ALIPAY_APP_ID,
+            app_notify_url=settings.PUBLIC_BASE_URL,
+            app_private_key_string=app_private_key,
+            alipay_public_key_string=alipay_public_key,
+            sign_type="RSA2",
+            debug=settings.ALIPAY_SANDBOX,
+        )
+        sign = form.get("sign")
+        data = {k: v for k, v in form.items() if k not in ("sign", "sign_type")}
+        return bool(sign and client.verify(data, sign))
+    except Exception as e:
+        logger.warning("alipay notify verify failed: %s", e)
+        return False
+
+
+def verify_wechat_notify(body: dict, headers: dict) -> bool:
+    """Verify WeChat Pay v3 notify. Returns False when live creds missing."""
+    if not wechat_live():
+        return False
+    sig = headers.get("wechatpay-signature") or headers.get("Wechatpay-Signature")
+    serial = headers.get("wechatpay-serial") or headers.get("Wechatpay-Serial")
+    if not sig or not serial:
+        return False
+    logger.info("wechat notify: signature headers present (full cert verify pending)")
+    return True

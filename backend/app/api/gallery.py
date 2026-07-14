@@ -254,6 +254,8 @@ async def explore_gallery(
                     "avatar": author["avatar"],
                     "likes": likes,
                     "views": views_map.get(item_key, 0),
+                    "is_seed": params.get("seed_marker") == "demo_seed_v1",
+                    "is_demo": params.get("seed_marker") == "demo_seed_v1" or bool(r.get("demo")),
                 })
             except Exception:
                 # One malformed legacy row must never break the whole gallery

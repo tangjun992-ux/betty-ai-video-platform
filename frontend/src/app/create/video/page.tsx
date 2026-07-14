@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCreationStore } from "@/lib/stores";
-import { submitGeneration, getTaskStatus, type TaskResult } from "@/lib/api";
+import { submitGeneration, getTaskStatus, type TaskResult, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { ResultGrid } from "@/components/ResultGrid";
@@ -20,12 +20,10 @@ import { CosmicVideoParamPanel } from "@/components/CosmicVideoParamPanel";
    Data
    ════════════════════════════════════════════════════════ */
 
-const VIDEO_MODELS = [
+const VIDEO_MODELS_FALLBACK = [
   { id: "auto", name: "Auto", desc: "智能选择最佳模型", icon: "🤖" },
-  { id: "bytedance/seedance-2", name: "Seedance 2.0", desc: "电影级画质·唇形同步", icon: "🎬", badge: "Pro" },
-  { id: "bytedance/seedance-2-fast", name: "Seedance 2.0 Fast", desc: "快速生成·实时预览", icon: "⚡", badge: "Fast" },
-  { id: "kling/kling-3", name: "Kling 3.0", desc: "高动态范围·运动平滑", icon: "🎞️", badge: "New" },
-  { id: "runway/gen3", name: "Runway Gen-3", desc: "电影级运镜·风格迁移", icon: "🎥" },
+  { id: "bytedance/seedance-2-fast", name: "Seedance 2.0 Fast", desc: "已验证 · 快速生成", icon: "⚡", badge: "Fast" },
+  { id: "seedance-2-fast", name: "Seedance Fast", desc: "已验证视频模型", icon: "🎬", badge: "Active" },
 ];
 
 const SUGGESTIONS = [
@@ -118,6 +116,31 @@ export default function CreateVideoPage() {
   const [enhancingPrompt, setEnhancingPrompt] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [videoModels, setVideoModels] = useState(VIDEO_MODELS_FALLBACK);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/models/?status=active`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        const active = (d.active || []).filter(
+          (m: { capabilities?: { media_types?: string[] } }) =>
+            m.capabilities?.media_types?.includes("video")
+        );
+        if (!active.length) return;
+        setVideoModels([
+          VIDEO_MODELS_FALLBACK[0],
+          ...active.map((m: { id: string; display_name: string; description?: string; provider?: string }) => ({
+            id: m.id,
+            name: m.display_name,
+            desc: (m.description || m.provider || "").slice(0, 48),
+            icon: "🎬",
+            badge: "已验证",
+          })),
+        ]);
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Remix pre-fill from URL (?prompt=&model=) ──
   useEffect(() => {
@@ -126,12 +149,12 @@ export default function CreateVideoPage() {
     const m = params.get("model");
     if (p) setPrompt(p);
     if (m) {
-      const matched = VIDEO_MODELS.find(
+      const matched = videoModels.find(
         (v) => v.id === m || v.id.endsWith(`/${m}`)
       );
       if (matched) setSelectedModel(matched.id);
     }
-  }, []); // Only on mount
+  }, [videoModels, setPrompt, setSelectedModel]);
 
   // ── Elapsed timer ──
   useEffect(() => {
@@ -426,7 +449,7 @@ export default function CreateVideoPage() {
       {/* ═══ RIGHT: Parameters ═══ */}
       <div className="hidden xl:block w-72 flex-shrink-0 relative">
         <CosmicVideoParamPanel
-          models={VIDEO_MODELS}
+          models={videoModels}
           selectedModel={selectedModel}
           onModelSelect={setSelectedModel}
           aspectRatio={aspectRatio}

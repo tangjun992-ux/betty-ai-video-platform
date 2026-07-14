@@ -1,10 +1,11 @@
 from fastapi import APIRouter
-from app.api import generate, tasks, models_info, health, upload, websocket, gallery, auth, settings, lipsync, motion, timeline, pricing, director, dashboard, library, projects, billing, developer, events, teams, moderation_admin
+from app.api import generate, tasks, models_info, health, upload, websocket, gallery, auth, settings, lipsync, motion, timeline, pricing, director, dashboard, library, projects, billing, developer, events, teams, moderation_admin, system
 from app.collector.api import router as collector_router
 
 router = APIRouter()
 
 router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+router.include_router(system.router, prefix="/system", tags=["System"])
 router.include_router(health.router, prefix="/health", tags=["Health"])
 router.include_router(generate.router, prefix="/generate", tags=["Generation"])
 router.include_router(tasks.router, prefix="/tasks", tags=["Task Management"])

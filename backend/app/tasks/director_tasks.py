@@ -56,7 +56,7 @@ def _run_async(coro):
 
 @app.task(name="app.tasks.director_tasks.run_director", queue="director_q",
           soft_time_limit=3600, time_limit=3900)
-def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str | None = None):
+def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str | None = None, user_id: int = 0):
     """Execute a director plan, persisting live per-step progress to Redis."""
     backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
     if backend_dir not in os.getcwd():
@@ -79,7 +79,9 @@ def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str |
     def snapshot(status: str, done: bool = False, total_ms: int | None = None):
         write_progress(job_id, {
             "job_id": job_id, "status": status, "done": done,
+            "user_id": user_id,
             "dry_run": dry_run, "plan": plan.to_dict(),
+            "session_uid": session_uid,
             "steps": list(steps_state.values()), "assets": assets,
             "asset_count": len(assets), "total_ms": total_ms,
         })
@@ -112,6 +114,7 @@ def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str |
     except Exception as e:
         logger.exception("[director_task] run failed: %s", e)
         write_progress(job_id, {"job_id": job_id, "status": "failed", "done": True,
+                                 "user_id": user_id, "session_uid": session_uid,
                                  "error": str(e), "steps": list(steps_state.values()),
                                  "assets": assets, "asset_count": len(assets)})
         return {"status": "failed", "error": str(e)}

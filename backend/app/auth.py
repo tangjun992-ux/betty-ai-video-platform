@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -93,16 +93,25 @@ GUEST_USER_ID = 0
 
 
 async def resolve_user_id(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(
         HTTPBearer(auto_error=False)
     ),
     db: AsyncSession = Depends(get_db),
 ) -> int:
-    """Resolve the effective account id: the authenticated user's id when a valid
-    bearer token is present, otherwise the shared guest account. This is the
-    single source of truth for per-user data scoping across the API."""
+    """Resolve the effective account id: authenticated user, or an isolated guest
+    account keyed by X-Guest-Id / betty_guest_id cookie (never shared user_id=0)."""
     user = await get_optional_user(credentials, db)
-    return user.id if user else GUEST_USER_ID
+    if user:
+        return user.id
+    guest_token = (
+        request.headers.get("X-Guest-Id")
+        or request.headers.get("x-guest-id")
+        or request.cookies.get("betty_guest_id")
+        or ""
+    )
+    from app.services.guest import get_or_create_guest_user
+    return await get_or_create_guest_user(db, guest_token or secrets.token_hex(16))
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:

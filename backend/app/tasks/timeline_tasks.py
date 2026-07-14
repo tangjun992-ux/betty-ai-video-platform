@@ -120,8 +120,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
     # Check FFmpeg
     ffmpeg_ok = os.path.exists(FFMPEG_BIN) or subprocess.run(["which", "ffmpeg"], capture_output=True).returncode == 0
     if not ffmpeg_ok:
-        logger.warning("FFmpeg not found, using simulation")
-        return _simulate_render(db_task_id)
+        return _mark_failed(db_task_id, "服务器未安装 FFmpeg，无法合成时间线视频")
 
     # Load project from DB (timeline_projects)
     project = None
@@ -146,7 +145,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
         engine.dispose()
     except Exception as e:
         logger.warning("Cannot load timeline project from DB: %s", e)
-        return _simulate_render(db_task_id)
+        return _mark_failed(db_task_id, f"无法加载时间线项目: {e}")
 
     if not project:
         _update_task(db_task_id, status="failed", error_message=f"Project not found: {project_id}")
@@ -248,14 +247,11 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
 
                 result_url = f"/api/v1/media/renders/timeline_{db_task_id[:8]}.mp4"
         else:
-            # All clips are external URLs — simulate with progress
-            _broadcast_progress(db_task_id, 20, "preparing", "外部素材，模拟渲染...")
-            steps = [(35, "processing"), (55, "compositing"), (75, "rendering"), (90, "finalizing")]
-            for pct, stage in steps:
-                _broadcast_progress(db_task_id, pct, stage, f"处理中...")
-                _update_task(db_task_id, progress=pct, current_stage=stage)
-                time.sleep(1)
-            result_url = clips[0].get("url", "")
+            # External-only clips cannot be composed locally — fail explicitly.
+            return _mark_failed(
+                db_task_id,
+                "时间线包含外部素材 URL，请先将片段保存到素材库（本地 /api/v1/media）后再合成",
+            )
 
         # Complete
         total_duration = sum(max(0, float(c.get("end", 5)) - float(c.get("start", 0))) for c in clips)

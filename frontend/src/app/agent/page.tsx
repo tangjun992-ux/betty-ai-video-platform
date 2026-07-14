@@ -416,7 +416,7 @@ export default function AgentPage() {
         </div>
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {sessions.map((s) => (
-            <button key={s.id} onClick={() => setActiveSession(s.id)}
+            <button key={s.id} onClick={() => { setActiveSession(s.id); loadSession(s.id); }}
               className={cn("flex items-start gap-2.5 w-full p-2.5 rounded-lg text-left transition-all",
                 activeSession === s.id ? "bg-cosmic-surface" : "hover:bg-cosmic-subtle")}>
               <MessageSquare className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
