@@ -34,7 +34,7 @@ interface HealthRow {
   failures: number;
 }
 
-type Tab = "all" | "image" | "video";
+type Tab = "active" | "lab" | "all" | "image" | "video";
 
 const isVideo = (m: ModelInfo) => m.capabilities.media_types.includes("video");
 
@@ -43,8 +43,10 @@ export default function ModelsPage() {
   const [healthMap, setHealthMap] = useState<Record<string, HealthRow>>({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("all");
+  const [tab, setTab] = useState<Tab>("active");
   const [q, setQ] = useState("");
+  const [activeModels, setActiveModels] = useState<ModelInfo[]>([]);
+  const [betaModels, setBetaModels] = useState<ModelInfo[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -56,7 +58,14 @@ export default function ModelsPage() {
         ]);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        if (alive) setModels(Array.isArray(data?.models) ? data.models : []);
+        const all: ModelInfo[] = Array.isArray(data?.models) ? data.models : [];
+        const active = Array.isArray(data?.active) ? data.active : all.filter((m) => m.status === "active");
+        const beta = Array.isArray(data?.beta) ? data.beta : all.filter((m) => m.status !== "active");
+        if (alive) {
+          setModels(all);
+          setActiveModels(active);
+          setBetaModels(beta);
+        }
         if (hr.ok) {
           const hd = await hr.json();
           const map: Record<string, HealthRow> = {};
@@ -72,12 +81,15 @@ export default function ModelsPage() {
     return () => { alive = false; };
   }, []);
 
-  const imgCount = models.filter((m) => !isVideo(m)).length;
-  const vidCount = models.filter(isVideo).length;
+  const imgCount = activeModels.filter((m) => !isVideo(m)).length;
+  const vidCount = activeModels.filter(isVideo).length;
+  const labCount = betaModels.length;
+
+  const source = tab === "lab" ? betaModels : activeModels;
 
   const filtered = useMemo(() => {
     const kw = q.trim().toLowerCase();
-    return models.filter((m) => {
+    return source.filter((m) => {
       if (tab === "image" && isVideo(m)) return false;
       if (tab === "video" && !isVideo(m)) return false;
       if (!kw) return true;
@@ -87,10 +99,11 @@ export default function ModelsPage() {
         m.capabilities.styles.some((s) => s.toLowerCase().includes(kw))
       );
     });
-  }, [models, tab, q]);
+  }, [source, tab, q]);
 
   const tabs: { key: Tab; label: string; count: number; icon: any }[] = [
-    { key: "all", label: "全部", count: models.length, icon: Sparkles },
+    { key: "active", label: "已验证", count: activeModels.length, icon: Sparkles },
+    { key: "lab", label: "实验室", count: labCount, icon: Activity },
     { key: "image", label: "图片", count: imgCount, icon: ImageIcon },
     { key: "video", label: "视频", count: vidCount, icon: Film },
   ];
@@ -104,7 +117,12 @@ export default function ModelsPage() {
           <span className="text-brand font-semibold">{imgCount} 图片</span>
           {" · "}
           <span className="text-brand font-semibold">{vidCount} 视频</span>
-          {" · "}按用量计费
+          {labCount > 0 && (
+            <>
+              {" · "}
+              <span className="text-text-tertiary">{labCount} 个实验室模型</span>
+            </>
+          )}
         </p>
       </motion.div>
 

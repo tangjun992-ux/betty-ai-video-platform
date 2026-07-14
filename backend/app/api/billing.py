@@ -284,6 +284,13 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
             logger.error("stripe checkout failed: %s", e)
             raise HTTPException(status_code=502, detail=f"支付网关错误: {e}")
 
+    # Dev-grant mode — only allowed outside production (local/staging demos).
+    if settings.is_production:
+        raise HTTPException(
+            status_code=503,
+            detail="生产环境未配置 Stripe 支付网关，请联系管理员或配置 STRIPE_API_KEY",
+        )
+
     # Dev-grant mode — credit immediately + record a real transaction.
     bal = await _get_balance(db, user_id)
     before = bal.credits + bal.daily_credits
@@ -404,6 +411,8 @@ async def pay_status(order_no: str, db: AsyncSession = Depends(get_db)):
 async def pay_mock_confirm(order_no: str, db: AsyncSession = Depends(get_db)):
     """Sandbox-only: simulate the user completing the scan-to-pay. Rejected for
     live provider orders (real payment must come through the gateway notify)."""
+    if settings.is_production:
+        raise HTTPException(status_code=404, detail="Not found")
     res = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
     order = res.scalar_one_or_none()
     if not order:

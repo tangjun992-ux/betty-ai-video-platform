@@ -53,6 +53,7 @@ class PlanRequest(BaseModel):
 class RunRequest(PlanRequest):
     dry_run: bool | None = Field(default=None, description="留空则按服务端默认")
     plan: Optional[dict] = Field(default=None, description="可选：客户端已编辑的计划，优先于 brief 自动规划")
+    session_uid: Optional[str] = Field(default=None, description="可选：异步完成后回写导演会话")
 
 
 class StepRerunRequest(BaseModel):
@@ -143,23 +144,31 @@ async def run_plan_stream(req: RunRequest):
 
 
 @router.post("/run/async", summary="异步执行导演计划 (后台任务, 避免长视频阻塞)")
-async def run_plan_async(req: RunRequest):
+async def run_plan_async(
+    req: RunRequest,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """Kick off the plan in a Celery task; poll GET /director/progress/<job_id>.
     Use this for real multi-shot films (6 shots × ~150s) that would time out over
     a live connection."""
     plan = _resolve_plan(req)
     dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    session_uid = req.session_uid
+    if session_uid:
+        await _owned_session(db, session_uid, user_id)
     job_id = uuid.uuid4().hex
     from app.tasks.director_tasks import run_director, write_progress
     # Seed a 'queued' snapshot so the first poll always returns something.
     write_progress(job_id, {
         "job_id": job_id, "status": "queued", "done": False, "dry_run": dry,
+        "session_uid": session_uid,
         "plan": plan.to_dict(),
         "steps": [{"id": s.id, "status": "skipped" if s.skip else "pending", "title": s.title, "elapsed_ms": None} for s in plan.steps],
         "assets": [], "asset_count": 0, "total_ms": None,
     })
-    run_director.delay(job_id, plan.to_dict(), dry, None)
-    return {"job_id": job_id, "plan": plan.to_dict(), "dry_run": dry}
+    run_director.delay(job_id, plan.to_dict(), dry, session_uid)
+    return {"job_id": job_id, "plan": plan.to_dict(), "dry_run": dry, "session_uid": session_uid}
 
 
 @router.get("/progress/{job_id}", summary="查询异步执行进度")

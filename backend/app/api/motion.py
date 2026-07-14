@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.models.task import Task
 from app.models.billing import UserBalance, Transaction, TransactionType
+from app.auth import resolve_user_id
 from app.tasks.motion_tasks import process_motion_task
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ async def _check_and_deduct_credits(
 )
 async def submit_motion(
     req: MotionRequest,
+    user_id: int = Depends(resolve_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -151,7 +153,7 @@ async def submit_motion(
     # Create Task record
     task = Task(
         task_id=task_id,
-        user_id=0,
+        user_id=user_id,
         prompt=req.prompt or "",
         media_type="video",
         quality="balanced",
@@ -166,7 +168,7 @@ async def submit_motion(
 
     # Check and deduct credits
     credits_ok = await _check_and_deduct_credits(
-        db=db, user_id=0, cost=MOTION_COST,
+        db=db, user_id=user_id, cost=MOTION_COST,
         task_id=task_id, model=model,
     )
     if not credits_ok:

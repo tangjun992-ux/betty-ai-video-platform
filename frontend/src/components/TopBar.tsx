@@ -18,6 +18,7 @@ import {
   Sun,
   Moon,
   Languages,
+  MessageSquare,
 } from "lucide-react";
 import { useUIStore, useAuthStore, useCmdKStore } from "@/lib/stores";
 import { useTheme } from "@/components/ThemeProvider";
@@ -145,6 +146,14 @@ export function TopBar() {
         >
           <Search className="w-5 h-5" />
         </button>
+
+        {/* Sessions — 对标 yapper 顶栏入口 */}
+        <Link
+          href="/sessions"
+          className="hidden lg:inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium text-text-secondary hover:text-brand hover:bg-brand/5 transition-all"
+        >
+          <MessageSquare className="w-3.5 h-3.5" /> {t("nav.sessions")}
+        </Link>
 
         {/* Create Now */}
         <Link

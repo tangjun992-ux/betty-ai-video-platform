@@ -19,6 +19,9 @@ from app.models.team import Team, TeamMember
 
 router = APIRouter()
 
+# Seat limits per team (minimal collaboration guardrail).
+MAX_TEAM_SEATS = 10
+
 
 class CreateTeamRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
@@ -132,6 +135,10 @@ async def invite_member(
     my = me.scalar_one_or_none()
     if not my or my.role not in ("owner", "admin"):
         raise HTTPException(status_code=403, detail="仅 owner/admin 可邀请")
+
+    count_res = await db.execute(select(TeamMember).where(TeamMember.team_id == team_id))
+    if len(count_res.scalars().all()) >= MAX_TEAM_SEATS:
+        raise HTTPException(status_code=400, detail=f"团队人数已达上限（{MAX_TEAM_SEATS} 人）")
 
     target: User | None = None
     if req.username:

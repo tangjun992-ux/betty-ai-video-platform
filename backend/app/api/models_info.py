@@ -257,8 +257,23 @@ MODELS = [
 
 
 @router.get("/", summary="获取可用模型列表")
-async def list_models():
-    return {"models": MODELS}
+async def list_models(status: str | None = None):
+    """Return models. Use status=active for production-ready only, status=beta for lab."""
+    if status == "active":
+        active = [m for m in MODELS if m.status == "active"]
+        return {"models": active, "active": active, "beta": [], "active_count": len(active), "beta_count": 0}
+    if status == "beta":
+        beta = [m for m in MODELS if m.status != "active"]
+        return {"models": beta, "active": [], "beta": beta, "active_count": 0, "beta_count": len(beta)}
+    active = [m for m in MODELS if m.status == "active"]
+    beta = [m for m in MODELS if m.status != "active"]
+    return {
+        "models": MODELS,
+        "active": active,
+        "beta": beta,
+        "active_count": len(active),
+        "beta_count": len(beta),
+    }
 
 
 @router.get("/health", summary="模型健康 registry 快照")

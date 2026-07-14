@@ -285,10 +285,14 @@ export default function AgentPage() {
   const executeAsync = async () => {
     if (!plan) return;
     pollStop.current = false;
+    setDryRunMode(false);
     try {
       const res = await fetch(`${API_BASE}/director/run/async`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief: plan.brief, has_ref_image: refImage, duration, dry_run: false, plan }),
+        body: JSON.stringify({
+          brief: plan.brief, has_ref_image: refImage, duration, dry_run: false, plan,
+          session_uid: activeUid || undefined,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const { job_id } = await res.json();
@@ -709,29 +713,42 @@ export default function AgentPage() {
                       </>
                     ) : (
                       <>
-                        <button onClick={() => execute(true)}
-                          className="flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold bg-brand text-white hover:bg-brand-strong shadow-button-glow transition-all">
-                          <Clapperboard className="w-4 h-4" />免费预览成片（本地 Demo）<ArrowRight className="w-4 h-4" />
-                        </button>
-                        <div className="flex flex-col gap-1 flex-1 sm:flex-initial">
-                          <button
-                            onClick={() => execute(false)}
-                            disabled={realAvailable === false}
-                            title={realAvailable === false ? "未配置模型 API Key，真实生成不可用" : "调用真实模型逐镜生成，消耗积分"}
-                            className={cn(
-                              "flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border transition-all",
-                              realAvailable === false
-                                ? "border-cosmic-border text-text-tertiary cursor-not-allowed opacity-60"
-                                : "border-amber-400/50 text-amber-500 hover:bg-amber-400/10"
-                            )}>
-                            <Coins className="w-4 h-4" />真实生成 · {plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)}积分
-                          </button>
-                          {realAvailable === false && (
-                            <p className="text-[11px] text-amber-600/90 text-center sm:text-left px-1">
-                              预览模式：未配置 Key，真实生成已禁用
-                            </p>
-                          )}
-                        </div>
+                        {realAvailable !== false ? (
+                          <>
+                            <button
+                              onClick={() => execute(false)}
+                              className="flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold bg-brand text-white hover:bg-brand-strong shadow-button-glow transition-all"
+                            >
+                              <Coins className="w-4 h-4" />
+                              {t("agent.real")} · {plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)} 积分
+                              <ArrowRight className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => execute(true)}
+                              className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border border-cosmic-border text-text-secondary hover:bg-cosmic-subtle transition-all"
+                            >
+                              <Clapperboard className="w-4 h-4" />{t("agent.preview")}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => execute(true)}
+                              className="flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold bg-brand text-white hover:bg-brand-strong shadow-button-glow transition-all">
+                              <Clapperboard className="w-4 h-4" />{t("agent.preview")}（本地 Demo）<ArrowRight className="w-4 h-4" />
+                            </button>
+                            <div className="flex flex-col gap-1 flex-1 sm:flex-initial">
+                              <button
+                                disabled
+                                className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border border-cosmic-border text-text-tertiary cursor-not-allowed opacity-60"
+                              >
+                                <Coins className="w-4 h-4" />{t("agent.real")} · {plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)} 积分
+                              </button>
+                              <p className="text-[11px] text-amber-600/90 text-center sm:text-left px-1">
+                                预览模式：未配置 Key，真实生成已禁用
+                              </p>
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
                   </div>

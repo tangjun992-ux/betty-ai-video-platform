@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_user, get_optional_user, require_admin
+from app.auth import require_admin
 from app.db import get_db
 from app.models.user import User
 from app.services.moderation import score_prompt
@@ -40,11 +40,9 @@ async def _ensure_mod_table(db: AsyncSession) -> None:
 
 
 async def _require_moderator(
-    user: User | None = Depends(get_optional_user),
+    user: User = Depends(require_admin),
 ) -> User:
-    """Prefer admin; fall back to any authenticated user for minimal ops."""
-    if user is None:
-        raise HTTPException(status_code=401, detail="登录后才能进行审核操作")
+    """Moderation actions require admin privileges."""
     return user
 
 

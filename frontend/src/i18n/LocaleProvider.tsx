@@ -7,7 +7,7 @@ export type Locale = "zh" | "en";
 export const dictionaries = {
   zh: {
     "nav.home": "首页", "nav.explore": "探索", "nav.feed": "动态", "nav.library": "我的库",
-    "nav.projects": "项目", "nav.agent": "AI Agent", "nav.image": "图片创作",
+    "nav.projects": "项目", "nav.sessions": "会话", "nav.agent": "AI Agent", "nav.image": "图片创作",
     "nav.video": "视频创作", "nav.imageEdit": "图片编辑", "nav.motion": "动作同步",
     "nav.lipsync": "唇形同步", "nav.avatar": "AI 头像", "nav.timeline": "时间线",
     "nav.upscale": "AI 放大", "nav.removeBg": "去背景", "nav.extend": "AI 扩图",
@@ -44,7 +44,7 @@ export const dictionaries = {
   },
   en: {
     "nav.home": "Home", "nav.explore": "Explore", "nav.feed": "Feed", "nav.library": "Library",
-    "nav.projects": "Projects", "nav.agent": "AI Agent", "nav.image": "Image Creation",
+    "nav.projects": "Projects", "nav.sessions": "Sessions", "nav.agent": "AI Agent", "nav.image": "Image Creation",
     "nav.video": "Video Creation", "nav.imageEdit": "Image Editor", "nav.motion": "Motion Sync",
     "nav.lipsync": "Lip Sync", "nav.avatar": "AI Avatar", "nav.timeline": "Timeline",
     "nav.upscale": "AI Upscale", "nav.removeBg": "Remove Background", "nav.extend": "AI Extend",

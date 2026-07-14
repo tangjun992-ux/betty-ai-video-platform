@@ -31,6 +31,7 @@ import {
   Mic,
   Clock,
   Wand2,
+  MessageSquare,
   Maximize2,
   Scissors,
   Expand,
@@ -49,6 +50,7 @@ const mainNav = [
   { href: "/feed", icon: Rss, labelKey: "nav.feed" },
   { href: "/library", icon: Library, labelKey: "nav.library" },
   { href: "/projects", icon: FolderKanban, labelKey: "nav.projects" },
+  { href: "/sessions", icon: MessageSquare, labelKey: "nav.sessions" },
   { href: "/teams", icon: Users, labelKey: "nav.teams" },
 ];
 
