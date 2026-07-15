@@ -16,11 +16,15 @@ from app.db import get_db
 from app.models.user import User
 from app.models.project import Project
 from app.models.team import Team, TeamMember
+from app.models.team_balance import TeamBalance
+from app.services.credits import _ensure_team_balance, transfer_to_team, is_active_team_member
 
 router = APIRouter()
 
-# Seat limits per team (minimal collaboration guardrail).
-MAX_TEAM_SEATS = 10
+# Default seat caps by owner plan tier (对标 Creator 5席 / Pro 10席).
+SEAT_LIMIT_BY_ROLE = {"creator": 5, "pro": 10, "admin": 20}
+DEFAULT_SEAT_LIMIT = 3
+TEAM_STARTER_CREDITS = 500
 
 
 class CreateTeamRequest(BaseModel):
@@ -39,13 +43,19 @@ class VisibilityRequest(BaseModel):
     visibility: str = Field(..., description="private | team | public")
 
 
-def _team_dict(t: Team, members: list[TeamMember] | None = None) -> dict:
+def _seat_limit_for_role(role: str | None) -> int:
+    return SEAT_LIMIT_BY_ROLE.get((role or "").lower(), DEFAULT_SEAT_LIMIT)
+
+
+def _team_dict(t: Team, members: list[TeamMember] | None = None, balance: TeamBalance | None = None) -> dict:
     return {
         "team_id": t.team_id,
         "name": t.name,
         "description": t.description,
         "owner_user_id": t.owner_user_id,
         "default_visibility": t.default_visibility,
+        "seat_limit": getattr(t, "seat_limit", None) or DEFAULT_SEAT_LIMIT,
+        "shared_credits": (balance.credits + getattr(balance, "daily_credits", 0)) if balance else 0,
         "created_at": t.created_at.isoformat() if t.created_at else "",
         "members": [
             {
@@ -72,21 +82,25 @@ async def create_team(
             detail="团队协作需要 Creator 及以上套餐。请升级后创建团队。",
         )
     vis = req.default_visibility if req.default_visibility in ("private", "team", "public") else "team"
+    seats = _seat_limit_for_role(user.role)
     team = Team(
         team_id=str(uuid.uuid4()),
         owner_user_id=user.id,
         name=req.name.strip(),
         description=req.description,
         default_visibility=vis,
+        seat_limit=seats,
     )
     owner_member = TeamMember(
         team_id=team.team_id, user_id=user.id, role="owner",
         invite_email=user.email, invite_username=user.username, status="active",
     )
+    team_balance = TeamBalance(team_id=team.team_id, credits=TEAM_STARTER_CREDITS, daily_credits=0)
     db.add(team)
     db.add(owner_member)
+    db.add(team_balance)
     await db.commit()
-    return _team_dict(team, [owner_member])
+    return _team_dict(team, [owner_member], team_balance)
 
 
 @router.get("/", summary="我的团队列表")
@@ -104,7 +118,8 @@ async def list_teams(
     out = []
     for t in teams:
         mres = await db.execute(select(TeamMember).where(TeamMember.team_id == t.team_id))
-        out.append(_team_dict(t, list(mres.scalars().all())))
+        bres = await db.execute(select(TeamBalance).where(TeamBalance.team_id == t.team_id))
+        out.append(_team_dict(t, list(mres.scalars().all()), bres.scalar_one_or_none()))
     return {"teams": out}
 
 
@@ -123,7 +138,8 @@ async def get_team(
     if not team:
         raise HTTPException(status_code=404, detail="团队不存在")
     mres = await db.execute(select(TeamMember).where(TeamMember.team_id == team_id))
-    return _team_dict(team, list(mres.scalars().all()))
+    bres = await db.execute(select(TeamBalance).where(TeamBalance.team_id == team_id))
+    return _team_dict(team, list(mres.scalars().all()), bres.scalar_one_or_none())
 
 
 @router.post("/{team_id}/invite", summary="邀请成员（email / username）")
@@ -142,8 +158,11 @@ async def invite_member(
         raise HTTPException(status_code=403, detail="仅 owner/admin 可邀请")
 
     count_res = await db.execute(select(TeamMember).where(TeamMember.team_id == team_id))
-    if len(count_res.scalars().all()) >= MAX_TEAM_SEATS:
-        raise HTTPException(status_code=400, detail=f"团队人数已达上限（{MAX_TEAM_SEATS} 人）")
+    tres = await db.execute(select(Team).where(Team.team_id == team_id))
+    team_row = tres.scalar_one_or_none()
+    seat_cap = (team_row.seat_limit if team_row else None) or DEFAULT_SEAT_LIMIT
+    if len(count_res.scalars().all()) >= seat_cap:
+        raise HTTPException(status_code=400, detail=f"团队席位已满（上限 {seat_cap} 人）")
 
     target: User | None = None
     if req.username:
@@ -266,3 +285,80 @@ async def remove_member(
     await db.delete(row)
     await db.commit()
     return {"removed": member_user_id, "team_id": team_id}
+
+
+class FundTeamRequest(BaseModel):
+    amount: int = Field(..., ge=1, le=50_000, description="从个人账户转入团队的积分")
+
+
+@router.get("/{team_id}/billing", summary="团队共享积分池")
+async def team_billing(
+    team_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not await is_active_team_member(db, team_id, user.id):
+        raise HTTPException(status_code=403, detail="不是该团队成员")
+    bal = await _ensure_team_balance(db, team_id)
+    return {
+        "team_id": team_id,
+        "credits": bal.credits + getattr(bal, "daily_credits", 0),
+        "purchased_credits": bal.credits,
+        "total_spent": bal.total_spent,
+        "total_tasks": bal.total_tasks,
+        "total_purchased": bal.total_purchased,
+    }
+
+
+@router.post("/{team_id}/fund", summary="从个人账户充值团队共享池")
+async def fund_team(
+    team_id: str,
+    req: FundTeamRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    try:
+        new_balance = await transfer_to_team(db, user.id, team_id, req.amount)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="不是该团队成员")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await db.commit()
+    return {"team_id": team_id, "credits": new_balance, "transferred": req.amount}
+
+
+@router.post("/members/accept", summary="接受待处理的团队邀请")
+async def accept_pending_invites(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Activate pending invites that match the logged-in user's email or username."""
+    res = await db.execute(
+        select(TeamMember).where(
+            and_(
+                TeamMember.status == "pending",
+                TeamMember.user_id == 0,
+            )
+        )
+    )
+    rows = list(res.scalars().all())
+    accepted = []
+    email = (user.email or "").lower()
+    username = (user.username or "").strip()
+    for row in rows:
+        match = (
+            (row.invite_email and row.invite_email.lower() == email)
+            or (row.invite_username and row.invite_username == username)
+        )
+        if not match:
+            continue
+        exists = await db.execute(select(TeamMember).where(
+            and_(TeamMember.team_id == row.team_id, TeamMember.user_id == user.id, TeamMember.status == "active")))
+        if exists.scalar_one_or_none():
+            await db.delete(row)
+            continue
+        row.user_id = user.id
+        row.status = "active"
+        accepted.append(row.team_id)
+    await db.commit()
+    return {"accepted": accepted, "count": len(accepted)}

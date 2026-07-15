@@ -294,7 +294,7 @@ class PromptRouter:
         scores = []
 
         for model_id, pref in models.items():
-            if model_health.is_circuit_open(model_id):
+            if model_health.is_circuit_open(model_id) or model_health.is_quarantined(model_id):
                 logger.warning("Router skipped open circuit model: %s", model_id)
                 continue
             model_score = 50.0  # base score

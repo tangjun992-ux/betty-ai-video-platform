@@ -202,6 +202,21 @@ async def get_project(
     return row.to_api_dict()
 
 
+class ParseSrtRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=500_000, description="SRT 文件文本内容")
+
+
+@router.post("/timeline/subtitles/parse", summary="解析 SRT 字幕文件")
+async def parse_subtitle_srt(req: ParseSrtRequest):
+    """Parse SubRip (.srt) into subtitle_track cues for timeline compose."""
+    from app.adapters.demo_provider import parse_srt
+
+    cues = parse_srt(req.content)
+    if not cues:
+        raise HTTPException(status_code=400, detail="无法解析 SRT：请检查时间轴格式与编码（UTF-8）")
+    return {"subtitle_track": cues, "cue_count": len(cues)}
+
+
 class ComposeClip(BaseModel):
     url: str = Field(..., description="片段 URL（本地 /api/v1/media 视频）")
     start: float = Field(0.0, description="入点 (秒)")

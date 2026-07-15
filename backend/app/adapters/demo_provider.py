@@ -363,6 +363,52 @@ def _srt_timestamp(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{sec:02d},{ms:03d}"
 
 
+def _srt_time_to_seconds(raw: str) -> float:
+    """Parse SRT timestamp (HH:MM:SS,mmm or HH:MM:SS.mmm) to seconds."""
+    ts = (raw or "").strip().replace(",", ".")
+    parts = ts.split(":")
+    if len(parts) != 3:
+        raise ValueError(f"invalid SRT timestamp: {raw!r}")
+    h = int(parts[0])
+    m = int(parts[1])
+    sec_parts = parts[2].split(".")
+    sec = int(sec_parts[0])
+    ms = int(sec_parts[1]) if len(sec_parts) > 1 else 0
+    return h * 3600 + m * 60 + sec + ms / 1000.0
+
+
+def parse_srt(content: str) -> list[dict]:
+    """Parse SubRip (.srt) text into [{text, start, end}, ...]."""
+    text = (content or "").lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n")
+    blocks = [b.strip() for b in text.split("\n\n") if b.strip()]
+    cues: list[dict] = []
+    for block in blocks:
+        lines = [ln.strip() for ln in block.split("\n") if ln.strip()]
+        if len(lines) < 2:
+            continue
+        idx = 0
+        if lines[0].isdigit():
+            idx = 1
+        if idx >= len(lines):
+            continue
+        timing = lines[idx]
+        if "-->" not in timing:
+            continue
+        start_raw, end_raw = [p.strip() for p in timing.split("-->", 1)]
+        try:
+            start = _srt_time_to_seconds(start_raw)
+            end = _srt_time_to_seconds(end_raw)
+        except ValueError:
+            continue
+        if end <= start:
+            end = start + 1.0
+        body = "\n".join(lines[idx + 1:]).strip()
+        if not body:
+            continue
+        cues.append({"text": body, "start": round(start, 3), "end": round(end, 3)})
+    return cues
+
+
 def _write_srt(subtitle_track: list[dict], path: Path) -> None:
     lines: list[str] = []
     for i, sub in enumerate(subtitle_track, 1):

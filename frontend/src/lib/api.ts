@@ -502,6 +502,24 @@ export async function saveTimelineProject(payload: {
   return res.json();
 }
 
+/** Parse SubRip (.srt) content into timeline subtitle cues */
+export async function parseTimelineSrt(content: string): Promise<{
+  subtitle_track: { text: string; start: number; end: number }[];
+  cue_count: number;
+}> {
+  const res = await fetch(`${API_BASE}/timeline/subtitles/parse`, {
+    method: "POST",
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    const detail = e.detail;
+    throw new Error(typeof detail === "string" ? detail : detail?.message || `解析失败: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Compose an ordered list of clips into one film (timeline editor) */
 export async function composeTimeline(
   clips: {

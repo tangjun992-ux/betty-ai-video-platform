@@ -53,6 +53,26 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_migrate_timeline_settings_column)
+        await conn.run_sync(_migrate_team_and_transaction_columns)
+
+
+def _migrate_team_and_transaction_columns(connection):
+    """Add team billing columns on existing SQLite/Postgres DBs."""
+    from sqlalchemy import inspect, text
+
+    try:
+        insp = inspect(connection)
+        tables = set(insp.get_table_names())
+        if "teams" in tables:
+            cols = {c["name"] for c in insp.get_columns("teams")}
+            if "seat_limit" not in cols:
+                connection.execute(text("ALTER TABLE teams ADD COLUMN seat_limit INTEGER DEFAULT 5"))
+        if "transactions" in tables:
+            cols = {c["name"] for c in insp.get_columns("transactions")}
+            if "team_id" not in cols:
+                connection.execute(text("ALTER TABLE transactions ADD COLUMN team_id VARCHAR(36)"))
+    except Exception:
+        pass
 
 
 def _migrate_timeline_settings_column(connection):

@@ -261,11 +261,16 @@ MODELS = [
 # model that must never be surfaced by default nor silently used in production.
 
 def verified_model_ids() -> set[str]:
-    return {m.id for m in MODELS if m.status == "active"}
+    from app.services.model_health import model_health
+    return {
+        m.id for m in MODELS
+        if m.status == "active" and model_health.is_routable(m.id)
+    }
 
 
 def is_verified(model_id: str) -> bool:
-    return any(m.id == model_id and m.status == "active" for m in MODELS)
+    from app.services.model_health import model_health
+    return any(m.id == model_id and m.status == "active" for m in MODELS) and model_health.is_routable(model_id)
 
 
 def default_verified_model(media_type: str) -> str | None:
@@ -295,7 +300,16 @@ async def list_models(status: str | None = None, include_beta: bool = False):
     - no `status`: returns verified only unless `include_beta=true` (and beta is
       never bundled into the primary `models` array in production).
     """
-    active = [_serialize(m) for m in MODELS if m.status == "active"]
+    from app.services.model_health import model_health
+
+    active = [
+        _serialize(m) for m in MODELS
+        if m.status == "active" and model_health.is_routable(m.id)
+    ]
+    quarantined_ids = [
+        m.id for m in MODELS
+        if m.status == "active" and not model_health.is_routable(m.id)
+    ]
     beta = [_serialize(m) for m in MODELS if m.status != "active"]
 
     if status == "active":
@@ -313,6 +327,7 @@ async def list_models(status: str | None = None, include_beta: bool = False):
         "models": primary,
         "active": active,
         "beta": beta,
+        "quarantined": quarantined_ids,
         "active_count": len(active),
         "beta_count": len(beta),
     }

@@ -18,6 +18,7 @@ from app.config import settings
 PREFIX = "model-health"
 CIRCUIT_FAILURES = 3
 CIRCUIT_TTL_SECONDS = 300
+QUARANTINE_TTL_SECONDS = 24 * 3600
 
 
 @dataclass
@@ -75,6 +76,9 @@ class ModelHealthRegistry:
     def _circuit_key(self, model_id: str) -> str:
         return f"{PREFIX}:circuit:{model_id}"
 
+    def _quarantine_key(self, model_id: str) -> str:
+        return f"{PREFIX}:quarantine:{model_id}"
+
     def _memory_snapshot(self, model_id: str) -> HealthSnapshot:
         with self._lock:
             raw = dict(self._memory.get(model_id, {}))
@@ -103,6 +107,33 @@ class ModelHealthRegistry:
 
     def is_circuit_open(self, model_id: str) -> bool:
         return self.snapshot(model_id).circuit_open
+
+    def is_quarantined(self, model_id: str) -> bool:
+        try:
+            return bool(self._client().exists(self._quarantine_key(model_id)))
+        except Exception:
+            with self._lock:
+                expiry = self._memory.get(f"q:{model_id}", {}).get("expiry", 0)
+                return bool(expiry and expiry > time.time())
+
+    def is_routable(self, model_id: str) -> bool:
+        return not self.is_circuit_open(model_id) and not self.is_quarantined(model_id)
+
+    def set_quarantine(self, model_id: str, reason: str = "", ttl: int = QUARANTINE_TTL_SECONDS) -> None:
+        payload = json.dumps({"reason": (reason or "")[:500], "at": int(time.time())})
+        try:
+            self._client().setex(self._quarantine_key(model_id), ttl, payload)
+        except Exception:
+            with self._lock:
+                self._memory[f"q:{model_id}"] = {"expiry": time.time() + ttl, "reason": reason}
+
+    def clear_quarantine(self, model_id: str) -> None:
+        try:
+            self._client().delete(self._quarantine_key(model_id))
+        except Exception:
+            pass
+        with self._lock:
+            self._memory.pop(f"q:{model_id}", None)
 
     def score(self, model_id: str) -> float:
         return self.snapshot(model_id).score
@@ -160,11 +191,12 @@ class ModelHealthRegistry:
     def reset(self, model_id: str) -> None:
         try:
             client = self._client()
-            client.delete(self._stats_key(model_id), self._circuit_key(model_id))
+            client.delete(self._stats_key(model_id), self._circuit_key(model_id), self._quarantine_key(model_id))
         except Exception:
             pass
         with self._lock:
             self._memory.pop(model_id, None)
+            self._memory.pop(f"q:{model_id}", None)
             self._circuits.pop(model_id, None)
 
 

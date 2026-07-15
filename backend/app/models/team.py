@@ -13,6 +13,7 @@ class Team(Base):
     description = Column(Text, nullable=True)
     # project visibility: private | team | public
     default_visibility = Column(String(20), nullable=False, default="team")
+    seat_limit = Column(Integer, nullable=False, default=5)
 
     def __repr__(self):
         return f"<Team {self.team_id} {self.name}>"

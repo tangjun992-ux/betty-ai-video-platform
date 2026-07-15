@@ -16,6 +16,7 @@ app = Celery(
         "app.tasks.lipsync_tasks",
         "app.tasks.motion_tasks",
         "app.tasks.timeline_tasks",
+        "app.tasks.health_tasks",
         "app.collector.tasks",
     ],
 )
@@ -39,6 +40,7 @@ app.conf.update(
         "app.tasks.motion_tasks.*": {"queue": "video_q"},
         # Timeline compose is a multi-asset orchestration → pipeline queue.
         "app.tasks.timeline_tasks.*": {"queue": "pipeline_q"},
+        "app.tasks.health_tasks.*": {"queue": "pipeline_q"},
         "app.tasks.pipeline_tasks.*": {"queue": "pipeline_q"},
         "app.tasks.director_tasks.*": {"queue": "director_q"},
         "app.collector.tasks.*": {"queue": "collector_q"},
@@ -100,7 +102,19 @@ app.conf.update(
             "kwargs": {"days": 7},
             "options": {"queue": "collector_q"},
         },
-    } if os.getenv("VIS_COLLECTION_AUTO", "true").lower() == "true" else {},
+        # Model health smoke: daily proactive probe + quarantine
+        "model-health-smoke-daily": {
+            "task": "app.tasks.health_tasks.smoke_active_models",
+            "schedule": 86400.0,
+            "options": {"queue": "pipeline_q"},
+        },
+    } if os.getenv("VIS_COLLECTION_AUTO", "true").lower() == "true" else {
+        "model-health-smoke-daily": {
+            "task": "app.tasks.health_tasks.smoke_active_models",
+            "schedule": 86400.0,
+            "options": {"queue": "pipeline_q"},
+        },
+    },
 )
 
 if __name__ == "__main__":

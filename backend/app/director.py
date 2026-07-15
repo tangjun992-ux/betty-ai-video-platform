@@ -88,7 +88,7 @@ def _pick_model(media_type: str, want_styles: list[str], prefer: str = "balanced
     from app.services.model_health import model_health
     active = [
         m for m in all_cands
-        if m.get("status") == "active" and not model_health.is_circuit_open(m["id"])
+        if m.get("status") == "active" and model_health.is_routable(m["id"])
     ]
     cands = active or all_cands
     if not cands:
@@ -750,7 +750,7 @@ class DirectorExecutor:
                 return generated[0] if isinstance(generated, list) else generated
 
             selected_model = step.model_id
-            if model_health.is_circuit_open(selected_model):
+            if model_health.is_circuit_open(selected_model) or model_health.is_quarantined(selected_model):
                 selected_model = get_fallback(selected_model) or selected_model
 
             started = time.monotonic()
@@ -766,7 +766,7 @@ class DirectorExecutor:
                 model_health.record_failure(
                     selected_model, str(primary_error), retryable=retryable)
                 fallback_id = get_fallback(selected_model) if retryable else None
-                if not fallback_id or model_health.is_circuit_open(fallback_id):
+                if not fallback_id or not model_health.is_routable(fallback_id):
                     raise
                 logger.warning(
                     "[director] fallback %s -> %s: %s",

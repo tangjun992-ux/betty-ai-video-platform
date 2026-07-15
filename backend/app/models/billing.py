@@ -18,6 +18,7 @@ class Transaction(Base):
 
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     task_id = Column(String(36), nullable=True, index=True)
+    team_id = Column(String(36), nullable=True, index=True)
 
     type = Column(String(20), nullable=False)
     amount = Column(Integer, nullable=False)

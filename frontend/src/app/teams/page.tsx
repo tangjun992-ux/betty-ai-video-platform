@@ -18,6 +18,8 @@ interface Team {
   name: string;
   description?: string;
   default_visibility: string;
+  seat_limit?: number;
+  shared_credits?: number;
   members: TeamMember[];
 }
 
@@ -136,7 +138,12 @@ export default function TeamsPage() {
                   <h2 className="font-semibold text-text-primary">{t.name}</h2>
                   {t.description && <p className="text-xs text-text-secondary mt-0.5">{t.description}</p>}
                   <p className="text-[11px] text-text-tertiary mt-1">
-                    可见性：{t.default_visibility} · {t.members?.length || 0} 名成员
+                    可见性：{t.default_visibility} · {t.members?.length || 0}/{t.seat_limit ?? 5} 席
+                    {typeof t.shared_credits === "number" && (
+                      <span className="ml-2 text-brand font-medium" data-testid="team-shared-credits">
+                        共享池 {t.shared_credits} 积分
+                      </span>
+                    )}
                   </p>
                 </div>
                 <button

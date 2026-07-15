@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Trash2, ChevronLeft, ChevronRight, Film, Loader2,
   Sparkles, Download, Music, ImageIcon, Video as VideoIcon, Type as TypeIcon,
-  Save, FolderOpen,
+  Save, FolderOpen, Upload,
 } from "lucide-react";
 import {
   listLibrary,
@@ -14,6 +14,7 @@ import {
   listTimelineProjects,
   getTimelineProject,
   saveTimelineProject,
+  parseTimelineSrt,
   API_BASE,
   type TimelineProject,
 } from "@/lib/api";
@@ -33,6 +34,7 @@ interface Clip {
 
 type Transition = "cut" | "fade" | "dissolve";
 type ExportPreset = "landscape_16_9" | "portrait_9_16" | "square_1_1";
+interface SubtitleCue { text: string; start: number; end: number; }
 
 function resolveMedia(url: string): string {
   if (!url) return url;
@@ -87,6 +89,9 @@ function TimelineEditorContent() {
   const [result, setResult] = useState<{ url: string; thumbnail: string } | null>(null);
   const [transition, setTransition] = useState<Transition>("fade");
   const [subtitleText, setSubtitleText] = useState("");
+  const [subtitleCues, setSubtitleCues] = useState<SubtitleCue[]>([]);
+  const [importingSrt, setImportingSrt] = useState(false);
+  const srtInputRef = useRef<HTMLInputElement>(null);
   const [showSubtitleTrack, setShowSubtitleTrack] = useState(true);
   const [exportPreset, setExportPreset] = useState<ExportPreset>("landscape_16_9");
   const [selectedClipKey, setSelectedClipKey] = useState<string | null>(null);
@@ -122,7 +127,17 @@ function TimelineEditorContent() {
     const narrUrl = settings.narration_url;
     setNarration(narrUrl ? libAudios.find((a) => a.url === narrUrl) || null : null);
     const subs = settings.subtitle_track;
-    setSubtitleText(subs?.[0]?.text?.trim() || "");
+    if (subs && subs.length > 1) {
+      setSubtitleCues(subs.map((s) => ({
+        text: s.text || "",
+        start: s.start ?? 0,
+        end: s.end ?? 5,
+      })));
+      setSubtitleText("");
+    } else {
+      setSubtitleCues([]);
+      setSubtitleText(subs?.[0]?.text?.trim() || "");
+    }
     setResult(null);
   }, []);
 
@@ -237,8 +252,26 @@ function TimelineEditorContent() {
   };
 
   const buildSubtitleTrack = () => {
+    if (subtitleCues.length > 0) return subtitleCues;
     if (!subtitleText.trim()) return [];
     return [{ text: subtitleText.trim(), start: 0, end: Math.max(trackDuration(), 5) }];
+  };
+
+  const importSrtFile = async (file: File) => {
+    setImportingSrt(true);
+    try {
+      const content = await file.text();
+      const { subtitle_track, cue_count } = await parseTimelineSrt(content);
+      setSubtitleCues(subtitle_track);
+      setSubtitleText("");
+      setResult(null);
+      toast.success("SRT 已导入", `${cue_count} 条字幕 · ${file.name}`);
+    } catch (e: any) {
+      toast.error("SRT 导入失败", e.message || "请检查文件格式");
+    } finally {
+      setImportingSrt(false);
+      if (srtInputRef.current) srtInputRef.current.value = "";
+    }
   };
 
   const buildSavePayload = () => ({
@@ -576,10 +609,38 @@ function TimelineEditorContent() {
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2 text-xs font-semibold text-text-secondary">
               <TypeIcon className="w-3.5 h-3.5 text-brand" /> 字幕轨
+              {subtitleCues.length > 0 && (
+                <span className="text-[10px] text-brand font-medium" data-testid="timeline-srt-cue-count">
+                  {subtitleCues.length} 条 SRT
+                </span>
+              )}
             </div>
-            <button onClick={() => setShowSubtitleTrack((v) => !v)} className="text-[11px] text-text-tertiary hover:text-brand">
-              {showSubtitleTrack ? "收起" : "展开"}
-            </button>
+            <div className="flex items-center gap-2">
+              <input
+                ref={srtInputRef}
+                type="file"
+                accept=".srt,text/plain"
+                className="hidden"
+                data-testid="timeline-srt-file"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importSrtFile(f);
+                }}
+              />
+              <button
+                type="button"
+                data-testid="timeline-srt-import"
+                disabled={importingSrt}
+                onClick={() => srtInputRef.current?.click()}
+                className="text-[11px] text-text-secondary hover:text-brand flex items-center gap-1"
+              >
+                {importingSrt ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                导入 SRT
+              </button>
+              <button onClick={() => setShowSubtitleTrack((v) => !v)} className="text-[11px] text-text-tertiary hover:text-brand">
+                {showSubtitleTrack ? "收起" : "展开"}
+              </button>
+            </div>
           </div>
           <AnimatePresence>
             {showSubtitleTrack && (
@@ -588,16 +649,27 @@ function TimelineEditorContent() {
                   <textarea
                     data-testid="timeline-subtitle-input"
                     value={subtitleText}
-                    onChange={(e) => setSubtitleText(e.target.value)}
+                    onChange={(e) => { setSubtitleText(e.target.value); setSubtitleCues([]); }}
                     rows={2}
-                    placeholder="输入成片字幕文案（合成时将烧录进视频）"
+                    placeholder="输入成片字幕文案，或导入 .srt 多轨字幕"
                     className="w-full bg-transparent text-sm resize-none focus:outline-none placeholder:text-text-tertiary"
                   />
-                  {subtitleText.trim() && (
+                  {subtitleCues.length > 0 ? (
+                    <div className="mt-2 max-h-24 overflow-y-auto space-y-1" data-testid="timeline-srt-preview">
+                      {subtitleCues.slice(0, 5).map((c, i) => (
+                        <div key={i} className="text-[11px] text-text-secondary truncate">
+                          {c.start.toFixed(1)}s–{c.end.toFixed(1)}s · {c.text}
+                        </div>
+                      ))}
+                      {subtitleCues.length > 5 && (
+                        <div className="text-[10px] text-text-tertiary">… 另有 {subtitleCues.length - 5} 条</div>
+                      )}
+                    </div>
+                  ) : subtitleText.trim() ? (
                     <div className="mt-2 h-8 rounded-lg bg-black/80 text-white text-xs flex items-center justify-center px-3 truncate" data-testid="timeline-subtitle-preview">
                       {subtitleText.trim()}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </motion.div>
             )}
