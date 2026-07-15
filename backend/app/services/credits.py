@@ -1,22 +1,33 @@
 """
 Shared credit deduction — personal balance or team shared pool.
 
-Generation APIs pass an optional ``team_id`` (via ``X-Team-Id`` header) to spend
-from the team pool when the actor is an active member.
+APIs pass an optional ``team_id`` (via ``X-Team-Id`` header) to spend from the
+team pool when the actor is an active member.
 """
 from __future__ import annotations
 
 import logging
 from typing import Optional
 
+from fastapi import Request
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.billing import UserBalance, Transaction, TransactionType
-from app.models.team import TeamMember
+from app.models.team import Team, TeamMember
 from app.models.team_balance import TeamBalance
 
 logger = logging.getLogger(__name__)
+
+# Creator/Pro subscriptions auto-fund the owner's primary team pool.
+TEAM_SUBSCRIPTION_PLANS = frozenset({"creator", "pro"})
+
+
+def resolve_team_id(request: Request | None) -> Optional[str]:
+    """Read X-Team-Id from the incoming request (empty → None)."""
+    if request is None:
+        return None
+    return (request.headers.get("x-team-id") or "").strip() or None
 
 
 async def _ensure_user_balance(db: AsyncSession, user_id: int) -> UserBalance:
@@ -155,3 +166,46 @@ async def transfer_to_team(
     ))
     await db.flush()
     return team_bal.credits
+
+
+async def grant_subscription_to_team_pool(
+    db: AsyncSession,
+    user_id: int,
+    plan_id: str,
+    credits: int,
+    *,
+    order_no: str = "",
+) -> int:
+    """Auto-recharge team shared pool when a Creator/Pro subscription is granted."""
+    if credits <= 0 or plan_id not in TEAM_SUBSCRIPTION_PLANS:
+        return 0
+
+    res = await db.execute(
+        select(Team).where(Team.owner_user_id == user_id).order_by(Team.created_at.asc())
+    )
+    team = res.scalars().first()
+    if not team:
+        logger.info("subscription team pool skip: user=%s has no owned team", user_id)
+        return 0
+
+    balance = await _ensure_team_balance(db, team.team_id)
+    before = balance.credits
+    balance.credits += credits
+    balance.total_purchased = (balance.total_purchased or 0) + credits
+
+    db.add(Transaction(
+        user_id=user_id,
+        type=TransactionType.BONUS.value,
+        amount=credits,
+        balance_before=before,
+        balance_after=balance.credits,
+        payment_id=order_no or None,
+        description=f"订阅 {plan_id} 自动充值团队池（+{credits}）",
+        team_id=team.team_id,
+    ))
+    await db.flush()
+    logger.info(
+        "subscription team pool funded: user=%s team=%s +%d credits",
+        user_id, team.team_id[:8], credits,
+    )
+    return credits

@@ -40,6 +40,18 @@ export function guestId(): string {
   return id;
 }
 
+/** Active team pool for shared credit deduction (X-Team-Id). */
+export function activeTeamId(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("betty-active-team-id");
+}
+
+export function setActiveTeamId(teamId: string | null): void {
+  if (typeof window === "undefined") return;
+  if (teamId) localStorage.setItem("betty-active-team-id", teamId);
+  else localStorage.removeItem("betty-active-team-id");
+}
+
 /** Headers for API calls — bearer when logged in, else stable guest id. */
 export function apiAuthHeaders(extra?: HeadersInit): Headers {
   const headers = new Headers(extra);
@@ -48,6 +60,10 @@ export function apiAuthHeaders(extra?: HeadersInit): Headers {
     if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
   } else if (typeof window !== "undefined" && !headers.has("X-Guest-Id")) {
     headers.set("X-Guest-Id", guestId());
+  }
+  const teamId = activeTeamId();
+  if (teamId && !headers.has("X-Team-Id")) {
+    headers.set("X-Team-Id", teamId);
   }
   return headers;
 }

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.models.task import Task
-from app.services.credits import deduct_credits
+from app.services.credits import deduct_credits, resolve_team_id
 from app.tasks.image_tasks import generate_image_task
 from app.tasks.video_tasks import generate_video_task
 from app.tasks.pipeline_tasks import run_pipeline
@@ -75,7 +75,7 @@ async def submit_generation(
     user_id: int = Depends(resolve_user_id),
 ):
     task_id = str(uuid.uuid4())
-    team_id = (request.headers.get("x-team-id") or "").strip() or None
+    team_id = resolve_team_id(request)
     # Deterministic seed: reuse the caller's (reproduce) or roll a fresh one so
     # every generation is reproducible and variations can be requested later.
     import random as _random

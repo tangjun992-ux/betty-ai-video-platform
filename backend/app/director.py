@@ -555,6 +555,41 @@ def _size_from_params(params: dict, default: str) -> str:
     return _RATIO_TO_SIZE.get(ratio, default)
 
 
+_ASPECT_TO_EXPORT = {
+    "16:9": "landscape_16_9",
+    "9:16": "portrait_9_16",
+    "1:1": "square_1_1",
+}
+
+
+def _export_preset_from_params(params: dict | None) -> str | None:
+    if not params:
+        return None
+    preset = params.get("export_preset")
+    if preset:
+        return preset
+    ratio = params.get("aspect_ratio")
+    return _ASPECT_TO_EXPORT.get(ratio)
+
+
+def _script_to_subtitle_track(script: str, duration_per_cue: float = 3.0) -> list[dict]:
+    """Build simple timed cues from narration script (Director ↔ timeline/SRT bridge)."""
+    parts = re.split(r"[。！？\n.!?]+", script or "")
+    cues: list[dict] = []
+    t = 0.0
+    for part in parts:
+        text = part.strip()
+        if not text:
+            continue
+        cues.append({
+            "text": text,
+            "start": round(t, 3),
+            "end": round(t + duration_per_cue, 3),
+        })
+        t += duration_per_cue
+    return cues
+
+
 # ─────────────────────────────── 执行器 ───────────────────────────────
 class DirectorExecutor:
     def __init__(self, dry_run: bool = True):
@@ -578,10 +613,39 @@ class DirectorExecutor:
                 return {"type": "prompt", "enhanced_prompt": enhanced}
 
             if step.action == "subtitle":
-                await asyncio.sleep(0.02)
+                results = getattr(self, "_results", {}) or {}
+                subtitle_track: list[dict] = []
+                params = step.params or {}
+
+                srt_content = params.get("srt") or params.get("srt_content")
+                if srt_content:
+                    from app.adapters.demo_provider import parse_srt
+                    subtitle_track = parse_srt(srt_content)
+                else:
+                    script = params.get("script") or step.prompt or ""
+                    if not script:
+                        for dep in step.depends_on:
+                            r = results.get(dep)
+                            if not isinstance(r, dict):
+                                continue
+                            script = (
+                                r.get("script")
+                                or r.get("enhanced_prompt")
+                                or r.get("prompt")
+                                or script
+                            )
+                    cue_duration = float(params.get("cue_duration", 3.0) or 3.0)
+                    subtitle_track = _script_to_subtitle_track(script, cue_duration)
+
+                self._subtitle_track = subtitle_track
                 step.status = "done"
-                return {"type": "subtitle", "ok": True, "model": step.model_name,
-                        "note": "字幕编排", "cost": step.est_credits}
+                return {
+                    "type": "subtitle",
+                    "subtitle_track": subtitle_track,
+                    "cue_count": len(subtitle_track),
+                    "model": step.model_name,
+                    "cost": step.est_credits,
+                }
 
             if step.action == "audio":
                 # Real TTS voiceover (配音) — narration that the final film muxes,
@@ -631,15 +695,32 @@ class DirectorExecutor:
                     step.status = "done"
                     return {"type": "compose", "ok": True, "model": step.model_name,
                             "note": "无分镜可合成"}
+                subtitle_track: list[dict] = list(getattr(self, "_subtitle_track", None) or [])
+                for dep in step.depends_on:
+                    r = results.get(dep)
+                    if isinstance(r, dict) and r.get("type") == "subtitle":
+                        subtitle_track = r.get("subtitle_track") or subtitle_track
+                export_preset = _export_preset_from_params(step.params)
                 try:
                     from app.adapters.demo_provider import compose_final_video
                     final_url, poster = await asyncio.to_thread(
-                        compose_final_video, shot_urls, None, True, narration_url)
+                        compose_final_video,
+                        shot_urls,
+                        None,
+                        True,
+                        narration_url,
+                        subtitle_track=subtitle_track,
+                        export_preset=export_preset,
+                    )
                     step.status = "done"
-                    return {"type": "video", "media_url": final_url, "url": final_url,
-                            "thumbnail": poster, "model": step.model_name, "cost": 0,
-                            "final": True, "shot_count": len(shot_urls),
-                            "has_voiceover": bool(narration_url)}
+                    return {
+                        "type": "video", "media_url": final_url, "url": final_url,
+                        "thumbnail": poster, "model": step.model_name, "cost": 0,
+                        "final": True, "shot_count": len(shot_urls),
+                        "has_voiceover": bool(narration_url),
+                        "subtitle_cues": len(subtitle_track),
+                        "export_preset": export_preset,
+                    }
                 except Exception as e:
                     logger.warning("[director] compose failed: %s", e)
                     step.status = "done"

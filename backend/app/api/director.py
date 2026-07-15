@@ -7,8 +7,9 @@ Director API — 导演式编排端点 (对标 yapper Agent)
 import json
 import os
 import uuid
+import re
 from typing import Any, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -19,6 +20,7 @@ from app.db import get_db
 from app.models.director_session import DirectorSession
 from app.auth import resolve_user_id
 from app.models.user import User
+from app.services.credits import deduct_credits, resolve_team_id
 from app.services.director_brain import ideate as brain_ideate, refine_with_llm
 
 router = APIRouter()
@@ -80,6 +82,26 @@ def _resolve_plan(req: RunRequest):
                                   duration=req.duration, ref_image_url=req.ref_image_url)
 
 
+async def _charge_director_plan(
+    db: AsyncSession, user_id: int, plan, *, team_id: str | None, dry_run: bool,
+) -> None:
+    """Deduct estimated plan credits before real execution."""
+    if dry_run:
+        return
+    cost = sum(s.est_credits for s in plan.steps if not s.skip)
+    if cost <= 0:
+        return
+    task_id = uuid.uuid4().hex
+    ok = await deduct_credits(
+        db, user_id, cost, task_id, "director",
+        team_id=team_id,
+        description=f"Director plan ({len(plan.steps)} steps)",
+    )
+    if not ok:
+        raise HTTPException(status_code=402, detail=f"积分不足，需要 {cost} 积分")
+    await db.commit()
+
+
 @router.post("/plan", summary="生成导演式创作计划")
 async def make_plan(req: PlanRequest):
     _moderate_brief(req.brief)
@@ -121,19 +143,31 @@ async def refine(req: RefineRequest):
 
 
 @router.post("/run", summary="执行导演计划，产出多资产 (非流式)")
-async def run_plan(req: RunRequest, user_id: int = Depends(resolve_user_id)):
+async def run_plan(
+    req: RunRequest,
+    request: Request,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     plan = _resolve_plan(req)
     dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    await _charge_director_plan(db, user_id, plan, team_id=resolve_team_id(request), dry_run=dry)
     executor = DirectorExecutor(dry_run=dry)
     return await executor.run(plan)
 
 
 @router.post("/run/stream", summary="流式执行导演计划 (SSE)")
-async def run_plan_stream(req: RunRequest, user_id: int = Depends(resolve_user_id)):
+async def run_plan_stream(
+    req: RunRequest,
+    request: Request,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """Stream per-step events (SSE). Frontend reads the body incrementally to
     animate the director's progress and surface assets as each shot completes."""
     plan = _resolve_plan(req)
     dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    await _charge_director_plan(db, user_id, plan, team_id=resolve_team_id(request), dry_run=dry)
     executor = DirectorExecutor(dry_run=dry)
 
     async def gen():
@@ -153,6 +187,7 @@ async def run_plan_stream(req: RunRequest, user_id: int = Depends(resolve_user_i
 @router.post("/run/async", summary="异步执行导演计划 (后台任务, 避免长视频阻塞)")
 async def run_plan_async(
     req: RunRequest,
+    request: Request,
     user_id: int = Depends(resolve_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -161,6 +196,7 @@ async def run_plan_async(
     a live connection."""
     plan = _resolve_plan(req)
     dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    await _charge_director_plan(db, user_id, plan, team_id=resolve_team_id(request), dry_run=dry)
     session_uid = req.session_uid
     if session_uid:
         await _owned_session(db, session_uid, user_id)
@@ -198,9 +234,13 @@ async def run_progress(
 
 
 @router.post("/step/rerun", summary="重新执行单个步骤 (per-step 重生成)")
-async def rerun_step(req: StepRerunRequest, user_id: int = Depends(resolve_user_id)):
+async def rerun_step(
+    req: StepRerunRequest,
+    request: Request,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     dry = _dry_run_default() if req.dry_run is None else req.dry_run
-    executor = DirectorExecutor(dry_run=dry)
     data = dict(req.step)
     step = DirectorStep(
         id=data.get("id") or uuid.uuid4().hex[:8],
@@ -210,6 +250,16 @@ async def rerun_step(req: StepRerunRequest, user_id: int = Depends(resolve_user_
         depends_on=[], est_credits=int(data.get("est_credits", 0) or 0),
         params=data.get("params", {}) or {},
     )
+    if not dry and step.est_credits > 0:
+        ok = await deduct_credits(
+            db, user_id, step.est_credits, step.id, step.model_id or "director",
+            team_id=resolve_team_id(request),
+            description=f"Director rerun {step.title[:20]}",
+        )
+        if not ok:
+            raise HTTPException(status_code=402, detail=f"积分不足，需要 {step.est_credits} 积分")
+        await db.commit()
+    executor = DirectorExecutor(dry_run=dry)
     return await executor.run_single(step)
 
 

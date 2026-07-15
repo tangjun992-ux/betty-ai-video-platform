@@ -22,6 +22,7 @@ from app.models.payment_order import PaymentOrder
 from app.models.user import User
 from app.api.pricing import PLANS
 from app.services.entitlements import plan_subscription_role, pick_higher_role, user_role
+from app.services.credits import grant_subscription_to_team_pool
 from app.rate_limiter import rate_limit
 from app.auth import resolve_user_id
 from app.services.receipt_email import send_receipt_email
@@ -55,11 +56,36 @@ CREDIT_PACKS = [
     {"id": "pack_studio", "name": "工作室包", "credits": 12000, "price_usd": 89.99, "bonus": 3000},
 ]
 
+# Team seat SKUs — billed per seat (对标 Creator 5席 / Pro 10席 + 可购额外席位).
+TEAM_SEAT_SKUS = {
+    "seat_monthly": {
+        "name": "团队额外席位（月付）",
+        "price_usd": 9.99,
+        "seats": 1,
+        "stripe_price_env": "STRIPE_PRICE_TEAM_SEAT_MONTHLY",
+    },
+    "seat_pack_3": {
+        "name": "团队席位包（3席）",
+        "price_usd": 24.99,
+        "seats": 3,
+        "stripe_price_env": "STRIPE_PRICE_TEAM_SEAT_MONTHLY",
+    },
+}
+
+_STRIPE_PLAN_PRICE = {
+    ("creator", "monthly"): "STRIPE_PRICE_CREATOR_MONTHLY",
+    ("creator", "yearly"): "STRIPE_PRICE_CREATOR_YEARLY",
+    ("pro", "monthly"): "STRIPE_PRICE_PRO_MONTHLY",
+    ("pro", "yearly"): "STRIPE_PRICE_PRO_YEARLY",
+}
+
 
 class CheckoutRequest(BaseModel):
-    kind: str = Field(..., description="plan | pack")
-    id: str = Field(..., description="套餐或积分包 id")
+    kind: str = Field(..., description="plan | pack | team_seats")
+    id: str = Field(..., description="套餐、积分包或席位 SKU id")
     cycle: str = Field("monthly", description="套餐计费周期 monthly|yearly")
+    team_id: Optional[str] = Field(None, description="team_seats 购买时必填")
+    quantity: int = Field(1, ge=1, le=50, description="席位购买数量倍数")
 
 
 class PayCreateRequest(CheckoutRequest):
@@ -77,25 +103,67 @@ async def _get_balance(db: AsyncSession, user_id: int) -> UserBalance:
 
 
 def _resolve_purchase(req: CheckoutRequest):
-    """Return (credits, price_usd, label) for the requested plan/pack."""
+    """Return (credits, price_usd, label, extra_meta) for the requested purchase."""
+    if req.kind == "team_seats":
+        sku = TEAM_SEAT_SKUS.get(req.id)
+        if not sku:
+            raise HTTPException(status_code=404, detail=f"席位 SKU 不存在: {req.id}")
+        if not req.team_id:
+            raise HTTPException(status_code=400, detail="购买席位需要 team_id")
+        seats = int(sku["seats"]) * int(req.quantity)
+        price = round(float(sku["price_usd"]) * req.quantity, 2)
+        label = f"{sku['name']} ×{req.quantity}"
+        return 0, price, label, {"team_id": req.team_id, "seats": seats, "sku_id": req.id}
     if req.kind == "plan":
         plan = next((p for p in PLANS if p.id == req.id), None)
         if not plan:
             raise HTTPException(status_code=404, detail=f"套餐不存在: {req.id}")
         price = plan.yearly_price if req.cycle == "yearly" else plan.monthly_price
         months = 12 if req.cycle == "yearly" else 1
-        return plan.credits_per_month * months, round(price * months, 2), f"{plan.name}·{'年' if req.cycle=='yearly' else '月'}付"
+        return (
+            plan.credits_per_month * months,
+            round(price * months, 2),
+            f"{plan.name}·{'年' if req.cycle=='yearly' else '月'}付",
+            {},
+        )
     if req.kind == "pack":
         pack = next((p for p in CREDIT_PACKS if p["id"] == req.id), None)
         if not pack:
             raise HTTPException(status_code=404, detail=f"积分包不存在: {req.id}")
-        return pack["credits"] + pack.get("bonus", 0), pack["price_usd"], pack["name"]
-    raise HTTPException(status_code=400, detail="kind 必须是 plan 或 pack")
+        return pack["credits"] + pack.get("bonus", 0), pack["price_usd"], pack["name"], {}
+    raise HTTPException(status_code=400, detail="kind 必须是 plan、pack 或 team_seats")
+
+
+def _stripe_line_item(req: CheckoutRequest, credits: int, price_usd: float, label: str) -> dict:
+    """Prefer configured Stripe Price IDs in production; fall back to price_data."""
+    price_id = ""
+    if req.kind == "plan":
+        env_key = _STRIPE_PLAN_PRICE.get((req.id, req.cycle))
+        if env_key:
+            price_id = getattr(settings, env_key, "") or os.getenv(env_key, "")
+    elif req.kind == "team_seats":
+        sku = TEAM_SEAT_SKUS.get(req.id) or {}
+        env_key = sku.get("stripe_price_env", "")
+        if env_key:
+            price_id = getattr(settings, env_key, "") or os.getenv(env_key, "")
+    if price_id:
+        qty = req.quantity if req.kind == "team_seats" else 1
+        if req.kind == "team_seats" and req.id == "seat_pack_3":
+            qty = req.quantity  # each unit = 3 seats via metadata grant
+        return {"price": price_id, "quantity": qty}
+    return {
+        "price_data": {
+            "currency": "usd",
+            "product_data": {"name": f"betty · {label}" + (f" ({credits} 积分)" if credits else "")},
+            "unit_amount": int(price_usd * 100),
+        },
+        "quantity": 1,
+    }
 
 
 @router.get("/credit-packs", summary="一次性积分包")
 async def credit_packs():
-    return {"packs": CREDIT_PACKS}
+    return {"packs": CREDIT_PACKS, "team_seat_skus": TEAM_SEAT_SKUS}
 
 
 @router.get("/summary", summary="账户余额与消费概览")
@@ -246,7 +314,7 @@ async def receipt(order_no: str, db: AsyncSession = Depends(get_db),
              dependencies=[Depends(rate_limit("checkout", rpm=10, rph=60))])
 async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
                    user_id: int = Depends(resolve_user_id)):
-    credits, price_usd, label = _resolve_purchase(req)
+    credits, price_usd, label, extra = _resolve_purchase(req)
 
     # Stripe-ready branch (activated when a key is configured).
     if settings.STRIPE_API_KEY:
@@ -256,28 +324,29 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
             order_no = "ST" + uuid.uuid4().hex[:22]
             order = PaymentOrder(
                 order_no=order_no, user_id=user_id, provider="stripe",
-                kind=req.kind, item_id=req.id, cycle=req.cycle, credits=credits,
+                kind=req.kind, item_id=req.id,
+                cycle=extra.get("team_id") if req.kind == "team_seats" else req.cycle,
+                credits=int(extra.get("seats") or 0) if req.kind == "team_seats" else credits,
                 amount_usd=price_usd, amount_cny=round(price_usd * settings.USD_TO_CNY, 2),
                 label=label, status="pending",
             )
             db.add(order)
             await db.commit()
+            meta = {
+                "kind": req.kind, "id": req.id, "credits": str(credits),
+                "order_no": order_no, "user_id": str(user_id),
+                "quantity": str(req.quantity),
+            }
+            if extra.get("team_id"):
+                meta["team_id"] = extra["team_id"]
+            if extra.get("seats"):
+                meta["seats"] = str(extra["seats"])
             session = stripe.checkout.Session.create(
                 mode="payment",
-                line_items=[{
-                    "price_data": {
-                        "currency": "usd",
-                        "product_data": {"name": f"betty · {label} ({credits} 积分)"},
-                        "unit_amount": int(price_usd * 100),
-                    },
-                    "quantity": 1,
-                }],
+                line_items=[_stripe_line_item(req, credits, price_usd, label)],
                 success_url=settings.STRIPE_SUCCESS_URL,
                 cancel_url=settings.STRIPE_CANCEL_URL,
-                metadata={
-                    "kind": req.kind, "id": req.id, "credits": str(credits),
-                    "order_no": order_no, "user_id": str(user_id),
-                },
+                metadata=meta,
             )
             return {"mode": "stripe", "checkout_url": session.url, "credits": credits, "order_no": order_no}
         except Exception as e:
@@ -292,12 +361,21 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
         )
 
     # Dev-grant mode — credit immediately + record a real transaction.
+    order_no = "DEV" + uuid.uuid4().hex[:20]
+    if req.kind == "team_seats":
+        if extra.get("team_id"):
+            await _grant_team_seats(db, user_id, extra["team_id"], int(extra.get("seats") or 0), order_no)
+        await db.commit()
+        return {
+            "mode": "dev", "success": True, "seats_added": int(extra.get("seats") or 0),
+            "team_id": extra.get("team_id"), "label": label, "order_no": order_no,
+        }
+
     bal = await _get_balance(db, user_id)
     before = bal.credits + bal.daily_credits
     bal.credits += credits
     bal.total_purchased += credits
     after = bal.credits + bal.daily_credits
-    order_no = "DEV" + uuid.uuid4().hex[:20]
     txn = Transaction(
         user_id=user_id,
         type=TransactionType.PURCHASE.value,
@@ -311,6 +389,8 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
     )
     db.add(txn)
     await _apply_plan_role(db, user_id, req.kind, req.id)
+    if req.kind == "plan":
+        await grant_subscription_to_team_pool(db, user_id, req.id, credits, order_no=order_no)
     await db.commit()
     logger.info("dev-grant checkout: +%d credits (%s), balance %d→%d", credits, label, before, after)
     try:
@@ -356,6 +436,36 @@ async def _apply_plan_role(
     return user.role
 
 
+async def _grant_team_seats(
+    db: AsyncSession, user_id: int, team_id: str, seats: int, order_no: str,
+) -> int:
+    """Increase team seat_limit after a team_seats purchase."""
+    if seats <= 0:
+        return 0
+    from app.models.team import Team, TeamMember
+    from sqlalchemy import and_
+
+    mem = await db.execute(
+        select(TeamMember).where(
+            and_(TeamMember.team_id == team_id, TeamMember.user_id == user_id, TeamMember.status == "active")
+        )
+    )
+    member = mem.scalar_one_or_none()
+    if not member or member.role not in ("owner", "admin"):
+        raise HTTPException(status_code=403, detail="仅团队 owner/admin 可购买席位")
+
+    tres = await db.execute(select(Team).where(Team.team_id == team_id))
+    team = tres.scalar_one_or_none()
+    if not team:
+        raise HTTPException(status_code=404, detail="团队不存在")
+
+    before = int(team.seat_limit or 0)
+    team.seat_limit = before + seats
+    await db.flush()
+    logger.info("team seats granted: team=%s +%d seats (order=%s)", team_id[:8], seats, order_no)
+    return team.seat_limit
+
+
 async def _grant_order(db: AsyncSession, order: PaymentOrder, *, email: Optional[str] = None) -> int:
     """Idempotently credit a PAID order and record a PURCHASE transaction."""
     uid = order.user_id
@@ -364,6 +474,17 @@ async def _grant_order(db: AsyncSession, order: PaymentOrder, *, email: Optional
     if order.granted or order.status != "paid":
         bal = await _get_balance(db, uid)
         return bal.credits + bal.daily_credits
+
+    if order.kind == "team_seats":
+        seats = int(order.credits or 0)
+        team_id = order.cycle
+        if team_id and seats > 0:
+            await _grant_team_seats(db, uid, team_id, seats, order.order_no)
+        order.granted = True
+        await db.commit()
+        bal = await _get_balance(db, uid)
+        return bal.credits + bal.daily_credits
+
     bal = await _get_balance(db, uid)
     before = bal.credits + bal.daily_credits
     bal.credits += order.credits
@@ -378,6 +499,10 @@ async def _grant_order(db: AsyncSession, order: PaymentOrder, *, email: Optional
     ))
     order.granted = True
     await _upgrade_role_for_plan(db, uid, order)
+    if order.kind == "plan":
+        await grant_subscription_to_team_pool(
+            db, uid, order.item_id, order.credits, order_no=order.order_no,
+        )
     await db.commit()
     logger.info("order %s granted +%d credits (%s)", order.order_no, order.credits, order.provider)
     _emit_receipt(order, to_email=email)
@@ -397,7 +522,7 @@ async def pay_create(req: PayCreateRequest, db: AsyncSession = Depends(get_db),
     from app.services import payments
     if req.method not in ("wechat", "alipay"):
         raise HTTPException(status_code=400, detail="method 必须是 wechat 或 alipay")
-    credits, price_usd, label = _resolve_purchase(req)
+    credits, price_usd, label, extra = _resolve_purchase(req)
     amount_cny = round(price_usd * settings.USD_TO_CNY, 2)
     order_no = "BT" + uuid.uuid4().hex[:22]
     notify_url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/api/v1/billing/pay/notify/{req.method}"
@@ -410,7 +535,9 @@ async def pay_create(req: PayCreateRequest, db: AsyncSession = Depends(get_db),
     provider = req.method if live else "sandbox"
     order = PaymentOrder(
         order_no=order_no, user_id=user_id, provider=provider,
-        kind=req.kind, item_id=req.id, cycle=req.cycle, credits=credits,
+        kind=req.kind, item_id=req.id,
+        cycle=extra.get("team_id") if req.kind == "team_seats" else req.cycle,
+        credits=int(extra.get("seats") or 0) if req.kind == "team_seats" else credits,
         amount_usd=price_usd, amount_cny=amount_cny, label=label,
         status="pending", qr_content=qr_content,
     )

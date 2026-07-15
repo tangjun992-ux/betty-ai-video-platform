@@ -56,7 +56,10 @@ def smoke_active_models(self):
             model_health.set_quarantine(m.id, reason=err or "smoke failed")
             results["failed"].append(m.id)
             results["quarantined"].append(m.id)
-            logger.warning("model smoke failed: %s — %s", m.id, err)
+            logger.error(
+                "MODEL_HEALTH_ALERT model=%s quarantined reason=%s",
+                m.id, err or "smoke failed",
+            )
 
     logger.info(
         "model health smoke done: probed=%d ok=%d quarantined=%d",

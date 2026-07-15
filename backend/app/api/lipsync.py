@@ -6,7 +6,7 @@ import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,10 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.models.user import User
 from app.models.task import Task
-from app.models.billing import UserBalance, Transaction, TransactionType
 from app.auth import resolve_user_id
 from app.services.moderation import check_prompt
 from app.services.entitlements import lipsync_cost, require_studio_tier
+from app.services.credits import deduct_credits, resolve_team_id
 from celery_app import app as celery_app
 
 logger = logging.getLogger(__name__)
@@ -32,36 +32,9 @@ class LipsyncResponse(BaseModel):
     tier: str = "demo"
 
 
-async def _deduct_lipsync_credits(db: AsyncSession, user_id: int, cost: int, task_id: str) -> bool:
-    r = await db.execute(select(UserBalance).where(UserBalance.user_id == user_id))
-    balance = r.scalar_one_or_none()
-    if balance is None:
-        balance = UserBalance(user_id=user_id, credits=5, daily_credits=3, daily_credits_max=3)
-        db.add(balance)
-        await db.flush()
-    total = balance.credits + balance.daily_credits
-    if total < cost:
-        return False
-    remaining = cost
-    if balance.daily_credits > 0:
-        d = min(balance.daily_credits, remaining)
-        balance.daily_credits -= d
-        remaining -= d
-    if remaining > 0:
-        balance.credits -= remaining
-    before = total
-    after = balance.credits + balance.daily_credits
-    db.add(Transaction(
-        user_id=user_id, type=TransactionType.CONSUMPTION.value, amount=-cost,
-        balance_before=before, balance_after=after, model_used="lipsync",
-        description=f"Lipsync task {task_id[:8]}",
-    ))
-    await db.flush()
-    return True
-
-
 @router.post("/lipsync", response_model=LipsyncResponse, summary="提交唇形同步任务")
 async def submit_lipsync(
+    request: Request,
     image_url: Optional[str] = Form(None),
     audio_url: Optional[str] = Form(None),
     text: Optional[str] = Form(None),
@@ -85,6 +58,8 @@ async def submit_lipsync(
     if tier_norm == "studio":
         require_studio_tier(u.role if u else "guest", "Lipsync Studio")
     cost = lipsync_cost(tier_norm)
+    team_id = resolve_team_id(request)
+    model_name = model if tier_norm == "demo" else "lipsync-studio"
 
     if text:
         m = check_prompt(text)
@@ -105,7 +80,10 @@ async def submit_lipsync(
         uploaded_audio_url = audio_asset.url
 
     task_id = str(uuid.uuid4())
-    if not await _deduct_lipsync_credits(db, user_id, cost, task_id):
+    if not await deduct_credits(
+        db, user_id, cost, task_id, model_name,
+        team_id=team_id, description=f"Lipsync task {task_id[:8]}",
+    ):
         raise HTTPException(status_code=402, detail=f"积分不足，需要 {cost} 积分")
 
     task = Task(
@@ -113,8 +91,8 @@ async def submit_lipsync(
         user_id=user_id,
         prompt=text or "lipsync",
         media_type="video",
-        requested_model=model if tier_norm == "demo" else "lipsync-studio",
-        selected_model=model if tier_norm == "demo" else "lipsync-studio",
+        requested_model=model_name,
+        selected_model=model_name,
         parameters={
             "image_url": uploaded_image_url,
             "audio_url": uploaded_audio_url,

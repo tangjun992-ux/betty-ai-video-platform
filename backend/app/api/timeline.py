@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,10 +16,13 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.db import get_db
 from app.auth import resolve_user_id
+from app.services.credits import deduct_credits, resolve_team_id
 from app.models.timeline_project import TimelineProject as TimelineProjectRow
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+TIMELINE_RENDER_COST = 4
 
 
 # ─── Request / Response Models ─────────────────────────
@@ -292,6 +295,7 @@ async def compose_timeline(req: ComposeRequest):
 )
 async def render_timeline(
     req: RenderRequest,
+    request: Request,
     user_id: int = Depends(resolve_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -313,6 +317,14 @@ async def render_timeline(
         )
 
     task_id = str(uuid.uuid4())
+    team_id = resolve_team_id(request)
+    if not await deduct_credits(
+        db, user_id, TIMELINE_RENDER_COST, task_id, "timeline-render",
+        team_id=team_id, description=f"Timeline render {req.project_id[:8]}",
+    ):
+        raise HTTPException(status_code=402, detail=f"积分不足，需要 {TIMELINE_RENDER_COST} 积分")
+    await db.commit()
+
     total_duration = sum(max(0, float(c.get("end", 5)) - float(c.get("start", 0))) for c in clips)
     estimated_time = max(30, int(total_duration * 3))  # ~3x real-time
 
@@ -341,6 +353,6 @@ async def render_timeline(
         status="queued",
         project_id=req.project_id,
         estimated_time_seconds=estimated_time,
-        estimated_cost_credits=4,
+        estimated_cost_credits=TIMELINE_RENDER_COST,
         poll_url=f"/api/v1/tasks/{task_id}",
     )

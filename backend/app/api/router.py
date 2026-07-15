@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api import generate, tasks, models_info, health, upload, websocket, gallery, auth, settings, lipsync, motion, timeline, pricing, director, dashboard, library, projects, billing, developer, events, teams, moderation_admin, system
+from app.api import generate, tasks, models_info, health, upload, websocket, gallery, auth, settings, lipsync, motion, timeline, pricing, director, dashboard, library, projects, billing, developer, events, teams, moderation_admin, model_health_admin, system
 from app.collector.api import router as collector_router
 
 router = APIRouter()
@@ -22,6 +22,7 @@ router.include_router(projects.router, prefix="/projects", tags=["Projects"])
 router.include_router(billing.router, prefix="/billing", tags=["Billing"])
 router.include_router(teams.router, prefix="/teams", tags=["Teams"])
 router.include_router(moderation_admin.router, prefix="/moderation", tags=["Moderation Admin"])
+router.include_router(model_health_admin.router, prefix="/admin/model-health", tags=["Model Health Admin"])
 router.include_router(developer.router, prefix="", tags=["Developer API"])
 router.include_router(events.router, prefix="", tags=["Product Events"])
 router.include_router(lipsync.router, prefix="", tags=["Lipsync"])
