@@ -69,7 +69,7 @@ MODELS = [
         id="imagen-4", provider="KIE.ai → Google", display_name="Imagen 4",
         description="Google 摄影级写实与光影",
         capabilities=ModelCapability(media_types=["image"], max_resolution="4K", max_duration_s=0, avg_latency_s=11, styles=["photorealistic", "landscape", "food", "product"], cost_per_image_credits=4, cost_per_5s_video_credits=0),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="active",
     ),
     ModelInfo(
         id="ideogram-v3", provider="KIE.ai → Ideogram", display_name="Ideogram V3",
@@ -167,13 +167,13 @@ MODELS = [
         id="kling-2.5-turbo", provider="KIE.ai → Kuaishou", display_name="Kling 2.5 Turbo",
         description="快手旗舰，运动连贯/性价比高",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=60, styles=["cinematic", "dynamic", "realistic"], cost_per_image_credits=0, cost_per_5s_video_credits=7),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="active",
     ),
     ModelInfo(
         id="kling-2.1-master", provider="KIE.ai → Kuaishou", display_name="Kling 2.1 Master",
         description="大师版，复杂运镜",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=90, styles=["cinematic", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=9),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="active",
     ),
     ModelInfo(
         id="kling-2.1-pro", provider="KIE.ai → Kuaishou", display_name="Kling 2.1 Pro",
@@ -287,13 +287,13 @@ from app.models.billing import UserBalance, Transaction, TransactionType
 
 PLANS_DATA = [
     {"id":"starter","name":"入门版","monthly_price":9.99,"yearly_price":7.99,"credits":1000,
-     "features":[{"name":"Seedance 2.0 全模态视频","included":False},{"name":"16+ 专业图片模型","included":True},{"name":"23+ 专业视频模型","included":False},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":False},{"name":"17+ 专业图片模型","included":True},{"name":"24+ 专业视频模型","included":False},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
     {"id":"personal","name":"个人版","monthly_price":24.99,"yearly_price":19.99,"credits":3000,
-     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"16+ 专业图片模型","included":True},{"name":"23+ 专业视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"17+ 专业图片模型","included":True},{"name":"24+ 专业视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
     {"id":"creator","name":"创作者版","monthly_price":49.99,"yearly_price":39.99,"credits":7000,"highlighted":True,"badge":"最受欢迎 🔥",
-     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"16+ 专业图片模型","included":True},{"name":"23+ 专业视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
-    {"id":"pro","name":"专业版","monthly_price":99.99,"yearly_price":79.99,"credits":15000,
-     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"16+ 专业图片模型","included":True},{"name":"23+ 专业视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"17+ 专业图片模型","included":True},{"name":"24+ 专业视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
+    {"id":"pro","name":"Max","monthly_price":149.99,"yearly_price":119.99,"credits":22500,"badge":"最佳价值",
+     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"17+ 专业图片模型","included":True},{"name":"24+ 专业视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
 ]
 
 @router.get("/pricing/plans", summary="获取定价方案")
