@@ -380,6 +380,36 @@ def _write_srt(subtitle_track: list[dict], path: Path) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+EXPORT_PRESETS: dict[str, tuple[int, int]] = {
+    "landscape_16_9": (1920, 1080),
+    "portrait_9_16": (1080, 1920),
+    "square_1_1": (1080, 1080),
+}
+
+
+def _trim_video(src: Path, start: float, end: float, dest: Path) -> None:
+    """Trim a source clip to [start, end] seconds (video-only for concat pipeline)."""
+    start_s = max(0.0, float(start))
+    full = _probe_duration(src)
+    end_s = float(end) if float(end) > 0 else full
+    end_s = min(full, max(start_s + 0.1, end_s))
+    duration = end_s - start_s
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-ss", f"{start_s:.3f}",
+            "-i", str(src),
+            "-t", f"{duration:.3f}",
+            "-an",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25",
+            str(dest),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=120,
+    )
+
+
 def _burn_subtitles(video_path: Path, subtitle_track: list[dict]) -> Path:
     """Burn SRT subtitles into the composed video (bottom-center)."""
     if not subtitle_track:
@@ -406,7 +436,9 @@ def _burn_subtitles(video_path: Path, subtitle_track: list[dict]) -> Path:
 def compose_final_video(video_urls: list[str], style: Optional[str] = None,
                         with_audio: bool = True, narration_url: Optional[str] = None,
                         *, transitions: Optional[list[str]] = None,
-                        subtitle_track: Optional[list[dict]] = None) -> tuple[str, str]:
+                        subtitle_track: Optional[list[dict]] = None,
+                        clip_trims: Optional[list[dict]] = None,
+                        export_preset: Optional[str] = None) -> tuple[str, str]:
     """
     Stitch multiple shot videos into ONE final film (the Director Agent's hero
     deliverable). Scales/pads every shot to the first shot's canvas, concatenates
@@ -423,7 +455,30 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
     out_name = f"final_{uuid.uuid4().hex[:12]}.mp4"
     out_path = gen_dir / out_name
 
-    w, h = _probe_size(paths[0])
+    trim_specs = clip_trims or [{} for _ in paths]
+    work_paths: list[Path] = []
+    for i, src in enumerate(paths):
+        spec = trim_specs[i] if i < len(trim_specs) else {}
+        start = float(spec.get("start", 0) or 0)
+        end_raw = float(spec.get("end", 0) or 0)
+        full_dur = _probe_duration(src)
+        end = end_raw if end_raw > 0 else full_dur
+        needs_trim = start > 0.05 or end < full_dur - 0.05
+        if needs_trim:
+            trimmed = gen_dir / f"trim_{uuid.uuid4().hex[:10]}.mp4"
+            _trim_video(src, start, end, trimmed)
+            work_paths.append(trimmed)
+        else:
+            work_paths.append(src)
+    paths = work_paths
+
+    base_w, base_h = _probe_size(paths[0])
+    base_w -= base_w % 2
+    base_h -= base_h % 2
+    if export_preset and export_preset in EXPORT_PRESETS:
+        w, h = EXPORT_PRESETS[export_preset]
+    else:
+        w, h = base_w, base_h
     w -= w % 2
     h -= h % 2
 

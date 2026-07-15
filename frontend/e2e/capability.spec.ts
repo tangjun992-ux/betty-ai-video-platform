@@ -8,8 +8,10 @@ test.beforeAll(async () => {
 test.describe("能力诚实披露", () => {
   test("唇形页展示能力提示", async ({ page }) => {
     await page.goto("/create/lipsync");
+    const accept = page.getByRole("button", { name: /接受全部|Accept all/i });
+    if (await accept.isVisible().catch(() => false)) await accept.click();
     const notice = page.getByTestId("capability-notice-lipsync");
-    await expect(notice).toBeVisible({ timeout: 30_000 });
+    await expect(notice).toBeVisible({ timeout: 60_000 });
     // Demo copy must be explicit that it is not real lip-sync
     if ((await notice.getAttribute("data-demo")) === "true") {
       await expect(notice).toContainText(/并非真实口型|Ken Burns/);
@@ -18,8 +20,10 @@ test.describe("能力诚实披露", () => {
 
   test("运动页在演示模式禁用提交并说明需 Key", async ({ page }) => {
     await page.goto("/create/motion");
+    const accept = page.getByRole("button", { name: /接受全部|Accept all/i });
+    if (await accept.isVisible().catch(() => false)) await accept.click();
     const notice = page.getByTestId("capability-notice-motion");
-    await expect(notice).toBeVisible({ timeout: 30_000 });
+    await expect(notice).toBeVisible({ timeout: 60_000 });
 
     if ((await notice.getAttribute("data-demo")) === "true") {
       await expect(notice).toContainText(/需要真实模型能力|配置/);

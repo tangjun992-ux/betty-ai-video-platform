@@ -27,8 +27,9 @@ router = APIRouter()
 class ClipItem(BaseModel):
     """时间线片段"""
     url: str = Field(..., description="素材 URL")
-    start: float = Field(0.0, description="起始时间 (秒)")
-    end: float = Field(5.0, description="结束时间 (秒)")
+    start: float = Field(0.0, description="入点 (秒)")
+    end: float = Field(5.0, description="出点 (秒)，0 表示用满素材时长")
+    volume: float = Field(1.0, ge=0.0, le=2.0, description="单镜音量 0–2")
     transition: Optional[str] = Field("cut", description="转场效果: cut | fade | dissolve | slide | zoom")
     label: Optional[str] = Field(None, description="片段标签/备注")
 
@@ -38,6 +39,10 @@ class TimelineSettings(BaseModel):
     with_audio: bool = True
     transition: str = Field("fade", description="cut | fade | dissolve")
     subtitle_track: Optional[List[dict]] = Field(default=None, description="[{text,start,end}]")
+    export_preset: Optional[str] = Field(
+        None,
+        description="导出画幅: landscape_16_9 | portrait_9_16 | square_1_1",
+    )
 
 
 class SaveProjectRequest(BaseModel):
@@ -199,6 +204,9 @@ async def get_project(
 
 class ComposeClip(BaseModel):
     url: str = Field(..., description="片段 URL（本地 /api/v1/media 视频）")
+    start: float = Field(0.0, description="入点 (秒)")
+    end: float = Field(0.0, description="出点 (秒)，0 表示用满素材")
+    volume: float = Field(1.0, ge=0.0, le=2.0, description="单镜音量")
     transition: Optional[str] = Field("cut", description="转场: cut | fade | dissolve")
 
 
@@ -208,6 +216,10 @@ class ComposeRequest(BaseModel):
     with_audio: bool = Field(True, description="是否混入音轨")
     transition: Optional[str] = Field("cut", description="全局默认转场: cut | fade | dissolve")
     subtitle_track: Optional[List[dict]] = Field(None, description="字幕轨（可选）")
+    export_preset: Optional[str] = Field(
+        None,
+        description="导出画幅: landscape_16_9 | portrait_9_16 | square_1_1",
+    )
 
 
 @router.post("/timeline/compose", summary="合成时间线为成片（同步）")
@@ -227,6 +239,10 @@ async def compose_timeline(req: ComposeRequest):
     transitions = [
         (c.transition or req.transition or "cut") for c in req.clips if c.url
     ]
+    clip_trims = [
+        {"start": c.start, "end": c.end, "volume": c.volume}
+        for c in req.clips if c.url
+    ]
     try:
         final_url, poster = await _a.to_thread(
             compose_final_video,
@@ -236,6 +252,8 @@ async def compose_timeline(req: ComposeRequest):
             req.narration_url,
             transitions=transitions,
             subtitle_track=req.subtitle_track or [],
+            clip_trims=clip_trims,
+            export_preset=req.export_preset,
         )
     except Exception as e:
         logger.error("timeline compose failed: %s", e)
@@ -246,6 +264,7 @@ async def compose_timeline(req: ComposeRequest):
         "transition": req.transition or "cut",
         "transitions": transitions,
         "subtitle_track": req.subtitle_track or [],
+        "export_preset": req.export_preset,
     }
 
 

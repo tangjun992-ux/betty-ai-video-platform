@@ -444,11 +444,19 @@ export async function listLibrary(params: { media_type?: string; source?: string
 export interface TimelineProject {
   id: string;
   name: string;
-  clips: { url: string; start?: number; end?: number; transition?: string; label?: string }[];
+  clips: {
+    url: string;
+    start?: number;
+    end?: number;
+    volume?: number;
+    transition?: string;
+    label?: string;
+  }[];
   settings?: {
     narration_url?: string | null;
     with_audio?: boolean;
     transition?: string;
+    export_preset?: string;
     subtitle_track?: { text: string; start?: number; end?: number }[];
   };
   created_at?: string;
@@ -496,14 +504,27 @@ export async function saveTimelineProject(payload: {
 
 /** Compose an ordered list of clips into one film (timeline editor) */
 export async function composeTimeline(
-  clips: { url: string; transition?: string }[],
+  clips: {
+    url: string;
+    start?: number;
+    end?: number;
+    volume?: number;
+    transition?: string;
+  }[],
   opts: {
     narration_url?: string;
     with_audio?: boolean;
     transition?: string;
     subtitle_track?: { text: string; start?: number; end?: number }[];
+    export_preset?: string;
   } = {},
-): Promise<{ url: string; thumbnail: string; clip_count: number; transition?: string }> {
+): Promise<{
+  url: string;
+  thumbnail: string;
+  clip_count: number;
+  transition?: string;
+  export_preset?: string;
+}> {
   const res = await fetch(`${API_BASE}/timeline/compose`, {
     method: "POST",
     headers: apiAuthHeaders({ "Content-Type": "application/json" }),
@@ -513,6 +534,7 @@ export async function composeTimeline(
       with_audio: opts.with_audio ?? true,
       transition: opts.transition ?? "cut",
       subtitle_track: opts.subtitle_track ?? [],
+      export_preset: opts.export_preset ?? null,
     }),
   });
   if (!res.ok) {

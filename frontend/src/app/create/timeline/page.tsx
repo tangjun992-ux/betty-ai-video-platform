@@ -21,8 +21,18 @@ import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
 interface LibItem { id: string; url: string; thumbnail?: string | null; title: string; media_type: string; }
-interface Clip { key: string; url: string; thumbnail?: string | null; title: string; }
+interface Clip {
+  key: string;
+  url: string;
+  thumbnail?: string | null;
+  title: string;
+  start: number;
+  end: number;
+  volume: number;
+}
+
 type Transition = "cut" | "fade" | "dissolve";
+type ExportPreset = "landscape_16_9" | "portrait_9_16" | "square_1_1";
 
 function resolveMedia(url: string): string {
   if (!url) return url;
@@ -36,11 +46,18 @@ const TRANSITIONS: { id: Transition; label: string }[] = [
   { id: "dissolve", label: "叠化 Dissolve" },
 ];
 
+const EXPORT_PRESETS: { id: ExportPreset; label: string; hint: string }[] = [
+  { id: "landscape_16_9", label: "横屏 16:9", hint: "YouTube / B站" },
+  { id: "portrait_9_16", label: "竖屏 9:16", hint: "抖音 / Reels" },
+  { id: "square_1_1", label: "方屏 1:1", hint: "小红书 / 信息流" },
+];
+
 function clipFromUrl(
   url: string,
   lib: LibItem[],
   idx: number,
   label?: string,
+  saved?: { start?: number; end?: number; volume?: number },
 ): Clip {
   const hit = lib.find((v) => v.url === url);
   return {
@@ -48,6 +65,9 @@ function clipFromUrl(
     url,
     thumbnail: hit?.thumbnail,
     title: label || hit?.title || `片段 ${idx + 1}`,
+    start: saved?.start ?? 0,
+    end: saved?.end ?? 5,
+    volume: saved?.volume ?? 1,
   };
 }
 
@@ -68,6 +88,8 @@ function TimelineEditorContent() {
   const [transition, setTransition] = useState<Transition>("fade");
   const [subtitleText, setSubtitleText] = useState("");
   const [showSubtitleTrack, setShowSubtitleTrack] = useState(true);
+  const [exportPreset, setExportPreset] = useState<ExportPreset>("landscape_16_9");
+  const [selectedClipKey, setSelectedClipKey] = useState<string | null>(null);
 
   const [projects, setProjects] = useState<TimelineProject[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -75,7 +97,6 @@ function TimelineEditorContent() {
   const [saving, setSaving] = useState(false);
   const [loadingProject, setLoadingProject] = useState(false);
   const loadedProjectRef = useRef<string | null>(null);
-  const mediaLoadedRef = useRef(false);
 
   const applyProject = useCallback((
     proj: TimelineProject,
@@ -88,9 +109,14 @@ function TimelineEditorContent() {
     setProjectName(proj.name || "未命名项目");
     setTransition(tr);
     setWithAudio(settings.with_audio ?? true);
+    setExportPreset((settings.export_preset as ExportPreset) || "landscape_16_9");
     setTrack(
       (proj.clips || []).map((c, i) =>
-        clipFromUrl(c.url, libVideos, i, c.label || undefined),
+        clipFromUrl(c.url, libVideos, i, c.label || undefined, {
+          start: c.start,
+          end: c.end,
+          volume: (c as { volume?: number }).volume,
+        }),
       ),
     );
     const narrUrl = settings.narration_url;
@@ -132,14 +158,15 @@ function TimelineEditorContent() {
   }, [applyProject, router, toast]);
 
   useEffect(() => {
-    if (mediaLoadedRef.current) return;
-    mediaLoadedRef.current = true;
+    let cancelled = false;
+    setLoading(true);
     (async () => {
       try {
         const [v, a] = await Promise.all([
           listLibrary({ media_type: "video", limit: 60 }),
           listLibrary({ media_type: "audio", limit: 30 }),
         ]);
+        if (cancelled) return;
         const vItems = (v.items || []).filter((i: LibItem) => i.url);
         const aItems = (a.items || []).filter((i: LibItem) => i.url);
         setVideos(vItems);
@@ -149,11 +176,12 @@ function TimelineEditorContent() {
           await loadProjectById(deepLinkProject, vItems, aItems, false);
         }
       } catch (e: any) {
-        toast.error("加载素材库失败", e.message || "");
+        if (!cancelled) toast.error("加载素材库失败", e.message || "");
       } finally {
         setLoading(false);
       }
     })();
+    return () => { cancelled = true; };
   }, [deepLinkProject, loadProjectById, refreshProjects, toast]);
 
   useEffect(() => {
@@ -161,11 +189,43 @@ function TimelineEditorContent() {
     loadProjectById(deepLinkProject, videos, audios, false);
   }, [deepLinkProject, loading, videos, audios, loadProjectById]);
 
+  useEffect(() => {
+    if (track.length === 0) {
+      setSelectedClipKey(null);
+      return;
+    }
+    if (!selectedClipKey || !track.some((c) => c.key === selectedClipKey)) {
+      setSelectedClipKey(track[0].key);
+    }
+  }, [track, selectedClipKey]);
+
   const addClip = useCallback((item: LibItem) => {
-    setTrack((t) => [...t, { key: `${item.id}-${Date.now()}`, url: item.url, thumbnail: item.thumbnail, title: item.title }]);
+    setTrack((t) => [...t, {
+      key: `${item.id}-${Date.now()}`,
+      url: item.url,
+      thumbnail: item.thumbnail,
+      title: item.title,
+      start: 0,
+      end: 5,
+      volume: 1,
+    }]);
     setResult(null);
   }, []);
-  const removeClip = (key: string) => { setTrack((t) => t.filter((c) => c.key !== key)); setResult(null); };
+
+  const updateClip = useCallback((key: string, patch: Partial<Pick<Clip, "start" | "end" | "volume">>) => {
+    setTrack((t) => t.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+    setResult(null);
+  }, []);
+
+  const trackDuration = useCallback(
+    () => track.reduce((sum, c) => sum + Math.max(0.5, c.end - c.start), 0),
+    [track],
+  );
+  const removeClip = (key: string) => {
+    setTrack((t) => t.filter((c) => c.key !== key));
+    setSelectedClipKey((k) => (k === key ? null : k));
+    setResult(null);
+  };
   const move = (idx: number, dir: -1 | 1) => {
     setTrack((t) => {
       const n = [...t]; const j = idx + dir;
@@ -178,7 +238,7 @@ function TimelineEditorContent() {
 
   const buildSubtitleTrack = () => {
     if (!subtitleText.trim()) return [];
-    return [{ text: subtitleText.trim(), start: 0, end: Math.max(track.length * 5, 5) }];
+    return [{ text: subtitleText.trim(), start: 0, end: Math.max(trackDuration(), 5) }];
   };
 
   const buildSavePayload = () => ({
@@ -186,8 +246,9 @@ function TimelineEditorContent() {
     name: projectName.trim() || "未命名项目",
     clips: track.map((c) => ({
       url: c.url,
-      start: 0,
-      end: 5,
+      start: c.start,
+      end: c.end,
+      volume: c.volume,
       transition,
       label: c.title,
     })),
@@ -195,6 +256,7 @@ function TimelineEditorContent() {
       narration_url: narration?.url ?? null,
       with_audio: withAudio,
       transition,
+      export_preset: exportPreset,
       subtitle_track: buildSubtitleTrack(),
     },
   });
@@ -227,16 +289,24 @@ function TimelineEditorContent() {
     try {
       const subtitle_track = buildSubtitleTrack();
       const res = await composeTimeline(
-        track.map((c) => ({ url: c.url, transition })),
+        track.map((c) => ({
+          url: c.url,
+          start: c.start,
+          end: c.end,
+          volume: c.volume,
+          transition,
+        })),
         {
           with_audio: withAudio,
           narration_url: narration?.url,
           transition,
           subtitle_track,
+          export_preset: exportPreset,
         },
       );
       setResult({ url: resolveMedia(res.url), thumbnail: resolveMedia(res.thumbnail) });
-      toast.success("合成完成", `${res.clip_count} 个片段 · 转场 ${transition}${subtitle_track.length ? " · 已烧录字幕" : ""}`);
+      const presetLabel = EXPORT_PRESETS.find((p) => p.id === exportPreset)?.label || exportPreset;
+      toast.success("合成完成", `${res.clip_count} 个片段 · ${presetLabel}${subtitle_track.length ? " · 已烧录字幕" : ""}`);
     } catch (e: any) {
       toast.error("合成失败", e.message || "请稍后重试");
     } finally {
@@ -329,6 +399,32 @@ function TimelineEditorContent() {
         )}
       </div>
 
+      {/* Export preset — social platforms */}
+      <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface p-4 mb-5" data-testid="timeline-export-preset">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <span className="text-sm font-semibold text-text-primary">导出画幅 · 社交预设</span>
+          <div className="flex gap-2 flex-wrap">
+            {EXPORT_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                data-testid={`timeline-preset-${p.id}`}
+                onClick={() => { setExportPreset(p.id); setResult(null); }}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-medium border transition-all text-left",
+                  exportPreset === p.id
+                    ? "bg-brand/10 text-brand border-brand/30"
+                    : "bg-cosmic-subtle border-cosmic-border text-text-secondary hover:text-text-primary",
+                )}
+              >
+                <span className="block">{p.label}</span>
+                <span className="block text-[10px] opacity-70">{p.hint}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Transition selector */}
       <div className="rounded-2xl border border-cosmic-border bg-cosmic-surface p-4 mb-5">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
@@ -370,26 +466,91 @@ function TimelineEditorContent() {
           ) : (
             <div className="flex gap-2 overflow-x-auto pb-2" data-testid="timeline-track">
               {track.map((c, i) => (
-                <div key={c.key} className="relative flex-shrink-0 w-40 group" data-testid="timeline-clip">
+                <div
+                  key={c.key}
+                  className={cn(
+                    "relative flex-shrink-0 w-40 group cursor-pointer rounded-lg",
+                    selectedClipKey === c.key && "ring-2 ring-brand/50",
+                  )}
+                  data-testid="timeline-clip"
+                  onClick={() => setSelectedClipKey(c.key)}
+                >
                   <div className="aspect-video rounded-lg overflow-hidden ring-1 ring-cosmic-border bg-black">
                     {c.thumbnail ? <img src={resolveMedia(c.thumbnail)} alt="" className="w-full h-full object-cover" />
                       : <video src={resolveMedia(c.url)} muted className="w-full h-full object-cover" />}
                   </div>
                   <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-[10px] text-white font-semibold">#{i + 1}</div>
+                  <div className="absolute top-1 right-1 px-1 py-0.5 rounded bg-black/60 text-[9px] text-white">
+                    {c.start.toFixed(1)}–{c.end.toFixed(1)}s
+                  </div>
                   {i < track.length - 1 && (
                     <div className="absolute -right-1 top-1/2 -translate-y-1/2 z-10 px-1 py-0.5 rounded bg-brand text-[9px] text-white font-medium">
                       {transition}
                     </div>
                   )}
                   <div className="absolute inset-x-0 bottom-1 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => move(i, -1)} disabled={i === 0} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => removeClip(c.key)} className="w-6 h-6 rounded bg-black/70 text-white hover:bg-red-500 flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => move(i, 1)} disabled={i === track.length - 1} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); move(i, -1); }} disabled={i === 0} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); removeClip(c.key); }} className="w-6 h-6 rounded bg-black/70 text-white hover:bg-red-500 flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); move(i, 1); }} disabled={i === track.length - 1} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
               ))}
             </div>
           )}
+          {track.length > 0 && selectedClipKey && (() => {
+            const clip = track.find((c) => c.key === selectedClipKey);
+            if (!clip) return null;
+            const idx = track.findIndex((c) => c.key === selectedClipKey);
+            return (
+              <div className="mt-3 p-3 rounded-xl border border-cosmic-border bg-cosmic-subtle/40" data-testid="timeline-clip-trim">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-text-secondary">片段 #{idx + 1} · 入出点 & 音量</span>
+                  <span className="text-[11px] text-text-tertiary">{clip.title}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label className="text-xs text-text-secondary">
+                    入点 In ({clip.start.toFixed(1)}s)
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(0, clip.end - 0.5)}
+                      step={0.1}
+                      value={clip.start}
+                      data-testid="timeline-clip-in"
+                      onChange={(e) => updateClip(clip.key, { start: Math.min(+e.target.value, clip.end - 0.5) })}
+                      className="w-full accent-brand mt-1"
+                    />
+                  </label>
+                  <label className="text-xs text-text-secondary">
+                    出点 Out ({clip.end.toFixed(1)}s)
+                    <input
+                      type="range"
+                      min={clip.start + 0.5}
+                      max={15}
+                      step={0.1}
+                      value={clip.end}
+                      data-testid="timeline-clip-out"
+                      onChange={(e) => updateClip(clip.key, { end: Math.max(+e.target.value, clip.start + 0.5) })}
+                      className="w-full accent-brand mt-1"
+                    />
+                  </label>
+                  <label className="text-xs text-text-secondary">
+                    音量 ({Math.round(clip.volume * 100)}%)
+                    <input
+                      type="range"
+                      min={0}
+                      max={2}
+                      step={0.05}
+                      value={clip.volume}
+                      data-testid="timeline-clip-volume"
+                      onChange={(e) => updateClip(clip.key, { volume: +e.target.value })}
+                      className="w-full accent-brand mt-1"
+                    />
+                  </label>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Narration track */}

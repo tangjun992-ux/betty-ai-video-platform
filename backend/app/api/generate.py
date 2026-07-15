@@ -158,10 +158,10 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
         enhanced_prompt = enhancement.enhanced
 
     # Stage 1c: Content safety pre-check (fast keyword filter)
-    from app.services.moderation import check_prompt
+    from app.services.moderation import check_prompt, moderation_reject
     mod = check_prompt(f"{req.prompt}\n{enhanced_prompt}")
     if not mod.allowed:
-        raise HTTPException(status_code=400, detail=mod.reason)
+        raise moderation_reject(mod)
 
     # Stage 2: Smart model selection via router
     model_selection = prompt_router.select_model(
@@ -296,6 +296,10 @@ class SpeechRequest(BaseModel):
 async def generate_speech(req: SpeechRequest):
     """Text-to-speech voiceover (对标 yapper Generate Audio). Real ElevenLabs via
     KIE when a key is configured; a short local tone otherwise."""
+    from app.services.moderation import check_prompt, moderation_reject
+    mod = check_prompt(req.text)
+    if not mod.allowed:
+        raise moderation_reject(mod)
     from app.adapters.demo_provider import demo_mode_active
     if demo_mode_active():
         from app.adapters.demo_provider import render_demo_speech
@@ -416,6 +420,10 @@ class EnhanceResponse(BaseModel):
 @router.post("/enhance", response_model=EnhanceResponse, summary="AI 优化提示词")
 async def enhance_prompt_endpoint(req: EnhanceRequest):
     """Expand a casual prompt into a richer, professional one (for 'Ask AI to improve')."""
+    from app.services.moderation import check_prompt, moderation_reject
+    mod = check_prompt(req.prompt)
+    if not mod.allowed:
+        raise moderation_reject(mod)
     result = prompt_enhancer.enhance(
         prompt=req.prompt,
         media_type=req.media_type or "auto",

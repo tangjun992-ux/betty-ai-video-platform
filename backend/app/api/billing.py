@@ -19,7 +19,9 @@ from app.config import settings
 from app.db import get_db
 from app.models.billing import UserBalance, Transaction, TransactionType
 from app.models.payment_order import PaymentOrder
+from app.models.user import User
 from app.api.pricing import PLANS
+from app.services.entitlements import plan_subscription_role, pick_higher_role, user_role
 from app.rate_limiter import rate_limit
 from app.auth import resolve_user_id
 from app.services.receipt_email import send_receipt_email
@@ -308,6 +310,7 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
         description=f"购买 {label}（+{credits} 积分）",
     )
     db.add(txn)
+    await _apply_plan_role(db, user_id, req.kind, req.id)
     await db.commit()
     logger.info("dev-grant checkout: +%d credits (%s), balance %d→%d", credits, label, before, after)
     try:
@@ -322,6 +325,37 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
 
 
 # ─── QR-based payment (WeChat / Alipay) ──────────────────
+async def _upgrade_role_for_plan(
+    db: AsyncSession, user_id: int, order: PaymentOrder,
+) -> str | None:
+    """When a subscription plan is paid, bump user.role to match entitlements."""
+    return await _apply_plan_role(db, user_id, order.kind, order.item_id)
+
+
+async def _apply_plan_role(
+    db: AsyncSession, user_id: int, kind: str, item_id: str,
+) -> str | None:
+    if kind != "plan":
+        return None
+    target = plan_subscription_role(item_id)
+    if not target:
+        return None
+    res = await db.execute(select(User).where(User.id == user_id))
+    user = res.scalar_one_or_none()
+    if not user:
+        return None
+    before = user_role(user.role)
+    new_role = pick_higher_role(user.role, target)
+    if new_role != before:
+        user.role = new_role
+        await db.flush()
+        logger.info(
+            "subscription role upgrade user=%s %s→%s (plan=%s)",
+            user_id, before, new_role, item_id,
+        )
+    return user.role
+
+
 async def _grant_order(db: AsyncSession, order: PaymentOrder, *, email: Optional[str] = None) -> int:
     """Idempotently credit a PAID order and record a PURCHASE transaction."""
     uid = order.user_id
@@ -343,6 +377,7 @@ async def _grant_order(db: AsyncSession, order: PaymentOrder, *, email: Optional
         description=f"{order.label}（+{order.credits} 积分 · {order.provider}）",
     ))
     order.granted = True
+    await _upgrade_role_for_plan(db, uid, order)
     await db.commit()
     logger.info("order %s granted +%d credits (%s)", order.order_no, order.credits, order.provider)
     _emit_receipt(order, to_email=email)

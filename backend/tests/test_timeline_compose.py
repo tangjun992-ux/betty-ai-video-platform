@@ -133,3 +133,20 @@ class TestTimelineAPI:
         path = Path(_local_media_path(data["url"]))
         assert path.exists()
         assert path.stat().st_size > 1000
+
+    def test_compose_with_trim_and_export_preset(self, client, video_urls):
+        res = client.post(
+            "/timeline/compose",
+            json={
+                "clips": [
+                    {"url": video_urls[0], "start": 0.2, "end": 1.2, "transition": "cut"},
+                    {"url": video_urls[1], "start": 0.0, "end": 1.0, "transition": "cut"},
+                ],
+                "with_audio": False,
+                "export_preset": "portrait_9_16",
+            },
+        )
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert data["clip_count"] == 2
+        assert data.get("export_preset") == "portrait_9_16"

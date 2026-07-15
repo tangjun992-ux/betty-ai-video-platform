@@ -156,6 +156,20 @@ def _check_openai_moderation(text: str) -> ModerationResult | None:
     return None
 
 
+def moderation_reject(result: ModerationResult):
+    """Raise a structured 400 for API callers (code + moderation payload)."""
+    from fastapi import HTTPException
+
+    return HTTPException(
+        status_code=400,
+        detail={
+            "code": "CONTENT_MODERATION_BLOCKED",
+            "message": result.reason or "内容不合规，请修改后重试。",
+            "moderation": result.public_dict(),
+        },
+    )
+
+
 def is_safe(text: str) -> bool:
     """Boolean convenience wrapper (e.g. for gallery display filtering)."""
     return check_prompt(text or "").allowed

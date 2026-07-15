@@ -10,6 +10,40 @@ from fastapi import HTTPException
 
 STUDIO_ROLES = frozenset({"personal", "creator", "pro", "admin"})
 
+# Subscription plan → persisted user.role (pack purchases do not change role).
+PLAN_ROLE_MAP: dict[str, str] = {
+    "starter": "free",
+    "personal": "personal",
+    "creator": "creator",
+    "pro": "pro",
+}
+
+ROLE_RANK: dict[str, int] = {
+    "guest": 0,
+    "free": 1,
+    "starter": 1,
+    "personal": 2,
+    "creator": 3,
+    "pro": 4,
+    "enterprise": 5,
+    "admin": 99,
+    "system": 0,
+}
+
+
+def plan_subscription_role(plan_id: str) -> str | None:
+    return PLAN_ROLE_MAP.get((plan_id or "").lower())
+
+
+def rank_role(role: str | None) -> int:
+    return ROLE_RANK.get(user_role(role), 0)
+
+
+def pick_higher_role(current: str | None, candidate: str) -> str:
+    cur = user_role(current)
+    cand = user_role(candidate)
+    return cand if rank_role(cand) > rank_role(cur) else cur
+
 LIPSYNC_DEMO_COST = 4
 LIPSYNC_STUDIO_COST = 10
 MOTION_DEMO_COST = 6

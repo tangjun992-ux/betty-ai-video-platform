@@ -104,6 +104,7 @@ export default function AgentPage() {
   const [brain, setBrain] = useState<"fast" | "quality" | "rules">("fast");
   const [creditGateOpen, setCreditGateOpen] = useState(false);
   const [creditNeeded, setCreditNeeded] = useState(0);
+  const [trendChips, setTrendChips] = useState<{ title: string; hint: string; duration?: number }[]>([]);
 
   const maybePromptUpgrade = useCallback(async (force = false) => {
     if (!force && dryRunMode) return;
@@ -130,6 +131,23 @@ export default function AgentPage() {
         setRealAvailable(false);
         setModeLabel("预览模式（本地/未配置 Key）");
       });
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/trends/curated?limit=6`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const items = d?.items;
+        if (!Array.isArray(items)) return;
+        setTrendChips(
+          items.slice(0, 6).map((item: any) => ({
+            title: item.topic?.title || item.topic?.keyword || "热点趋势",
+            hint: item.curation?.production_notes || item.topic?.title || "",
+            duration: item.curation?.suggested_duration,
+          })).filter((c: { title: string }) => c.title),
+        );
+      })
+      .catch(() => {});
   }, []);
 
   // ── models catalog (active only, for per-step model swap) ──
@@ -579,6 +597,35 @@ export default function AgentPage() {
           </div>
 
           {err && <p className="text-center text-sm text-amber-500 py-3">{err}</p>}
+
+          {/* VIS trend style chips */}
+          {trendChips.length > 0 && phase === "idle" && (
+            <div className="mb-4" data-testid="agent-trend-chips">
+              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">
+                热点趋势 · VIS 推荐风格
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {trendChips.map((chip) => (
+                  <button
+                    key={chip.title}
+                    type="button"
+                    onClick={() => {
+                      const styleHint = chip.hint ? `，${chip.hint}` : "";
+                      setBrief((b) => (b.trim() ? `${b.trim()}${styleHint}` : `围绕「${chip.title}」创作短视频${styleHint}`));
+                      if (chip.duration) setDuration(chip.duration);
+                    }}
+                    className="group flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cosmic-surface/50 border border-cosmic-border/50 hover:border-brand/40 transition-all text-left max-w-full"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-brand flex-shrink-0" />
+                    <span className="text-xs font-medium text-text-primary">{chip.title}</span>
+                    {chip.duration ? (
+                      <span className="text-[10px] text-text-tertiary">{chip.duration}s</span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Ideate concepts — pick a creative direction */}
           {concepts.length > 0 && phase === "idle" && (

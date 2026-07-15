@@ -65,11 +65,10 @@ def _moderate_brief(brief: str | None):
     """Pre-generation content gate for the director brief."""
     if not brief:
         return
-    from app.services.moderation import check_prompt
+    from app.services.moderation import check_prompt, moderation_reject
     m = check_prompt(brief)
     if not m.allowed:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail=m.reason)
+        raise moderation_reject(m)
 
 
 def _resolve_plan(req: RunRequest):
@@ -109,6 +108,7 @@ async def brain_modes():
 async def ideate(req: IdeateRequest):
     """Expand a rough idea into several distinct creative concepts to pick from
     (对标 yapper 'Help Ideate'). Uses LLM when a key is configured, else rules."""
+    _moderate_brief(req.brief)
     concepts = await brain_ideate(req.brief.strip(), brain=req.brain)
     return {"concepts": concepts, "brain": req.brain}
 

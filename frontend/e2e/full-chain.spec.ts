@@ -9,26 +9,26 @@ test.beforeAll(async ({ request }) => {
 });
 
 test.describe("时间线全链路", () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, request }) => {
     await page.addInitScript((gid) => {
       localStorage.removeItem("auth-store");
       localStorage.setItem("betty-guest-id", gid);
       document.cookie = `betty_guest_id=${encodeURIComponent(gid)};path=/;max-age=31536000;SameSite=Lax`;
     }, E2E_GUEST_ID);
+    await seedTimelineVideos(request);
   });
 
   test("项目保存 → 深链恢复 → 字幕合成", async ({ page }) => {
     test.setTimeout(180_000);
 
     await page.goto("/create/timeline");
+    const accept = page.getByRole("button", { name: /接受全部|Accept all/i });
+    if (await accept.isVisible().catch(() => false)) await accept.click();
     await expect(page.getByTestId("timeline-page")).toBeVisible({ timeout: 30_000 });
 
     const libraryItems = page.getByTestId("timeline-library-item");
-    // Retry once if the first library fetch raced auth interceptor setup
-    if (!(await libraryItems.count())) {
-      await page.reload();
-    }
-    await expect(libraryItems.first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("timeline-library-grid")).toBeVisible({ timeout: 60_000 });
+    await expect(libraryItems.first()).toBeVisible({ timeout: 30_000 });
 
     await libraryItems.nth(0).click();
     await libraryItems.nth(1).click();
