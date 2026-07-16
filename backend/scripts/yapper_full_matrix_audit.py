@@ -452,7 +452,10 @@ def score_gaps(checks: list[dict], live: list[dict], meta: dict) -> dict:
     soft_fail_ok = {"ops:stripe_configured", "ops:oidc_configured", "api:extractor_tiktok_honest", "models:shelf_vs_yapper"}
     hard = [c for c in must if c["name"] not in soft_fail_ok]
     hard_ok = sum(1 for c in hard if c["ok"])
-    live_hard = [c for c in live if not c.get("skipped") and c["name"] != "live:skipped"]
+    live_hard = [
+        c for c in live
+        if not c.get("skipped") and c["name"] not in ("live:skipped", "live:paid_probe_skipped")
+    ]
     live_ok = sum(1 for c in live_hard if c["ok"])
 
     gaps = [
