@@ -19,6 +19,9 @@ class Project(Base):
     cover = Column(String(1000), nullable=True)
     # list[{item_id, url, thumbnail, media_type, title}]
     items = Column(JSON, nullable=False, default=list)
+    # ACL: private (owner only) | team (team members) | public (any authenticated)
+    visibility = Column(String(20), nullable=False, default="private")
+    team_id = Column(String(36), nullable=True, index=True)
 
     def __repr__(self):
         return f"<Project {self.project_id} {self.name}>"

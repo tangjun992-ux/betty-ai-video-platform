@@ -30,6 +30,10 @@ export default function StatusPage() {
   const [updated, setUpdated] = useState<string>("");
   const [modelHealth, setModelHealth] = useState<ModelHealth[]>([]);
   const [circuitsOpen, setCircuitsOpen] = useState(0);
+  const [lastSmoke, setLastSmoke] = useState<{
+    ts?: string; mode?: string; probed?: number; ok?: number;
+    failed_count?: number; quarantined_count?: number;
+  } | null>(null);
 
   const load = useCallback(async () => {
     const t0 = performance.now();
@@ -45,6 +49,7 @@ export default function StatusPage() {
         const j = await mh.json();
         setModelHealth(j.models || []);
         setCircuitsOpen(j.circuits_open || 0);
+        setLastSmoke(j.last_smoke || null);
       }
     } catch { /* ignore */ }
     setUpdated(new Date().toLocaleTimeString());
@@ -66,6 +71,15 @@ export default function StatusPage() {
     { name: "Redis / 队列", ok: apiOk ? redisOk : null, note: redisOk ? "正常" : (checks.redis || "—") },
     { name: "生成 Worker", ok: apiOk ? (workers ?? 0) > 0 : null, note: workers != null ? `${workers} 个在线` : "—" },
     { name: "模型熔断", ok: circuitsOpen === 0, note: circuitsOpen ? `${circuitsOpen} 个熔断中` : "全部畅通" },
+    {
+      name: "上次冒烟",
+      ok: lastSmoke ? (lastSmoke.failed_count || 0) === 0 : null,
+      note: lastSmoke
+        ? `${lastSmoke.mode || "?"} · ${lastSmoke.ok ?? 0}/${lastSmoke.probed ?? 0} 通过` +
+          ((lastSmoke.failed_count || 0) > 0 ? ` · 失败 ${lastSmoke.failed_count}` : "") +
+          (lastSmoke.ts ? ` · ${String(lastSmoke.ts).replace("T", " ").replace("Z", " UTC")}` : "")
+        : "尚未运行",
+    },
   ];
 
   const hotModels = modelHealth

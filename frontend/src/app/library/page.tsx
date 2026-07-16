@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Download, Trash2, ImageIcon, Video, Grid3X3, List,
-  Upload, Music, X, Link2, Sparkles, CheckCircle2, Clock, HardDrive, Cpu, FolderOpen,
+  Upload, Music, X, Link2, Sparkles, CheckCircle2, Clock, HardDrive, Cpu, FolderOpen, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api";
@@ -26,11 +26,13 @@ interface LibraryItem {
   size_bytes: number | null;
   duration: number | null;
   created_at: string;
+  favorited?: boolean;
+  folder?: string | null;
 }
 
 interface LibraryCounts {
   all: number; image: number; video: number; audio: number;
-  upload: number; generated: number;
+  upload: number; generated: number; favorite?: number;
 }
 
 const MEDIA_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
@@ -137,6 +139,7 @@ export default function LibraryPage() {
 
   const [tab, setTab] = useState<(typeof TYPE_TABS)[number]["key"]>("all");
   const [source, setSource] = useState<(typeof SOURCE_TABS)[number]["key"]>("all");
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -155,6 +158,7 @@ export default function LibraryPage() {
     setError(null);
     try {
       const params = new URLSearchParams({ media_type: tab, source, q: debouncedQ, limit: "96" });
+      if (favoritesOnly) params.set("favorite", "true");
       const res = await fetch(`${API_BASE}/library/?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -165,9 +169,26 @@ export default function LibraryPage() {
     } finally {
       setLoading(false);
     }
-  }, [tab, source, debouncedQ]);
+  }, [tab, source, debouncedQ, favoritesOnly]);
 
   useEffect(() => { fetchLibrary(); }, [fetchLibrary]);
+
+  const toggleFavorite = useCallback(async (item: LibraryItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const next = !item.favorited;
+    try {
+      const res = await fetch(
+        `${API_BASE}/library/favorites/${encodeURIComponent(item.id)}`,
+        { method: next ? "POST" : "DELETE" },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setItems((prev) => prev.map((it) => (it.id === item.id ? { ...it, favorited: next } : it)));
+      if (detail?.id === item.id) setDetail({ ...detail, favorited: next });
+      if (favoritesOnly && !next) fetchLibrary();
+    } catch {
+      toast.error("收藏操作失败");
+    }
+  }, [detail, favoritesOnly, fetchLibrary, toast]);
 
   // ─── Upload ───────────────────────────────────────────
   const uploadFiles = useCallback(async (files: FileList | File[]) => {
@@ -382,6 +403,19 @@ export default function LibraryPage() {
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          onClick={() => setFavoritesOnly((v) => !v)}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+            favoritesOnly
+              ? "border-amber-400/50 bg-amber-500/15 text-amber-700 dark:text-amber-200"
+              : "border-cosmic-border text-text-secondary hover:text-text-primary"
+          )}
+        >
+          <Star className={cn("w-3.5 h-3.5", favoritesOnly && "fill-current")} />
+          收藏{typeof counts?.favorite === "number" ? ` ${counts.favorite}` : ""}
+        </button>
         <div className="flex items-center gap-1 bg-cosmic-surface/30 rounded-lg p-1 ml-auto">
           <button
             aria-label="网格视图"
@@ -443,6 +477,20 @@ export default function LibraryPage() {
                     {item.source === "generated" ? "AI 生成" : "上传"}
                   </span>
                 </div>
+
+                <button
+                  type="button"
+                  aria-label="收藏"
+                  onClick={(e) => toggleFavorite(item, e)}
+                  className={cn(
+                    "absolute bottom-2 right-2 w-7 h-7 rounded-full flex items-center justify-center transition-all",
+                    item.favorited
+                      ? "bg-amber-500/90 text-white opacity-100"
+                      : "bg-black/45 text-white/80 opacity-0 group-hover:opacity-100"
+                  )}
+                >
+                  <Star className={cn("w-3.5 h-3.5", item.favorited && "fill-current")} />
+                </button>
 
                 {/* Select checkbox */}
                 <button

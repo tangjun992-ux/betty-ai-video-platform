@@ -344,6 +344,22 @@ async def live_model_health():
         "models": rows,
         "circuits_open": sum(1 for r in rows if r["circuit_open"]),
         "count": len(rows),
+        "last_smoke": _models_last_smoke(),
+    }
+
+
+def _models_last_smoke() -> dict | None:
+    from app.services.model_smoke import get_last_smoke
+    report = get_last_smoke()
+    if not report:
+        return None
+    return {
+        "ts": report.get("ts"),
+        "mode": report.get("mode"),
+        "probed": report.get("probed", 0),
+        "ok": report.get("ok", 0),
+        "failed_count": len(report.get("failed") or []),
+        "quarantined_count": len(report.get("quarantined") or []),
     }
 
 

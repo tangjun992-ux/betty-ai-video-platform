@@ -30,11 +30,18 @@ class ProjectItem(BaseModel):
 class CreateProject(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
+    visibility: Optional[str] = Field("private", description="private | team | public")
+    team_id: Optional[str] = None
 
 
 class UpdateProject(BaseModel):
     name: Optional[str] = Field(None, max_length=200)
     description: Optional[str] = None
+    visibility: Optional[str] = Field(None, description="private | team | public")
+    team_id: Optional[str] = None
+
+
+_VIS = frozenset({"private", "team", "public"})
 
 
 def _serialize(p: Project) -> dict:
@@ -46,6 +53,9 @@ def _serialize(p: Project) -> dict:
         "cover": p.cover or (items[0].get("thumbnail") or items[0].get("url") if items else None),
         "item_count": len(items),
         "items": items,
+        "visibility": getattr(p, "visibility", None) or "private",
+        "team_id": getattr(p, "team_id", None),
+        "owner_user_id": p.user_id,
         "created_at": p.created_at.isoformat() if p.created_at else "",
         "updated_at": p.updated_at.isoformat() if p.updated_at else "",
     }
@@ -62,8 +72,18 @@ async def list_projects(current_user: Optional[User] = Depends(get_optional_user
 @router.post("/", summary="创建项目")
 async def create_project(req: CreateProject, current_user: Optional[User] = Depends(get_optional_user),
                          db: AsyncSession = Depends(get_db)):
-    p = Project(project_id=str(uuid.uuid4()), user_id=current_user.id if current_user else 0,
-                name=req.name.strip(), description=(req.description or "").strip() or None, items=[])
+    vis = (req.visibility or "private").strip().lower()
+    if vis not in _VIS:
+        raise HTTPException(status_code=400, detail="visibility 必须是 private|team|public")
+    p = Project(
+        project_id=str(uuid.uuid4()),
+        user_id=current_user.id if current_user else 0,
+        name=req.name.strip(),
+        description=(req.description or "").strip() or None,
+        items=[],
+        visibility=vis,
+        team_id=(req.team_id or "").strip() or None,
+    )
     db.add(p)
     await db.commit()
     await db.refresh(p)
@@ -76,6 +96,27 @@ async def _get(db: AsyncSession, project_id: str) -> Project:
     if not p:
         raise HTTPException(status_code=404, detail="项目不存在")
     return p
+
+
+async def _user_in_team(db: AsyncSession, user_id: int, team_id: str | None) -> bool:
+    if not team_id:
+        return False
+    from app.models.team import TeamMember
+    from sqlalchemy import and_
+    m = await db.execute(select(TeamMember).where(
+        and_(TeamMember.team_id == team_id, TeamMember.user_id == user_id, TeamMember.status == "active")))
+    return m.scalar_one_or_none() is not None
+
+
+async def _can_view(db: AsyncSession, p: Project, user_id: int) -> bool:
+    if (p.user_id or 0) == user_id:
+        return True
+    vis = (getattr(p, "visibility", None) or "private").lower()
+    if vis == "public":
+        return True
+    if vis == "team":
+        return await _user_in_team(db, user_id, getattr(p, "team_id", None))
+    return False
 
 
 async def _get_owned(db: AsyncSession, project_id: str, user_id: int) -> Project:
@@ -91,7 +132,10 @@ async def get_project(
     user_id: int = Depends(resolve_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    return _serialize(await _get_owned(db, project_id, user_id))
+    p = await _get(db, project_id)
+    if not await _can_view(db, p, user_id):
+        raise HTTPException(status_code=403, detail="无权查看此项目")
+    return _serialize(p)
 
 
 @router.patch("/{project_id}", summary="更新项目信息")
@@ -106,6 +150,13 @@ async def update_project(
         p.name = req.name.strip() or p.name
     if req.description is not None:
         p.description = req.description.strip() or None
+    if req.visibility is not None:
+        vis = req.visibility.strip().lower()
+        if vis not in _VIS:
+            raise HTTPException(status_code=400, detail="visibility 必须是 private|team|public")
+        p.visibility = vis
+    if req.team_id is not None:
+        p.team_id = req.team_id.strip() or None
     await db.commit()
     await db.refresh(p)
     return _serialize(p)

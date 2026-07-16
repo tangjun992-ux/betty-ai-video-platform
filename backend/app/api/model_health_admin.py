@@ -75,6 +75,15 @@ async def trigger_smoke(
     return result
 
 
+@router.get("/last-smoke", summary="最近一次模型冒烟报告")
+async def last_smoke(_: User = Depends(require_admin)):
+    from app.services.model_smoke import get_last_smoke
+    report = get_last_smoke()
+    if not report:
+        return {"available": False, "report": None}
+    return {"available": True, "report": report}
+
+
 @router.get("/audit", summary="管理审计日志")
 async def admin_audit(
     limit: int = 50,

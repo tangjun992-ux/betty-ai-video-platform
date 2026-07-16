@@ -21,6 +21,8 @@ class Asset(Base):
     size_bytes = Column(Integer, nullable=True)
     content_type = Column(String(100), nullable=True)
     note = Column(Text, nullable=True)
+    # Lightweight folder label for library organization (P1)
+    folder = Column(String(80), nullable=True, index=True)
 
     def __repr__(self):
         return f"<Asset {self.asset_id} {self.media_type}>"

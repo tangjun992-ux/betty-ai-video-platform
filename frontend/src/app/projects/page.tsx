@@ -21,6 +21,7 @@ export default function ProjectsPage() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
+  const [visibility, setVisibility] = useState<"private" | "team" | "public">("private");
 
   const load = async () => {
     try { setProjects((await listProjects()).projects); }
@@ -33,8 +34,8 @@ export default function ProjectsPage() {
     if (!name.trim()) { toast.error("请输入项目名称", ""); return; }
     setCreating(true);
     try {
-      await createProject(name.trim(), desc.trim() || undefined);
-      setName(""); setDesc(""); setShowForm(false);
+      await createProject(name.trim(), desc.trim() || undefined, { visibility });
+      setName(""); setDesc(""); setVisibility("private"); setShowForm(false);
       await load();
       toast.success("项目已创建", "");
     } catch (e: any) { toast.error("创建失败", e.message || ""); }
@@ -59,6 +60,26 @@ export default function ProjectsPage() {
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="项目名称，例如：咖啡品牌 Campaign"
             className="input-cosmic" autoFocus />
           <input value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="项目简介（可选）" className="input-cosmic" />
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-text-tertiary">可见性</span>
+            {([
+              ["private", "仅自己"],
+              ["team", "团队"],
+              ["public", "公开"],
+            ] as const).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setVisibility(k)}
+                className={`px-2.5 py-1 rounded-lg border ${visibility === k ? "border-brand bg-brand/10 text-brand" : "border-cosmic-border text-text-secondary"}`}
+              >
+                {label}
+              </button>
+            ))}
+            {visibility === "team" && (
+              <span className="text-text-tertiary">可在团队页看到（可选绑定具体 team）</span>
+            )}
+          </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowForm(false)} className="btn-secondary text-sm">取消</button>
             <button onClick={submit} disabled={creating || !name.trim()} className="btn-primary text-sm">
@@ -89,6 +110,9 @@ export default function ProjectsPage() {
                   <div className="w-full h-full flex items-center justify-center text-text-tertiary/50"><ImageIcon className="w-8 h-8" /></div>
                 )}
                 <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-md text-[10px] text-white font-medium">{p.item_count} 项</span>
+                <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-md text-[10px] text-white/90 font-medium">
+                  {p.visibility === "team" ? "团队" : p.visibility === "public" ? "公开" : "私有"}
+                </span>
               </div>
               <div className="p-3">
                 <p className="text-sm font-semibold text-text-primary truncate">{p.name}</p>

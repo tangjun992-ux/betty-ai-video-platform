@@ -414,16 +414,53 @@ export async function mockConfirmPay(orderNo: string): Promise<any> {
 
 // ─── Projects (作品集) ──────────────────────────────────
 export interface ProjectItemRef { item_id: string; url: string; thumbnail?: string | null; media_type: string; title?: string | null; }
-export interface ProjectDTO { id: string; name: string; description?: string | null; cover?: string | null; item_count: number; items: ProjectItemRef[]; created_at: string; updated_at: string; }
+export interface ProjectDTO {
+  id: string;
+  name: string;
+  description?: string | null;
+  cover?: string | null;
+  item_count: number;
+  items: ProjectItemRef[];
+  visibility?: "private" | "team" | "public";
+  team_id?: string | null;
+  owner_user_id?: number;
+  created_at: string;
+  updated_at: string;
+}
 
 export async function listProjects(): Promise<{ projects: ProjectDTO[] }> {
   const res = await fetch(`${API_BASE}/projects/`);
   if (!res.ok) throw new Error(`加载项目失败: ${res.status}`);
   return res.json();
 }
-export async function createProject(name: string, description?: string): Promise<ProjectDTO> {
-  const res = await fetch(`${API_BASE}/projects/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, description }) });
+export async function createProject(
+  name: string,
+  description?: string,
+  opts?: { visibility?: string; team_id?: string },
+): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name,
+      description,
+      visibility: opts?.visibility || "private",
+      team_id: opts?.team_id,
+    }),
+  });
   if (!res.ok) throw new Error(`创建项目失败: ${res.status}`);
+  return res.json();
+}
+export async function updateProject(
+  id: string,
+  patch: { name?: string; description?: string; visibility?: string; team_id?: string | null },
+): Promise<ProjectDTO> {
+  const res = await fetch(`${API_BASE}/projects/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`更新项目失败: ${res.status}`);
   return res.json();
 }
 export async function getProject(id: string): Promise<ProjectDTO> {

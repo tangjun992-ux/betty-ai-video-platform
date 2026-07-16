@@ -54,6 +54,7 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_migrate_timeline_settings_column)
         await conn.run_sync(_migrate_team_and_transaction_columns)
+        await conn.run_sync(_migrate_library_project_acl_columns)
 
 
 def _migrate_team_and_transaction_columns(connection):
@@ -93,5 +94,25 @@ def _migrate_timeline_settings_column(connection):
         cols = {c["name"] for c in insp.get_columns("timeline_projects")}
         if "settings" not in cols:
             connection.execute(text("ALTER TABLE timeline_projects ADD COLUMN settings JSON"))
+    except Exception:
+        pass
+
+
+def _migrate_library_project_acl_columns(connection):
+    """Add Asset.folder + Project.visibility/team_id for P1 library/ACL."""
+    from sqlalchemy import inspect, text
+    try:
+        insp = inspect(connection)
+        tables = set(insp.get_table_names())
+        if "assets" in tables:
+            cols = {c["name"] for c in insp.get_columns("assets")}
+            if "folder" not in cols:
+                connection.execute(text("ALTER TABLE assets ADD COLUMN folder VARCHAR(80)"))
+        if "projects" in tables:
+            cols = {c["name"] for c in insp.get_columns("projects")}
+            if "visibility" not in cols:
+                connection.execute(text("ALTER TABLE projects ADD COLUMN visibility VARCHAR(20) DEFAULT 'private'"))
+            if "team_id" not in cols:
+                connection.execute(text("ALTER TABLE projects ADD COLUMN team_id VARCHAR(36)"))
     except Exception:
         pass

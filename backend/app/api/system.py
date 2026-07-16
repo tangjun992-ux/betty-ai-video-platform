@@ -71,6 +71,23 @@ async def slo_snapshot():
             "motion_p95_latency_s": 120,
         },
         "models": rows,
+        "last_smoke": _public_last_smoke(),
+    }
+
+
+def _public_last_smoke() -> dict | None:
+    from app.services.model_smoke import get_last_smoke
+    report = get_last_smoke()
+    if not report:
+        return None
+    return {
+        "ts": report.get("ts"),
+        "mode": report.get("mode"),
+        "probed": report.get("probed", 0),
+        "ok": report.get("ok", 0),
+        "failed_count": len(report.get("failed") or []),
+        "quarantined_count": len(report.get("quarantined") or []),
+        "failed": list(report.get("failed") or [])[:12],
     }
 
 

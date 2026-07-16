@@ -19,6 +19,7 @@ from app.config import settings
 from app.db import get_db
 from app.models.asset import Asset
 from app.models.task import Task
+from app.models.user import User
 from app.auth import resolve_user_id
 
 router = APIRouter()
@@ -28,6 +29,37 @@ VIDEO_EXTS = {".mp4", ".webm", ".mov"}
 AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".ogg"}
 MAX_IMAGE_SIZE = 10 * 1024 * 1024    # 10MB
 MAX_MEDIA_SIZE = 100 * 1024 * 1024   # 100MB (video/audio)
+MAX_FAVORITES = 500
+
+
+def _user_meta(user: User) -> dict:
+    try:
+        return json.loads(user.metadata_json) if user.metadata_json else {}
+    except Exception:
+        return {}
+
+
+def _favorites_list(user: User) -> list[str]:
+    meta = _user_meta(user)
+    favs = (meta.get("library") or {}).get("favorites") or []
+    return [str(x) for x in favs if isinstance(x, str)]
+
+
+async def _load_user(db: AsyncSession, user_id: int) -> User:
+    res = await db.execute(select(User).where(User.id == user_id))
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=401, detail="用户不存在")
+    return user
+
+
+async def _save_favorites(db: AsyncSession, user: User, favorites: list[str]) -> None:
+    meta = _user_meta(user)
+    lib = dict(meta.get("library") or {})
+    lib["favorites"] = favorites[:MAX_FAVORITES]
+    meta["library"] = lib
+    user.metadata_json = json.dumps(meta, ensure_ascii=False)
+    await db.flush()
 
 
 def _ext_media_type(ext: str) -> Optional[str]:
@@ -64,7 +96,7 @@ def _safe_list(value) -> list:
     return []
 
 
-def _asset_item(a: Asset) -> dict:
+def _asset_item(a: Asset, *, favorited: bool = False) -> dict:
     return {
         "id": f"up_{a.asset_id}",
         "source": "upload",
@@ -77,12 +109,15 @@ def _asset_item(a: Asset) -> dict:
         "size_bytes": a.size_bytes,
         "duration": None,
         "created_at": a.created_at.isoformat() if a.created_at else "",
+        "favorited": favorited,
+        "folder": getattr(a, "folder", None) or None,
     }
 
 
-def _generated_items(t: Task) -> list:
+def _generated_items(t: Task, *, favorites: set[str] | None = None) -> list:
     params = _safe_dict(t.parameters)
     ts = t.completed_at or t.created_at
+    favs = favorites or set()
     out = []
     for idx, r in enumerate(_safe_list(t.results)):
         if not isinstance(r, dict):
@@ -91,8 +126,9 @@ def _generated_items(t: Task) -> list:
         if not url:
             continue
         model = r.get("model", t.selected_model or "")
+        item_id = f"gen_{t.task_id}_{idx}"
         out.append({
-            "id": f"gen_{t.task_id}_{idx}",
+            "id": item_id,
             "source": "generated",
             "media_type": r.get("type", t.media_type),
             "url": url,
@@ -103,6 +139,8 @@ def _generated_items(t: Task) -> list:
             "size_bytes": None,
             "duration": params.get("duration"),
             "created_at": ts.isoformat() if ts else "",
+            "favorited": item_id in favs,
+            "folder": params.get("library_folder") or r.get("folder"),
         })
     return out
 
@@ -113,12 +151,16 @@ async def list_library(
     source: str = Query(default="all"),          # all | upload | generated
     q: str = Query(default=""),
     sort: str = Query(default="recent"),         # recent | oldest
+    favorite: bool = Query(default=False, description="仅收藏"),
+    folder: str = Query(default="", description="按文件夹筛选（上传资产）"),
     limit: int = Query(default=48, le=200),
     offset: int = Query(default=0),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(resolve_user_id),
 ):
     items: list = []
+    user = await _load_user(db, user_id)
+    favs = set(_favorites_list(user))
 
     # Per-user isolation: each resolved account sees only its own assets.
     def _own(col):
@@ -131,7 +173,8 @@ async def list_library(
         )
         for a in res.scalars().all():
             try:
-                items.append(_asset_item(a))
+                aid = f"up_{a.asset_id}"
+                items.append(_asset_item(a, favorited=aid in favs))
             except Exception:
                 continue
 
@@ -142,7 +185,7 @@ async def list_library(
         )
         for t in res.scalars().all():
             try:
-                items.extend(_generated_items(t))
+                items.extend(_generated_items(t, favorites=favs))
             except Exception:
                 continue
 
@@ -151,9 +194,16 @@ async def list_library(
         items = [
             it for it in items
             if kw in (it["title"] or "").lower()
-            or kw in (it["prompt"] or "").lower()
-            or kw in (it["model"] or "").lower()
+            or kw in (it.get("prompt") or "").lower()
+            or kw in (it.get("model") or "").lower()
         ]
+
+    folder_q = folder.strip()
+    if folder_q:
+        items = [it for it in items if (it.get("folder") or "") == folder_q]
+
+    if favorite:
+        items = [it for it in items if it.get("favorited")]
 
     # Tab counts reflect the current source+search scope, computed BEFORE the
     # media_type filter so switching tabs never zeroes the other tab badges
@@ -164,6 +214,7 @@ async def list_library(
         "audio": sum(1 for it in items if it["media_type"] == "audio"),
         "upload": sum(1 for it in items if it["source"] == "upload"),
         "generated": sum(1 for it in items if it["source"] == "generated"),
+        "favorite": sum(1 for it in items if it.get("favorited")),
     }
 
     if media_type != "all":
@@ -171,13 +222,77 @@ async def list_library(
 
     items.sort(key=lambda x: x["created_at"], reverse=(sort != "oldest"))
     total = len(items)
+    folders = sorted({it.get("folder") for it in items if it.get("folder")})
     return {
         "items": items[offset:offset + limit],
         "total": total,
         "counts": counts,
+        "favorites": sorted(favs),
+        "folders": folders,
         "limit": limit,
         "offset": offset,
     }
+
+
+@router.get("/favorites", summary="收藏列表 ID")
+async def list_favorites(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    user = await _load_user(db, user_id)
+    favs = _favorites_list(user)
+    return {"favorites": favs, "total": len(favs)}
+
+
+@router.post("/favorites/{item_id}", summary="收藏条目")
+async def add_favorite(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    if not (item_id.startswith("up_") or item_id.startswith("gen_")):
+        raise HTTPException(status_code=400, detail="无效的条目 ID")
+    user = await _load_user(db, user_id)
+    favs = _favorites_list(user)
+    if item_id not in favs:
+        favs.insert(0, item_id)
+        await _save_favorites(db, user, favs)
+        await db.commit()
+    return {"favorited": True, "id": item_id, "total": len(favs)}
+
+
+@router.delete("/favorites/{item_id}", summary="取消收藏")
+async def remove_favorite(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    user = await _load_user(db, user_id)
+    favs = [x for x in _favorites_list(user) if x != item_id]
+    await _save_favorites(db, user, favs)
+    await db.commit()
+    return {"favorited": False, "id": item_id, "total": len(favs)}
+
+
+@router.patch("/{item_id}/folder", summary="设置上传资产文件夹")
+async def set_item_folder(
+    item_id: str,
+    folder: str = Query(default="", max_length=80),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    """Assign a lightweight folder label on uploaded assets (P1)."""
+    if not item_id.startswith("up_"):
+        raise HTTPException(status_code=400, detail="仅支持上传资产设置文件夹；生成结果请用项目归类")
+    asset_id = item_id[3:]
+    res = await db.execute(select(Asset).where(Asset.asset_id == asset_id, Asset.user_id == user_id))
+    asset = res.scalar_one_or_none()
+    if not asset:
+        raise HTTPException(status_code=404, detail="条目不存在")
+    name = (folder or "").strip()[:80]
+    asset.folder = name or None
+    await db.commit()
+    return _asset_item(asset, favorited=item_id in set(_favorites_list(await _load_user(db, user_id))))
 
 
 @router.post("/upload", summary="上传到内容库")
@@ -208,10 +323,23 @@ async def upload_to_library(
 
 
 @router.delete("/{item_id}", summary="删除内容库条目")
-async def delete_library_item(item_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_library_item(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    # Drop favorite reference if present
+    try:
+        user = await _load_user(db, user_id)
+        favs = [x for x in _favorites_list(user) if x != item_id]
+        if len(favs) != len(_favorites_list(user)):
+            await _save_favorites(db, user, favs)
+    except Exception:
+        pass
+
     if item_id.startswith("up_"):
         asset_id = item_id[3:]
-        res = await db.execute(select(Asset).where(Asset.asset_id == asset_id))
+        res = await db.execute(select(Asset).where(Asset.asset_id == asset_id, Asset.user_id == user_id))
         asset = res.scalar_one_or_none()
         if not asset:
             raise HTTPException(status_code=404, detail="条目不存在")
@@ -234,7 +362,7 @@ async def delete_library_item(item_id: str, db: AsyncSession = Depends(get_db)):
             idx = int(idx_str)
         except ValueError:
             raise HTTPException(status_code=400, detail="无效的条目 ID")
-        res = await db.execute(select(Task).where(Task.task_id == task_id))
+        res = await db.execute(select(Task).where(Task.task_id == task_id, Task.user_id == user_id))
         task = res.scalar_one_or_none()
         if not task:
             raise HTTPException(status_code=404, detail="条目不存在")

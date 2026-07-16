@@ -44,12 +44,51 @@ def _load_task_row(db_task_id: str) -> Optional[dict[str, Any]]:
         row = session.execute(
             text(
                 "SELECT task_id, user_id, status, prompt, media_type, selected_model, "
-                "results, error_message, webhook_url, actual_cost, estimated_cost "
+                "results, error_message, webhook_url, actual_cost, estimated_cost, parameters "
                 "FROM tasks WHERE task_id = :tid"
             ),
             {"tid": db_task_id},
         ).mappings().first()
         return dict(row) if row else None
+
+
+def _parse_parameters(raw) -> dict:
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str) and raw:
+        try:
+            parsed = json.loads(raw)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def persist_webhook_status(db_task_id: str, delivery: dict[str, Any]) -> None:
+    """Write webhook delivery outcome into tasks.parameters.webhook (no migration)."""
+    from datetime import datetime, timezone
+
+    engine = _sync_engine()
+    with Session(engine) as session:
+        row = session.execute(
+            text("SELECT parameters FROM tasks WHERE task_id = :tid"),
+            {"tid": db_task_id},
+        ).first()
+        if not row:
+            return
+        params = _parse_parameters(row[0])
+        params["webhook"] = {
+            "delivered": bool(delivery.get("delivered")),
+            "attempts": delivery.get("attempts"),
+            "status_code": delivery.get("status_code"),
+            "reason": delivery.get("reason"),
+            "at": datetime.now(timezone.utc).isoformat(),
+        }
+        session.execute(
+            text("UPDATE tasks SET parameters = :p WHERE task_id = :tid"),
+            {"p": json.dumps(params, ensure_ascii=False), "tid": db_task_id},
+        )
+        session.commit()
 
 
 def _parse_results(raw) -> list:
@@ -249,5 +288,10 @@ def on_task_terminal(db_task_id: str, *, status: str) -> dict[str, Any]:
     # Prefer the status just written (row may lag in rare races).
     task["status"] = status or task.get("status")
     wh = deliver_webhook(db_task_id, task=task)
+    if task.get("webhook_url"):
+        try:
+            persist_webhook_status(db_task_id, wh)
+        except Exception as e:
+            logger.warning("persist webhook status failed task=%s: %s", db_task_id, e)
     em = notify_task_email(db_task_id, task=task)
     return {"ok": True, "webhook": wh, "email": em}

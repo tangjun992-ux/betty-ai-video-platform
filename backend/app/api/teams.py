@@ -226,13 +226,23 @@ async def team_projects(
     pres = await db.execute(select(Project).where(Project.user_id.in_(member_ids)))
     projects = []
     for p in pres.scalars().all():
+        vis = (getattr(p, "visibility", None) or "private").lower()
+        # Enforce per-project ACL for team listing:
+        # private → owner only; team → this team (or unbound); public → all members
+        if vis == "private" and p.user_id != user.id:
+            continue
+        if vis == "team":
+            pid_team = getattr(p, "team_id", None)
+            if pid_team and pid_team != team_id:
+                continue
         projects.append({
             "project_id": p.project_id,
             "name": p.name,
             "description": p.description,
             "cover": p.cover,
             "owner_user_id": p.user_id,
-            "visibility": team.default_visibility,
+            "visibility": vis,
+            "team_id": getattr(p, "team_id", None),
             "item_count": len(p.items or []),
         })
     return {"team_id": team_id, "visibility": team.default_visibility, "projects": projects}

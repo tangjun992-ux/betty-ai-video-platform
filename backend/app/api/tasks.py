@@ -17,10 +17,11 @@ router = APIRouter()
 class TaskResultResponse(BaseModel):
     task_id: str
     status: str
-    results: Optional[list]
-    cost_credits: Optional[float]
-    completed_at: Optional[str]
-    error_message: Optional[str]
+    results: Optional[list] = None
+    cost_credits: Optional[float] = None
+    completed_at: Optional[str] = None
+    error_message: Optional[str] = None
+    webhook: Optional[dict] = None
 
 
 async def _owned_task(db: AsyncSession, task_id: str, user_id: int) -> Task:
@@ -46,6 +47,13 @@ async def get_task_status(
     task = await _owned_task(db, task_id, user_id)
 
     if task.status in ("completed", "failed", "cancelled"):
+        params = task.parameters if isinstance(task.parameters, dict) else {}
+        if isinstance(task.parameters, str):
+            try:
+                import json as _json
+                params = _json.loads(task.parameters) or {}
+            except Exception:
+                params = {}
         return TaskResultResponse(
             task_id=task.task_id,
             status=task.status,
@@ -53,6 +61,7 @@ async def get_task_status(
             cost_credits=task.actual_cost,
             completed_at=task.completed_at.isoformat() if task.completed_at else None,
             error_message=task.error_message,
+            webhook=params.get("webhook") if isinstance(params, dict) else None,
         )
 
     return {

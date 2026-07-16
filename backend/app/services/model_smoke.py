@@ -155,4 +155,64 @@ def run_active_smoke(*, mode: str | None = None) -> dict:
         "model health smoke done: mode=%s probed=%d ok=%d quarantined=%d",
         mode, results["probed"], results["ok"], len(results["quarantined"]),
     )
+    results["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        save_last_smoke(results)
+    except Exception as e:
+        logger.warning("persist last smoke failed: %s", e)
     return results
+
+
+_LAST_SMOKE_KEY = "model-health:last-smoke"
+_LAST_SMOKE_TTL = 7 * 24 * 3600
+
+
+def save_last_smoke(report: dict) -> None:
+    """Persist last smoke report for status/admin surfaces (Redis + memory fallback)."""
+    from app.services.model_health import model_health
+    import json as _json
+
+    # Truncate evidence URLs for storage size; keep enough for ops.
+    slim = {
+        "ts": report.get("ts") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "mode": report.get("mode"),
+        "probed": report.get("probed", 0),
+        "ok": report.get("ok", 0),
+        "failed": list(report.get("failed") or [])[:50],
+        "quarantined": list(report.get("quarantined") or [])[:50],
+        "details": [],
+    }
+    for d in (report.get("details") or [])[:40]:
+        ev = d.get("evidence") or {}
+        slim["details"].append({
+            "model_id": d.get("model_id"),
+            "ok": d.get("ok"),
+            "latency_ms": d.get("latency_ms"),
+            "error": (d.get("error") or "")[:200],
+            "mode": d.get("mode"),
+            "path": ev.get("path"),
+        })
+    payload = _json.dumps(slim, ensure_ascii=False)
+    try:
+        client = model_health._client()
+        client.set(_LAST_SMOKE_KEY, payload, ex=_LAST_SMOKE_TTL)
+    except Exception:
+        with model_health._lock:
+            model_health._memory[_LAST_SMOKE_KEY] = slim
+
+
+def get_last_smoke() -> dict | None:
+    """Load last smoke report or None."""
+    from app.services.model_health import model_health
+    import json as _json
+
+    try:
+        client = model_health._client()
+        raw = client.get(_LAST_SMOKE_KEY)
+        if raw:
+            return _json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        pass
+    with model_health._lock:
+        mem = model_health._memory.get(_LAST_SMOKE_KEY)
+        return dict(mem) if isinstance(mem, dict) else None
