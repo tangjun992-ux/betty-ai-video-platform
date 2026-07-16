@@ -122,14 +122,27 @@ def process_lipsync(
             output = persist_results([{"type": "video", "url": v_url, "thumbnail": thumb,
                                        "model": "demo-lipsync", "duration": 5}])
         else:
+            # Studio tier bills lipsync-studio; prefer a higher-res avatar path.
+            # Explicit KIE ids (contain "/") are honored as-is.
+            model_id = "kling/ai-avatar-pro"
+            resolution = "480p"
+            if model and "/" in model:
+                model_id = model
+            elif model in ("lipsync-studio", "studio"):
+                model_id = "kling/ai-avatar-pro"
+                resolution = "720p"
             res = asyncio.run(KieAdapter().generate_lipsync(
                 image_url=image_public, audio_url=audio_public,
-                prompt="a person talking naturally to camera, accurate lip sync"))
+                prompt="a person talking naturally to camera, accurate lip sync",
+                model_id=model_id,
+                resolution=resolution,
+            ))
             _update_task(db_task_id, progress=85, current_stage="rendering")
             _broadcast_progress(db_task_id, 85, "rendering", "正在渲染最终视频...")
             output = persist_results([{
                 "type": "video", "url": res.media_url,
                 "thumbnail": res.thumbnail_url or "", "model": res.model, "duration": 5,
+                "requested_model": model,
             }])
 
         _update_task(

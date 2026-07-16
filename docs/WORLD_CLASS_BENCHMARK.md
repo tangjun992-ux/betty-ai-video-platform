@@ -28,7 +28,7 @@
 | 唇形同步 | **60** | 65 | 75 | 55 | 40 | 有真链路；依赖 KIE 排队，未做 fixture live |
 | 时间线 / 合成 | **72** | 70 | 40 | **88** | 45 | 本地 ffmpeg 可靠；弱于 Runway 生成式剪辑 |
 | Agent / 多镜叙事 | **68** | 75 | 40 | 70 | 35 | Director 有 plan/run；深度依赖子任务 live |
-| 开发者 API / Webhook | **78** | 70 | **85** | **88** | 70 | HMAC webhook + 公开 API 已落地 |
+| 开发者 API / Webhook | **75** | 70 | **85** | **88** | 70 | HMAC webhook + `execute_generation` 公开 API（细粒度评估见 CORE_FEATURE_FINE_GRAINED） |
 | 社区 / 分享 / Remix | **74** | **88** | 60 | 65 | 55 | 有 explore 分享页；社区氛围弱于 Yapper/MJ |
 | 计费订阅闭环 | **42** | **85** | 80 | 85 | 75 | Stripe Price/Webhook **未配置** |
 | 企业协作 / SSO | **50** | 55 | 45 | **75** | 40 | 团队积分+ACL+审片骨架；OIDC 未接 IdP |

@@ -17,7 +17,7 @@ import { CosmicParamPanel, CosmicSlider, CosmicSelect } from "@/components/cosmi
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { submitGeneration, getTaskStatus, trackOnboarding, type GenerateResponse, type TaskResult, API_BASE } from "@/lib/api";
+import { submitGeneration, getTaskStatus, uploadImage, trackOnboarding, type GenerateResponse, type TaskResult, API_BASE } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ═══════════════════════════════════════════════════════════
@@ -193,7 +193,15 @@ export default function CreateImagePage() {
     addRecentPrompt(prompt);
 
     try {
-      // 1) Submit generation
+      // 1) Upload first reference image when present (i2i)
+      let imageUrl: string | undefined;
+      if (referenceFiles.length > 0) {
+        setProgressStage("上传参考图...");
+        const uploaded = await uploadImage(referenceFiles[0].file);
+        imageUrl = uploaded.url;
+      }
+
+      // 2) Submit generation
       const res: GenerateResponse = await submitGeneration({
         prompt,
         media_type: "image",
@@ -207,6 +215,7 @@ export default function CreateImagePage() {
         count,
         style: style || undefined,
         enhance_prompt: creativity !== "wild",
+        image_url: imageUrl,
       });
 
       setTaskId(res.task_id);
@@ -283,7 +292,7 @@ export default function CreateImagePage() {
     }
   }, [
     prompt, selectedModel, quality, resolution, aspectRatio, count,
-    style, creativity, submitting, addRecentPrompt, addResult, toast,
+    style, creativity, submitting, referenceFiles, addRecentPrompt, addResult, toast,
     user?.id, completeOnboarding,
   ]);
 

@@ -106,9 +106,11 @@ async def submit_lipsync(
     db.add(task)
     await db.commit()
 
+    # Pass billed model_name (e.g. lipsync-studio), not the raw Form `model`
+    # which defaults to "auto" and previously ignored the studio tier.
     celery_app.send_task(
         "app.tasks.lipsync_tasks.process_lipsync",
-        args=[task_id, uploaded_image_url, uploaded_audio_url, text, voice_id, model],
+        args=[task_id, uploaded_image_url, uploaded_audio_url, text, voice_id, model_name],
         queue="video_q",
     )
 

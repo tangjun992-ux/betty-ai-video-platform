@@ -101,7 +101,7 @@ async def require_api_key(
     return k.user_id
 
 
-from app.api.generate import GenerateRequest, submit_generation  # no cycle: generate doesn't import developer
+from app.api.generate import GenerateRequest, execute_generation  # no cycle: generate doesn't import developer
 
 
 @router.post("/public/generate", summary="公开 API：提交生成（X-API-Key 鉴权）",
@@ -113,4 +113,4 @@ async def public_generate(
 ):
     """Public generation endpoint — reuses the full web pipeline (routing,
     moderation, cost, dispatch) scoped to the API key's owner."""
-    return await submit_generation(req, db=db, user_id=key_user)
+    return await execute_generation(req, db, key_user, team_id=None)

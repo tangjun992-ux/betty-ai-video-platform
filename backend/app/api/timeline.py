@@ -17,6 +17,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.db import get_db
 from app.auth import resolve_user_id
 from app.services.credits import deduct_credits, resolve_team_id
+from app.models.task import Task
 from app.models.timeline_project import TimelineProject as TimelineProjectRow
 
 logger = logging.getLogger(__name__)
@@ -318,15 +319,39 @@ async def render_timeline(
 
     task_id = str(uuid.uuid4())
     team_id = resolve_team_id(request)
+    total_duration = sum(max(0, float(c.get("end", 5)) - float(c.get("start", 0))) for c in clips)
+    estimated_time = max(30, int(total_duration * 3))  # ~3x real-time
+
+    # Persist Task row first so /tasks/{id} polling and Celery update_task work.
+    task = Task(
+        task_id=task_id,
+        user_id=user_id,
+        prompt=f"Timeline render: {row.name or req.project_id}",
+        media_type="video",
+        quality=req.quality,
+        requested_model="timeline-render",
+        selected_model="timeline-render",
+        parameters={
+            "project_id": req.project_id,
+            "quality": req.quality,
+            "format": req.format,
+            "clip_count": len(clips),
+            "total_duration": total_duration,
+        },
+        estimated_cost=TIMELINE_RENDER_COST,
+        status="queued",
+    )
+    db.add(task)
+    await db.flush()
+
     if not await deduct_credits(
         db, user_id, TIMELINE_RENDER_COST, task_id, "timeline-render",
         team_id=team_id, description=f"Timeline render {req.project_id[:8]}",
     ):
+        task.status = "failed"
+        task.error_message = f"积分不足，需要 {TIMELINE_RENDER_COST} 积分"
+        await db.commit()
         raise HTTPException(status_code=402, detail=f"积分不足，需要 {TIMELINE_RENDER_COST} 积分")
-    await db.commit()
-
-    total_duration = sum(max(0, float(c.get("end", 5)) - float(c.get("start", 0))) for c in clips)
-    estimated_time = max(30, int(total_duration * 3))  # ~3x real-time
 
     # Dispatch Celery task
     try:
@@ -338,10 +363,17 @@ async def render_timeline(
         )
     except Exception as e:
         logger.error(f"Failed to dispatch timeline render task: {e}")
+        task.status = "failed"
+        task.error_message = f"渲染任务调度失败: {e}"
+        await db.commit()
         raise HTTPException(
             status_code=500,
             detail=f"渲染任务调度失败: {str(e)}",
         )
+
+    task.celery_task_id = celery_task.id
+    task.status = "queued"
+    await db.commit()
 
     logger.info(
         f"Timeline render dispatched: task={task_id} project={req.project_id} "

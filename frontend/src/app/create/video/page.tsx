@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCreationStore } from "@/lib/stores";
-import { submitGeneration, getTaskStatus, type TaskResult, API_BASE } from "@/lib/api";
+import { submitGeneration, getTaskStatus, uploadImage, type TaskResult, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { ResultGrid } from "@/components/ResultGrid";
@@ -228,6 +228,14 @@ export default function CreateVideoPage() {
         ? `${prompt}\n\n[多镜头序列]\n${shots.map((s, i) => `镜头${i + 1}: ${s.prompt}`).join("\n")}`
         : prompt;
 
+      // Upload first image reference for i2v when present
+      let imageUrl: string | undefined;
+      const imageRef = references.find((r) => r.type === "image" && r.file);
+      if (imageRef?.file) {
+        const uploaded = await uploadImage(imageRef.file);
+        imageUrl = uploaded.url;
+      }
+
       const body: any = {
         prompt: finalPrompt,
         media_type: "video",
@@ -241,6 +249,7 @@ export default function CreateVideoPage() {
         duration,
         count,
         enhance_prompt: true,
+        image_url: imageUrl,
       };
 
       const res = await submitGeneration(body);
@@ -264,7 +273,7 @@ export default function CreateVideoPage() {
       setSubmitting(false);
       setTaskId(null);
     }
-  }, [prompt, multiShotMode, shots, submitting, selectedModel, quality, resolution, aspectRatio, duration, count, addRecentPrompt, addResult, toast]);
+  }, [prompt, multiShotMode, shots, references, submitting, selectedModel, quality, resolution, aspectRatio, duration, count, addRecentPrompt, addResult, toast]);
 
   // ── Left tool actions ──
   const handleToolClick = useCallback((tool: LeftTool) => {

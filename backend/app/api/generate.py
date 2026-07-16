@@ -60,22 +60,18 @@ class RouterAnalysisResponse(BaseModel):
     all_scores: list[dict]
 
 
-@router.post(
-    "/",
-    response_model=GenerateResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="提交生成请求",
-    description="根据提示词智能选择模型并生成图像或视频",
-    dependencies=[Depends(rate_limit("generate", rpm=10, rph=100))],
-)
-async def submit_generation(
+async def execute_generation(
     req: GenerateRequest,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(resolve_user_id),
-):
+    db: AsyncSession,
+    user_id: int,
+    team_id: Optional[int] = None,
+) -> GenerateResponse:
+    """Core generation pipeline shared by web `/generate/` and public Developer API.
+
+    Does not depend on FastAPI `Request` / Depends injection so API-key callers
+    can invoke it directly without a synthetic Starlette request.
+    """
     task_id = str(uuid.uuid4())
-    team_id = resolve_team_id(request)
     # Deterministic seed: reuse the caller's (reproduce) or roll a fresh one so
     # every generation is reproducible and variations can be requested later.
     import random as _random
@@ -137,6 +133,18 @@ async def submit_generation(
         "prompt_was_enhanced": enhanced_prompt != req.prompt,
     }
 
+    params = {
+        "resolution": req.resolution,
+        "duration": req.duration,
+        "count": req.count,
+        "style": req.style,
+        "seed": seed,
+        "original_prompt": req.prompt if enhanced_prompt != req.prompt else None,
+        "routing_info": json.dumps(routing_info),
+    }
+    if req.image_url:
+        params["image_url"] = req.image_url
+
     # Create Task record
     task = Task(
         task_id=task_id,
@@ -147,15 +155,7 @@ async def submit_generation(
         requested_model=req.model,
         selected_model=estimated_model,
         fallback_model=fallback_model,
-        parameters={
-            "resolution": req.resolution,
-            "duration": req.duration,
-            "count": req.count,
-            "style": req.style,
-            "seed": seed,
-            "original_prompt": req.prompt if enhanced_prompt != req.prompt else None,
-            "routing_info": json.dumps(routing_info),
-        },
+        parameters=params,
         estimated_cost=estimated_cost,
         status="queued",
         webhook_url=req.webhook_url,
@@ -228,6 +228,25 @@ async def submit_generation(
     )
 
 
+@router.post(
+    "/",
+    response_model=GenerateResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="提交生成请求",
+    description="根据提示词智能选择模型并生成图像或视频",
+    dependencies=[Depends(rate_limit("generate", rpm=10, rph=100))],
+)
+async def submit_generation(
+    req: GenerateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    return await execute_generation(
+        req, db, user_id, team_id=resolve_team_id(request),
+    )
+
+
 class SpeechRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=5000, description="要配音的文本/脚本")
     voice: str = Field(default="Rachel", description="音色")
@@ -258,18 +277,31 @@ async def generate_speech(req: SpeechRequest):
             "media_type": "audio", "model": res.model, "cost": res.cost, "demo": False}
 
 
+# Credit costs for image tools (upstream KIE burn + margin).
+_EDIT_TOOL_COSTS = {
+    "edit": 3,
+    "upscale": 2,
+    "bg-remove": 2,
+    "extend": 3,
+}
+
+
 @router.post("/edit", summary="AI 图像工具 (编辑/超分/抠图/扩图)",
              dependencies=[Depends(rate_limit("edit", rpm=15, rph=120))])
 async def edit_image_tool(
+    request: Request,
     operation: str = Form(..., description="edit | upscale | bg-remove | extend"),
     image_file: Optional[UploadFile] = File(None),
     image_url: Optional[str] = Form(None),
     prompt: Optional[str] = Form(None),
     factor: str = Form("2"),
     ratio: str = Form("16:9"),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
 ):
     """Unified image-tool endpoint (对标 yapper 编辑/放大/去背景/扩图).
-    Uploads the source to a public URL then runs the real KIE model."""
+    Uploads the source to a public URL then runs the real KIE model.
+    Authenticated + metered (guest session or JWT via resolve_user_id)."""
     import asyncio as _a
     op = (operation or "").strip().lower()
     if op not in ("edit", "upscale", "bg-remove", "extend"):
@@ -283,6 +315,16 @@ async def edit_image_tool(
         raise HTTPException(status_code=400, detail="请提供图片 (image_file 或 image_url)")
     if op in ("edit",) and not (prompt and prompt.strip()):
         raise HTTPException(status_code=400, detail="编辑操作需要 prompt 指令")
+
+    tool_cost = _EDIT_TOOL_COSTS[op]
+    tool_task_id = str(uuid.uuid4())
+    team_id = resolve_team_id(request)
+    if not await deduct_credits(
+        db, user_id, tool_cost, tool_task_id, f"image-tool-{op}",
+        team_id=team_id, description=f"Image tool {op}",
+    ):
+        raise HTTPException(status_code=402, detail=f"积分不足，需要 {tool_cost} 积分")
+    await db.commit()
 
     # Resolve source bytes
     from app.adapters.demo_provider import demo_mode_active, _local_media_path
@@ -306,7 +348,8 @@ async def edit_image_tool(
     if demo_mode_active():
         from app.adapters.demo_provider import run_demo_image_tool
         url = await _a.to_thread(run_demo_image_tool, op, data, factor, ratio)
-        return {"url": url, "media_type": "image", "model": f"demo-{op}", "demo": True}
+        return {"url": url, "media_type": "image", "model": f"demo-{op}", "demo": True,
+                "operation": op, "cost_credits": tool_cost}
 
     from app.adapters.kie_adapter import KieAdapter
     from app.services.media_store import persist_results
@@ -343,7 +386,8 @@ async def edit_image_tool(
     out = {"type": "image", "url": res.media_url, "media_url": res.media_url, "model": res.model}
     out = (await _a.to_thread(persist_results, [out]))[0]
     return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
-            "media_type": "image", "model": res.model, "operation": op, "cost": res.cost}
+            "media_type": "image", "model": res.model, "operation": op,
+            "cost": res.cost, "cost_credits": tool_cost}
 
 
 class EnhanceRequest(BaseModel):
