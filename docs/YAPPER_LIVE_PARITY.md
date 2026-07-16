@@ -96,18 +96,18 @@ python3 scripts/fixture_derivative_harness.py
 | 探针 | 结果 |
 |------|------|
 | `smoke_live_image_sample` gpt-image-2 + nano-banana | **2/2 outframe_ok** |
-| `seedance-2.0-fast` | **outframe_ok**（既有） |
-| `seedance-2.0` | **outframe_ok**（本轮复验） |
-| `kling-2.5-turbo` | duration 字符串修复后复验（见最新 run） |
-| Motion native createTask | 见最新 `MOTION_FIXTURE_LIVE` / last_run.json |
-| pytest live parity + core | 见本轮 pytest |
+| `smoke_live_video_sample` 默认 | **fallback Seedance×2 → `slo_ge_2=true`**；随后修复 Kling resolution 后单测 `kling-2.5-turbo` **outframe_ok** |
+| Kling T2V（duration=`"5"`，不传 resolution） | **live success**（`smoke_live_video_sample --models kling-2.5-turbo`） |
+| Motion native（本地 synthetic fixture） | createTask OK；fail=`No valid characters detected`（样片无真人） |
+| Motion native（KIE playground 样例图/视频） | **`ok=true`**，`model=kling-3.0/motion-control`，`motion_mode=native` |
+| pytest focused parity | **51+ passed** |
 
-> 注：曾用 duration=2 触发 KIE `422 Invalid duration`；Kling int duration 触发 `duration must be a string`。
+> 注：曾用 duration=2 触发 KIE `422`；Kling int duration → `duration must be a string`；Kling 带 `720p` → Operation not found（已改为优先不传 resolution）。
 
 ## 分数影响（诚实）
 
 | 维 | 前 | 后 |
 |----|----|----|
-| 真出片（视频） | 1 SKU | **≥2 SKU 周检路径**（Seedance×2 或 Seedance+Kling） |
-| Motion | best_effort Seedance | **原生 Kling Motion Control SKU** |
-| 综合就绪 | ~82 | **~85**（仍非 Act-One；密钥/全量周检待部署） |
+| 真出片（视频） | 1 SKU | **≥2 SKU 周检稳定**（Seedance fast + Seedance；Kling 参数修复后可作第 3） |
+| Motion | best_effort Seedance | **原生 Kling Motion Control 已 live 出片**（非 Act-One） |
+| 综合就绪 | ~82 | **~86**（密钥/OIDC/Stripe/CDN 与 Act-One 仍待） |

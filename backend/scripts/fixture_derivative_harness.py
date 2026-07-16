@@ -205,24 +205,40 @@ def run_motion_live_optional() -> dict:
         vid_url = await adapter.upload_public_url(
             ref.read_bytes(), filename="ref.mp4", content_type="video/mp4",
         )
-        res = await adapter.generate_motion(
-            image_url=img_url,
-            video_url=vid_url,
-            prompt="natural body motion transfer, keep identity stable",
-            model_id="motion-control",
-            duration=5,
-            resolution="720p",
-            character_orientation="video",
-        )
-        meta = getattr(res, "meta", {}) or {}
-        out = {
-            "ok": bool(getattr(res, "media_url", "")),
-            "media_url": getattr(res, "media_url", ""),
-            "model": getattr(res, "model", ""),
-            "cost": getattr(res, "cost", 0),
-            "motion_mode": meta.get("motion_mode"),
-            "sku": meta.get("sku") or getattr(res, "model", ""),
-        }
+        async def _once(image_url: str, video_url: str, source: str):
+            res = await adapter.generate_motion(
+                image_url=image_url,
+                video_url=video_url,
+                prompt="No distortion, the character's movements are consistent with the video.",
+                model_id="motion-control",
+                duration=5,
+                resolution="720p",
+                character_orientation="video",
+            )
+            meta = getattr(res, "meta", {}) or {}
+            return {
+                "ok": bool(getattr(res, "media_url", "")),
+                "media_url": getattr(res, "media_url", ""),
+                "model": getattr(res, "model", ""),
+                "cost": getattr(res, "cost", 0),
+                "motion_mode": meta.get("motion_mode"),
+                "sku": meta.get("sku") or getattr(res, "model", ""),
+                "source": source,
+            }
+
+        try:
+            out = await _once(img_url, vid_url, "local_fixtures")
+        except Exception as e:
+            msg = str(e)
+            # Synthetic fixtures often lack detectable characters; prove native SKU
+            # with KIE playground examples (same API contract).
+            if "no valid characters" in msg.lower() or "character" in msg.lower():
+                pub_img = "https://static.aiquickdraw.com/tools/example/1773115240203_t8pIR73J.png"
+                pub_vid = "https://static.aiquickdraw.com/tools/example/1773115131888_zBZHuynR.mp4"
+                out = await _once(pub_img, pub_vid, "kie_public_examples")
+                out["fixture_error"] = msg
+            else:
+                out = {"ok": False, "error": msg, "source": "local_fixtures"}
         report_path = root / "last_run.json"
         report_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
         out["report_path"] = str(report_path)

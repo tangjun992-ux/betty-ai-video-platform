@@ -417,25 +417,34 @@ class KieAdapter(BaseModelAdapter):
 
         # Resolution mapping
         kie_res = _size_to_resolution(resolution)
-        payload["resolution"] = kie_res
+        is_kling_t2v = (kie_id.startswith("kling/") or kie_id.startswith("kling-")) and not _is_native_motion_control(kie_id)
 
         # Image-to-video
         if image_url:
             payload["imageUrl"] = image_url
 
-        # Not every model accepts every resolution token (e.g. seedance-2-fast
-        # rejects 1080p). Retry down a safe ladder on "invalid resolution" (422)
-        # so a valid request is never lost to a resolution mismatch.
-        # Kling also rejects int duration — retry once as string if mis-detected.
-        res_ladder = [r for r in (kie_res, "720p", "480p") if r]
+        # Kling market ops are often keyed as Model_resolution_duration; many
+        # turbo SKUs reject explicit resolution (Operation not found …_720p_5).
+        # Prefer duration-only (+ optional aspect_ratio) for Kling T2V.
+        if is_kling_t2v:
+            payload["aspect_ratio"] = kwargs.get("aspect_ratio") or "16:9"
+            payload["aspectRatio"] = payload["aspect_ratio"]
+            attempts = [{}, {"resolution": "720p"}, {"resolution": "1080p"}]
+        else:
+            payload["resolution"] = kie_res
+            attempts = [{"resolution": r} for r in (kie_res, "720p", "480p") if r]
+
         seen = set()
         result = None
         last_err: Optional[Exception] = None
-        for res_try in res_ladder:
-            if res_try in seen:
+        for extra in attempts:
+            key = tuple(sorted(extra.items()))
+            if key in seen:
                 continue
-            seen.add(res_try)
-            payload["resolution"] = res_try
+            seen.add(key)
+            for k in ("resolution",):
+                payload.pop(k, None)
+            payload.update(extra)
             try:
                 result = await self._submit_and_poll(payload, media_type="video", timeout=600)
                 break
@@ -449,14 +458,14 @@ class KieAdapter(BaseModelAdapter):
                         break
                     except RuntimeError as e2:
                         last_err = e2
-                        raise
-                if "resolution" in msg and ("422" in msg or "invalid" in msg):
-                    logger.warning("[KIE] resolution %s rejected for %s, retrying lower", res_try, kie_id)
+                        continue
+                if "operation not found" in msg or ("resolution" in msg and ("422" in msg or "invalid" in msg)):
+                    logger.warning("[KIE] video params rejected for %s (%s), retrying", kie_id, e)
                     last_err = e
                     continue
                 raise
         if result is None:
-            raise last_err or RuntimeError("KIE video generation failed: no valid resolution")
+            raise last_err or RuntimeError("KIE video generation failed: no valid params")
 
         url = _extract_url(result, "videoUrl")
         cover = _extract_url(result, "coverUrl") or url

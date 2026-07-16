@@ -25,7 +25,7 @@
 | **Yapper** | 最近竞品；工具契约约 **90–92%** 对齐，主差距在**出片稳定、默认成片感、社区飞轮** |
 | **Kling / Runway / Luma** | 可借道网关调用部分 SKU，**无原生模型护城河**；Motion/视频质量**禁止宣称对等** |
 | **Midjourney / OpenAI** | 审美社区与一等公民模型差距大；Betty 是工具聚合，不是审美飞轮 |
-| **综合生产就绪** | **~85 / 100** — 含 live 图 2/2 + 视频 ≥2 SKU 周检 + 原生 Kling Motion Control；密钥与 Act-One / 全量周检仍待 |
+| **综合生产就绪** | **~86 / 100** — 含 live 图 2/2 + 视频 ≥2 SKU（Seedance×2，Kling 已修参出片）+ 原生 Motion live；密钥与 Act-One 仍待 |
 
 ---
 
@@ -83,7 +83,7 @@
 | 企业 SSO / 协作 | **58** | 55 | 45 | **75** | 40 | 30 | **70** | OIDC 代码齐；未接 IdP |
 | 目录诚实 / 信任 | **80** | 70 | 75 | 80 | 70 | 60 | 75 | active/beta/lab；guess 折叠 |
 | 可观测 / 运维 | **76** | 60 | 70 | 75 | 55 | 40 | **85** | 冒烟 KPI、隔离、readiness |
-| **加权综合** | **~85** | **~74** | **~72** | **~78** | **~58** | **~55** | **~72** | Betty 工具+双 SKU 出片+原生 Motion；仍弱于原生视频厂护城河 |
+| **加权综合** | **~86** | **~74** | **~72** | **~78** | **~58** | **~55** | **~72** | Betty 工具+双 SKU 出片+原生 Motion live；仍弱于原生视频厂护城河 |
 
 \*竞品分为相对定位估计。
 
@@ -265,7 +265,7 @@
 | P1 退款/分镜/Price 面 | ~74 | 商业与 Agent |
 | P2 样片库/OIDC/bootstrap | ~76 | 配置面↑ |
 | Yapper 核心全测 + Extractor/Avatar | ~78 | 工具契约 |
-| **Live 出片 + 原生 Motion + Agent minimal** | **~85** | 图2/2+视≥2 SKU路径+Kling Motion；非 Act-One |
+| **Live 出片 + 原生 Motion + Agent minimal** | **~86** | 图2/2+视≥2 SKU+Kling Motion live；非 Act-One |
 
 **冲到 80+ 的硬条件（缺一不可）：**
 1. live_video 周检稳定 ≥ **2** 个 SKU 真出片  

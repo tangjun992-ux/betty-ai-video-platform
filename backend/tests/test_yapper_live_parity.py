@@ -103,6 +103,29 @@ def test_video_duration_kling_is_string():
     assert _video_duration_for_kie("bytedance/seedance-2-fast", 5) == 5
 
 
+def test_kling_t2v_omits_resolution_first():
+    """Kling turbo market ops often reject resolution=720p; first attempt is duration-only."""
+    from app.adapters.kie_adapter import KieAdapter
+    import asyncio
+
+    adapter = KieAdapter.__new__(KieAdapter)
+    captured = []
+
+    async def fake_submit(payload, media_type="video", timeout=600):
+        captured.append(dict(payload))
+        if "resolution" in payload:
+            raise RuntimeError("KIE API error: code=500 msg=Operation not found: …_720p_5")
+        return {"resultJson": '{"resultUrls":["https://cdn.example.com/v.mp4"]}', "taskId": "t"}
+
+    adapter._submit_and_poll = fake_submit  # type: ignore
+    res = asyncio.run(adapter.generate_video(
+        "a dog running", model_id="kling-2.5-turbo", duration=5, resolution="720p",
+    ))
+    assert captured[0].get("duration") == "5"
+    assert "resolution" not in captured[0]
+    assert res.media_url.endswith(".mp4")
+
+
 def test_director_minimal_skips_post_ladder():
     from app.director import DirectorPlanner
 
