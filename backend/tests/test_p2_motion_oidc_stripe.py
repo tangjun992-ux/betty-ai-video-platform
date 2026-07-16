@@ -28,7 +28,8 @@ def test_motion_samples_api():
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["available"] is True
-    assert data["mode"] == "best_effort"
+    assert data["mode"] == "native"
+    assert data.get("sku") == "kling-3.0/motion-control"
     assert len(data["samples"]) >= 1
     sample = data["samples"][0]
     img = c.get(sample["image_path"])

@@ -84,17 +84,41 @@ KIE_MODEL_IDS = {
     # KIE video IDs → self
     "bytedance/seedance-2": "bytedance/seedance-2",
     "bytedance/seedance-2-fast": "bytedance/seedance-2-fast",
-    # Motion Control (Yapper parity) — best-effort via Seedance i2v + videoUrl;
-    # not a native Kling Motion / Act-One SKU until upstream exposes one.
-    "motion-control": "bytedance/seedance-2-fast",
-    "motion-control-studio": "bytedance/seedance-2",
-    "motion-control-demo": "bytedance/seedance-2-fast",
+    # Motion Control — native Kling Motion Control on KIE (not Runway Act-One).
+    # Seedance i2v remains available when callers pass seedance-* model ids explicitly.
+    "motion-control": "kling-3.0/motion-control",
+    "motion-control-studio": "kling-3.0/motion-control",
+    "motion-control-demo": "kling-3.0/motion-control",
+    "kling-motion": "kling-3.0/motion-control",
+    "kling-3.0-motion": "kling-3.0/motion-control",
+    "kling-3.0/motion-control": "kling-3.0/motion-control",
+    "kling-2.6/motion-control": "kling-2.6/motion-control",
 }
 
 
 def _resolve_kie_model_id(model_name: str) -> str:
     """Map internal model name → KIE model_id, fallback to raw name."""
     return KIE_MODEL_IDS.get(model_name, model_name)
+
+
+def _is_native_motion_control(kie_id: str) -> bool:
+    return "motion-control" in (kie_id or "")
+
+
+def _video_duration_for_kie(kie_id: str, duration: int):
+    """Kling family on KIE expects duration as a string (e.g. \"5\"); others accept int."""
+    d = max(1, int(duration or 5))
+    if (kie_id or "").startswith("kling/") or (kie_id or "").startswith("kling-"):
+        return str(d)
+    return d
+
+
+def _motion_mode_for_resolution(resolution: str, *, studio: bool = False) -> str:
+    """Normalize UI resolution → Kling Motion Control mode (720p|1080p)."""
+    r = (resolution or "").strip().lower()
+    if studio or r in ("1080p", "1080", "pro"):
+        return "1080p"
+    return "720p"
 
 
 # ─── Video model detection ─────────────────────────────────
@@ -388,7 +412,7 @@ class KieAdapter(BaseModelAdapter):
         payload = {
             "model": kie_id,
             "prompt": prompt,
-            "duration": duration,
+            "duration": _video_duration_for_kie(kie_id, duration),
         }
 
         # Resolution mapping
@@ -402,6 +426,7 @@ class KieAdapter(BaseModelAdapter):
         # Not every model accepts every resolution token (e.g. seedance-2-fast
         # rejects 1080p). Retry down a safe ladder on "invalid resolution" (422)
         # so a valid request is never lost to a resolution mismatch.
+        # Kling also rejects int duration — retry once as string if mis-detected.
         res_ladder = [r for r in (kie_res, "720p", "480p") if r]
         seen = set()
         result = None
@@ -416,6 +441,15 @@ class KieAdapter(BaseModelAdapter):
                 break
             except RuntimeError as e:
                 msg = str(e).lower()
+                if "duration must be a string" in msg and not isinstance(payload.get("duration"), str):
+                    payload["duration"] = str(int(duration or 5))
+                    logger.warning("[KIE] retrying %s with string duration", kie_id)
+                    try:
+                        result = await self._submit_and_poll(payload, media_type="video", timeout=600)
+                        break
+                    except RuntimeError as e2:
+                        last_err = e2
+                        raise
                 if "resolution" in msg and ("422" in msg or "invalid" in msg):
                     logger.warning("[KIE] resolution %s rejected for %s, retrying lower", res_try, kie_id)
                     last_err = e
@@ -447,27 +481,76 @@ class KieAdapter(BaseModelAdapter):
         image_url: str,
         video_url: str,
         prompt: str = "",
-        model_id: str = "seedance-2.0-fast",
+        model_id: str = "motion-control",
         duration: int = 5,
         resolution: str = "720p",
+        character_orientation: str = "video",
+        background_source: Optional[str] = None,
+        **kwargs,
     ) -> GenerationResult:
-        """Dedicated motion-transfer path: drive a still with a reference video.
+        """Motion transfer: prefer native Kling Motion Control; Seedance is best-effort fallback.
 
-        Sends both imageUrl and videoUrl to KIE. Providers that ignore videoUrl
-        still receive a strong motion prompt; callers must treat empty URLs as failure.
+        Native SKU (``kling-3.0/motion-control``) requires:
+          - ``input_urls`` (character still) + ``video_urls`` (driver, typically 3–30s)
+          - ``character_orientation``: ``image`` | ``video``
+          - ``mode``: ``720p`` | ``1080p``
+        Explicit Seedance model ids keep the legacy imageUrl+videoUrl path.
         """
         if not image_url or not video_url:
             raise ValueError("generate_motion requires image_url and video_url")
         kie_id = _resolve_kie_model_id(model_id)
         motion_prompt = (prompt or "").strip() or (
-            "motion transfer: the subject performs the same body motion and timing "
-            "as the reference video, keep identity and clothing consistent"
+            "No distortion, the character's movements are consistent with the video, "
+            "keep identity and clothing consistent"
         )
+        if len(motion_prompt) > 2500:
+            motion_prompt = motion_prompt[:2500]
+        studio = bool(kwargs.get("studio")) or str(model_id).endswith("-studio")
+        orient = (character_orientation or "video").strip().lower()
+        if orient not in ("image", "video"):
+            orient = "video"
+
         logger.info("[KIE] motion → model=%s image=%s… video=%s…", kie_id, image_url[:40], video_url[:40])
+
+        if _is_native_motion_control(kie_id):
+            mode = _motion_mode_for_resolution(resolution, studio=studio)
+            payload = {
+                "model": kie_id,
+                "prompt": motion_prompt,
+                "input_urls": [image_url],
+                "video_urls": [video_url],
+                "character_orientation": orient,
+                "mode": mode,
+            }
+            if background_source in ("input_video", "input_image"):
+                payload["background_source"] = background_source
+            result = await self._submit_and_poll(payload, media_type="video", timeout=900)
+            url = _extract_url(result, "videoUrl")
+            if not url:
+                raise RuntimeError("KIE native motion-control returned empty video URL")
+            return GenerationResult(
+                media_url=url,
+                thumbnail_url=_extract_url(result, "coverUrl") or image_url,
+                media_type="video",
+                model=kie_id,
+                cost=_extract_kie_cost(result, "video", duration),
+                duration=float(duration),
+                meta={
+                    "kie_task_id": result.get("taskId", ""),
+                    "op": "motion",
+                    "motion_mode": "native",
+                    "sku": kie_id,
+                    "mode": mode,
+                    "character_orientation": orient,
+                    "duration": duration,
+                },
+            )
+
+        # Best-effort Seedance / generic i2v path (explicit non-motion SKUs)
         payload = {
             "model": kie_id,
             "prompt": motion_prompt,
-            "duration": duration,
+            "duration": _video_duration_for_kie(kie_id, duration),
             "resolution": _size_to_resolution(resolution),
             "imageUrl": image_url,
             "videoUrl": video_url,
@@ -489,6 +572,7 @@ class KieAdapter(BaseModelAdapter):
             meta={
                 "kie_task_id": result.get("taskId", ""),
                 "op": "motion",
+                "motion_mode": "best_effort",
                 "duration": duration,
             },
         )

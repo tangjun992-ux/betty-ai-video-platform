@@ -91,7 +91,8 @@ def test_capabilities_include_motion_honesty():
     assert r.status_code == 200
     data = r.json()
     assert "features" in data
-    assert data["features"]["motion_transfer"]["mode"] == "best_effort"
+    assert data["features"]["motion_transfer"]["mode"] == "native"
+    assert data["features"]["motion_transfer"]["sku"] == "kling-3.0/motion-control"
     assert data["features"]["task_webhooks"]["available"] is True
 
 

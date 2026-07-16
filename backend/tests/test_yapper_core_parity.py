@@ -52,7 +52,8 @@ def test_capabilities_yapper_features(client: TestClient):
         "tool_cost_board",
     ):
         assert key in feats, f"missing capability {key}"
-    assert feats["motion_transfer"]["mode"] == "best_effort"
+    assert feats["motion_transfer"]["mode"] == "native"
+    assert feats["motion_transfer"]["sku"] == "kling-3.0/motion-control"
     assert feats["share_permalink"]["requires_publish"] is True
     assert feats["prompt_extractor"]["path"] == "/generate/extract-prompt"
 
@@ -110,7 +111,8 @@ def test_motion_samples_and_files(client: TestClient):
     assert r.status_code == 200
     d = r.json()
     assert d["available"] is True
-    assert d["mode"] == "best_effort"
+    assert d["mode"] == "native"
+    assert d.get("sku") == "kling-3.0/motion-control"
     sample = d["samples"][0]
     img = client.get(sample["image_path"])
     vid = client.get(sample["video_path"])

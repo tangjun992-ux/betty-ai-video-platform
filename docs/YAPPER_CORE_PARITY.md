@@ -15,7 +15,7 @@
 | Video generate | `/create/video` · `POST /generate/` | ✅ UI 收起工具栏已修；live 出片另计 |
 | Studio Lip-Syncing | `/create/lipsync` · `POST /lipsync` | ✅ voices + 链路 |
 | Talking Avatar | `/create/avatar` · lipsync 后端 | ✅ **本轮新建专用页**（图+音频优先） |
-| Motion Control | `/create/motion` · `/motion` | ✅ samples；`best_effort` 诚实 |
+| Motion Control | `/create/motion` · `/motion` | ✅ samples；原生 `kling-3.0/motion-control` |
 | Timeline Editor | `/create/timeline` | ✅ SRT parse 契约 |
 | Media Upscaling | `/create/upscale` · `/generate/edit` | ✅ 真路由（tools 页已修正） |
 | Background remove | `/create/bg-remove` | ✅ |
@@ -56,7 +56,7 @@ cd backend
 | Yapper core parity pytest | **16/16** |
 | 全量 tests/ | **185 passed** |
 | harness | 全契约项 ok（JSON report） |
-| Motion 诚实 | `mode=best_effort` |
+| Motion 诚实 | `mode=native`（Kling Motion；非 Act-One） |
 | Extractor | heuristic 或 vision（视 Key） |
 
 ---

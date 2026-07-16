@@ -208,14 +208,20 @@ def run_motion_live_optional() -> dict:
         res = await adapter.generate_motion(
             image_url=img_url,
             video_url=vid_url,
-            prompt="natural body motion transfer",
-            duration=2,
+            prompt="natural body motion transfer, keep identity stable",
+            model_id="motion-control",
+            duration=5,
+            resolution="720p",
+            character_orientation="video",
         )
+        meta = getattr(res, "meta", {}) or {}
         out = {
             "ok": bool(getattr(res, "media_url", "")),
             "media_url": getattr(res, "media_url", ""),
             "model": getattr(res, "model", ""),
             "cost": getattr(res, "cost", 0),
+            "motion_mode": meta.get("motion_mode"),
+            "sku": meta.get("sku") or getattr(res, "model", ""),
         }
         report_path = root / "last_run.json"
         report_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")

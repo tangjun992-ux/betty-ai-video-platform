@@ -129,6 +129,9 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
                 model_id=motion_model,
                 duration=int(params.get("duration", 5) or 5),
                 resolution=params.get("resolution", "720p") or ("1080p" if params.get("tier") == "studio" else "720p"),
+                character_orientation=params.get("character_orientation") or "video",
+                background_source=params.get("background_source"),
+                studio=params.get("tier") == "studio",
             ))
             rd = result.to_dict() if hasattr(result, "to_dict") else result
             media_url = rd.get("media_url") or rd.get("url") or ""

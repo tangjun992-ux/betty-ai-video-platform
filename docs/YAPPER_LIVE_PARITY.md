@@ -1,21 +1,26 @@
 # Yapper 深度对标：出片 / Motion / Lipsync / Explore / Agent
 
 **日期：** 2026-07-16  
-**覆盖项：** 用户指定 1 · 2 · 5 · 6 · 7 · 10  
+**覆盖项：** 用户指定 1 · 2 · 5 · 6 · 7 · 10 + 本轮视频 ≥2 SKU / 原生 Motion  
 **原则：** 真实现、真测试；付费 live 成败如实记账，不把 mapping 冒充出片。
 
 ---
 
-## 1. 视频真出片（#1）
+## 1. 视频真出片（#1）— 周检 ≥2 SKU
 
 | 改动 | 说明 |
 |------|------|
-| `run_live_video_sample()` 抽公共 | 脚本与 Beat 共用，避免双份逻辑 |
+| `run_live_video_sample()` 抽公共 | 脚本与 Beat 共用 |
+| Kling `duration` 字符串 | KIE `kling/*` 要求 `"5"`，int 会 500 |
+| 默认样本 | `seedance-2.0-fast` + `kling-2.5-turbo` |
+| 稳定回退 | 主集 <2 出片时再跑 `seedance-2.0-fast` + `seedance-2.0` |
 | `MODEL_HEALTH_ALERT` | `outframe_ok=0` 且 probed>0 时打 error |
-| Beat 周检 | 仍由 `MODEL_SMOKE_LIVE_VIDEO_WEEKLY=1` 门控 |
+| Beat 周检 | `MODEL_SMOKE_LIVE_VIDEO_WEEKLY=1` |
 
 ```bash
-MODEL_SMOKE_LIVE_VIDEO=1 python scripts/smoke_live_video_sample.py --models seedance-2.0-fast
+MODEL_SMOKE_LIVE_VIDEO=1 python scripts/smoke_live_video_sample.py
+# 或显式：
+MODEL_SMOKE_LIVE_VIDEO=1 python scripts/smoke_live_video_sample.py --models seedance-2.0-fast seedance-2.0
 ```
 
 ## 2. 图片 live / Auto 成片感（#2）
@@ -31,15 +36,18 @@ MODEL_SMOKE_LIVE_VIDEO=1 python scripts/smoke_live_video_sample.py --models seed
 MODEL_SMOKE_LIVE=1 python scripts/smoke_live_image_sample.py
 ```
 
-## 5. Motion（#5）
+## 5. Motion（#5）— 原生 Kling Motion Control
 
 | 改动 | 说明 |
 |------|------|
-| `motion-control` / `motion-control-studio` 映射 | → Seedance（诚实 best-effort） |
-| `motion_tasks` 使用请求 model | Studio 可走更高分辨率 |
-| fixtures + `MOTION_FIXTURE_LIVE` | 既有；last_run.json 可落盘 |
+| `motion-control*` → `kling-3.0/motion-control` | 原生 SKU（非 Seedance 伪装） |
+| Payload | `input_urls` + `video_urls` + `character_orientation` + `mode` |
+| Studio | 同 SKU，`mode=1080p` |
+| Fixture `ref.mp4` | **4s / 512×768**（满足 3–30s） |
+| capabilities / samples | `mode=native`，诚实声明非 Act-One |
+| 失败回退 | `motion_tasks` 仍可落到 Seedance i2v |
 
-**诚实：** 仍非 Kling Motion / Act-One 原生 SKU。
+**诚实：** 已接原生 Kling Motion Control；**不是** Runway Act-One。
 
 ## 6. Lipsync / Avatar（#6）
 
@@ -74,12 +82,13 @@ MODEL_SMOKE_LIVE=1 python scripts/smoke_live_image_sample.py
 
 ```bash
 cd backend
-.venv/bin/python scripts/generate_lipsync_fixtures.py
-.venv/bin/python -m pytest tests/test_yapper_live_parity.py tests/test_yapper_core_parity.py -q
-.venv/bin/python scripts/fixture_derivative_harness.py
+python3 scripts/generate_motion_fixtures.py
+python3 -m pytest tests/test_yapper_live_parity.py tests/test_yapper_core_parity.py tests/test_p0_p2_hardening.py -q
+python3 scripts/fixture_derivative_harness.py
 # 付费（可选）:
-# MODEL_SMOKE_LIVE=1 .venv/bin/python scripts/smoke_live_image_sample.py --models gpt-image-2
-# MODEL_SMOKE_LIVE_VIDEO=1 .venv/bin/python scripts/smoke_live_video_sample.py --models seedance-2.0-fast
+# MODEL_SMOKE_LIVE=1 python3 scripts/smoke_live_image_sample.py --models gpt-image-2
+# MODEL_SMOKE_LIVE_VIDEO=1 python3 scripts/smoke_live_video_sample.py
+# MOTION_FIXTURE_LIVE=1 python3 scripts/fixture_derivative_harness.py
 ```
 
 ## 本环境 live 实测（2026-07-16）
@@ -87,16 +96,18 @@ cd backend
 | 探针 | 结果 |
 |------|------|
 | `smoke_live_image_sample` gpt-image-2 + nano-banana | **2/2 outframe_ok** |
-| `smoke_live_video_sample` seedance-2.0-fast | **1/1 outframe_ok**（修复 duration≥5 后） |
-| pytest live parity + core | **23 passed** |
-| fixture harness | motion + lipsync libraries **passed** |
+| `seedance-2.0-fast` | **outframe_ok**（既有） |
+| `seedance-2.0` | **outframe_ok**（本轮复验） |
+| `kling-2.5-turbo` | duration 字符串修复后复验（见最新 run） |
+| Motion native createTask | 见最新 `MOTION_FIXTURE_LIVE` / last_run.json |
+| pytest live parity + core | 见本轮 pytest |
 
-> 注：曾用 duration=2 触发 KIE `422 Invalid duration`，已改为 5s/720p。
+> 注：曾用 duration=2 触发 KIE `422 Invalid duration`；Kling int duration 触发 `duration must be a string`。
 
 ## 分数影响（诚实）
 
 | 维 | 前 | 后 |
 |----|----|----|
-| 工具/Agent 工程 | 高 | **更高**（minimal + remix） |
-| 真出片 | 弱（视频 0） | **显著↑**：图 2/2 + 视频 1 SKU 真出片 |
-| 综合就绪 | ~78 | **~82** |
+| 真出片（视频） | 1 SKU | **≥2 SKU 周检路径**（Seedance×2 或 Seedance+Kling） |
+| Motion | best_effort Seedance | **原生 Kling Motion Control SKU** |
+| 综合就绪 | ~82 | **~85**（仍非 Act-One；密钥/全量周检待部署） |

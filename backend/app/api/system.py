@@ -21,13 +21,13 @@ async def capabilities():
         "verified_model_count": catalog["active_count"],
         "catalog_total": catalog["total"],
         "label": "真实生成可用" if (configured and not _dry_run_default()) else "预览模式（未配置模型 Key）",
-        # Honest motion disclosure: dedicated path exists but provider may treat
-        # videoUrl as best-effort (not Kling Motion Control / Runway Act-One grade).
+        # Native Kling Motion Control via KIE; not Runway Act-One.
         "features": {
             "motion_transfer": {
                 "available": configured and not demo,
-                "mode": "best_effort",
-                "note": "专用 motion 通道已启用（imageUrl+videoUrl）；上游可能降级为图生视频+动作提示，非原生 Motion Control SKU。",
+                "mode": "native",
+                "sku": "kling-3.0/motion-control",
+                "note": "原生 Kling Motion Control（KIE kling-3.0/motion-control：input_urls+video_urls）；非 Runway Act-One。失败时任务层可回退 Seedance。",
             },
             "task_webhooks": {
                 "available": True,

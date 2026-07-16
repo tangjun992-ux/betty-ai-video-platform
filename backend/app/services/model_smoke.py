@@ -247,7 +247,10 @@ def get_last_smoke() -> dict | None:
         return dict(mem) if isinstance(mem, dict) else None
 
 
+# Weekly-stable defaults: Seedance fast + Kling turbo (distinct providers).
+# seedance-2.0 is a known-good alternate if Kling is temporarily down.
 DEFAULT_LIVE_VIDEO_SAMPLE = ("seedance-2.0-fast", "kling-2.5-turbo")
+STABLE_LIVE_VIDEO_FALLBACK = ("seedance-2.0-fast", "seedance-2.0")
 DEFAULT_LIVE_IMAGE_SAMPLE = ("gpt-image-2", "nano-banana", "nano-banana-pro", "imagen-4")
 
 

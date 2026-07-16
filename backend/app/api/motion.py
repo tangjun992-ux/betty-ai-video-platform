@@ -190,16 +190,18 @@ async def list_motion_samples():
         samples.append({
             "id": "canonical-v1",
             "title": "标准输入样片对",
-            "desc": "正面人物静帧 + 2s 参考动作（生成资产，可再分发）",
+            "desc": "正面人物静帧 + 4s 参考动作（≥3s，满足 Kling Motion Control）",
             "image_path": "/api/v1/motion/samples/canonical-v1/still.png",
             "video_path": "/api/v1/motion/samples/canonical-v1/ref.mp4",
             "style": "realistic",
             "prompt": "自然肢体迁移，全身动作，柔和光影",
-            "note": "best_effort 输入样片；输出质量不对标 Kling Motion / Runway Act-One",
+            "duration_seconds": 4,
+            "note": "原生 SKU 输入样片（kling-3.0/motion-control）；非 Runway Act-One 质量对标",
         })
     return {
         "available": available,
-        "mode": "best_effort",
+        "mode": "native",
+        "sku": "kling-3.0/motion-control",
         "fixture_dir": str(_FIXTURE_DIR),
         "samples": samples,
         "live_gate": "MOTION_FIXTURE_LIVE=1",

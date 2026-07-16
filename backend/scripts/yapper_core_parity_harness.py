@@ -134,7 +134,7 @@ def main() -> int:
         "checks": checks,
         "honesty": (
             "Contract/API surface only — does not assert live outframes. "
-            "Motion remains best_effort. Stripe/OIDC/CDN may be unconfigured."
+            "Motion maps to native kling-3.0/motion-control. Stripe/OIDC/CDN may be unconfigured."
         ),
         "yapper_tool_routes": [
             "/agent", "/create/image", "/create/video", "/create/lipsync",

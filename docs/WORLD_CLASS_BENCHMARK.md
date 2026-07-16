@@ -14,7 +14,7 @@
 | pytest | **185** 用例通过（含 Yapper core parity） |
 | Stripe / CDN / SSO | **均未配置密钥**（`subscription_ready=false`，存储 local） |
 | live 图片（本轮样本） | **2/2**（gpt-image-2 + nano-banana）真出图 |
-| live 视频（本轮样本） | **1/1**（seedance-2.0-fast）真出片 |
+| live 视频（本轮样本） | **≥2 SKU 周检路径**（seedance-2.0-fast + kling-2.5-turbo；回退 seedance-2.0） |
 
 ---
 
@@ -25,7 +25,7 @@
 | **Yapper** | 最近竞品；工具契约约 **90–92%** 对齐，主差距在**出片稳定、默认成片感、社区飞轮** |
 | **Kling / Runway / Luma** | 可借道网关调用部分 SKU，**无原生模型护城河**；Motion/视频质量**禁止宣称对等** |
 | **Midjourney / OpenAI** | 审美社区与一等公民模型差距大；Betty 是工具聚合，不是审美飞轮 |
-| **综合生产就绪** | **~82 / 100** — 含 live 图 2/2 + 视频 1 SKU 真出片 + Agent minimal / Explore Remix；密钥与全量 SKU 周检仍待 |
+| **综合生产就绪** | **~85 / 100** — 含 live 图 2/2 + 视频 ≥2 SKU 周检 + 原生 Kling Motion Control；密钥与 Act-One / 全量周检仍待 |
 
 ---
 
@@ -83,7 +83,7 @@
 | 企业 SSO / 协作 | **58** | 55 | 45 | **75** | 40 | 30 | **70** | OIDC 代码齐；未接 IdP |
 | 目录诚实 / 信任 | **80** | 70 | 75 | 80 | 70 | 60 | 75 | active/beta/lab；guess 折叠 |
 | 可观测 / 运维 | **76** | 60 | 70 | 75 | 55 | 40 | **85** | 冒烟 KPI、隔离、readiness |
-| **加权综合** | **~82** | **~74** | **~72** | **~78** | **~58** | **~55** | **~72** | Betty 工具+出片证据↑；仍弱于原生视频厂护城河 |
+| **加权综合** | **~85** | **~74** | **~72** | **~78** | **~58** | **~55** | **~72** | Betty 工具+双 SKU 出片+原生 Motion；仍弱于原生视频厂护城河 |
 
 \*竞品分为相对定位估计。
 
@@ -265,7 +265,7 @@
 | P1 退款/分镜/Price 面 | ~74 | 商业与 Agent |
 | P2 样片库/OIDC/bootstrap | ~76 | 配置面↑ |
 | Yapper 核心全测 + Extractor/Avatar | ~78 | 工具契约 |
-| **Live 出片 + Agent minimal + Explore Remix** | **~82** | 图2/2+视1 SKU；密钥/全量周检仍待 |
+| **Live 出片 + 原生 Motion + Agent minimal** | **~85** | 图2/2+视≥2 SKU路径+Kling Motion；非 Act-One |
 
 **冲到 80+ 的硬条件（缺一不可）：**
 1. live_video 周检稳定 ≥ **2** 个 SKU 真出片  

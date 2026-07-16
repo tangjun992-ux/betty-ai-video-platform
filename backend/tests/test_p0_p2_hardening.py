@@ -91,6 +91,19 @@ def test_kie_generate_motion_payload():
     assert captured.get("imageUrl") == "https://img/a.png"
     assert res.media_url.endswith(".mp4")
     assert res.meta.get("op") == "motion"
+    assert res.meta.get("motion_mode") == "best_effort"
+
+    captured.clear()
+    res2 = asyncio.run(adapter.generate_motion(
+        image_url="https://img/a.png",
+        video_url="https://vid/b.mp4",
+        model_id="motion-control-studio",
+        resolution="1080p",
+    ))
+    assert captured["model"] == "kling-3.0/motion-control"
+    assert captured["mode"] == "1080p"
+    assert captured["input_urls"] == ["https://img/a.png"]
+    assert res2.meta.get("motion_mode") == "native"
 
 
 def test_oidc_status_unconfigured():

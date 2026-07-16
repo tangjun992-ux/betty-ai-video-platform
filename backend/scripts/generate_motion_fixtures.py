@@ -28,13 +28,16 @@ def main() -> int:
     still = ROOT / "still.png"
     img.save(still, "PNG")
 
+    # Kling Motion Control requires driver video typically 3–30s.
     ref = ROOT / "ref.mp4"
+    dur = "4"
     cmd = [
         "ffmpeg", "-y", "-f", "lavfi",
-        "-i", "color=c=0x203040:s=512x768:d=2",
-        "-f", "lavfi", "-i", "color=c=0x4682b4:s=40x40:d=2",
-        "-filter_complex", "[1][0]overlay=x='40+t*180':y=300",
-        "-t", "2", "-pix_fmt", "yuv420p", "-an",
+        f"-i", f"color=c=0x203040:s=512x768:d={dur}",
+        "-f", "lavfi", f"-i", f"color=c=0x4682b4:s=40x40:d={dur}",
+        # [0]=canvas background, [1]=moving block (must keep 512x768 output)
+        "-filter_complex", "[0][1]overlay=x='40+t*100':y=300",
+        "-t", dur, "-pix_fmt", "yuv420p", "-an",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
         str(ref),
     ]

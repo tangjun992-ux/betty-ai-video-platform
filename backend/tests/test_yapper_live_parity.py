@@ -64,7 +64,43 @@ def test_motion_control_mapped_in_kie():
     from app.adapters.kie_adapter import KIE_MODEL_IDS, _resolve_kie_model_id
 
     assert "motion-control" in KIE_MODEL_IDS
-    assert _resolve_kie_model_id("motion-control").startswith("bytedance/")
+    assert _resolve_kie_model_id("motion-control") == "kling-3.0/motion-control"
+    assert _resolve_kie_model_id("motion-control-studio") == "kling-3.0/motion-control"
+
+
+def test_kie_generate_motion_native_payload():
+    from app.adapters.kie_adapter import KieAdapter
+    import asyncio
+
+    adapter = KieAdapter.__new__(KieAdapter)
+    captured = {}
+
+    async def fake_submit(payload, media_type="video", timeout=900):
+        captured.update(payload)
+        return {"resultJson": '{"resultUrls":["https://cdn.example.com/m.mp4"]}', "taskId": "t1"}
+
+    adapter._submit_and_poll = fake_submit  # type: ignore
+    res = asyncio.run(adapter.generate_motion(
+        image_url="https://img/a.png",
+        video_url="https://vid/b.mp4",
+        prompt="walk",
+        model_id="motion-control",
+        resolution="720p",
+    ))
+    assert captured["model"] == "kling-3.0/motion-control"
+    assert captured["input_urls"] == ["https://img/a.png"]
+    assert captured["video_urls"] == ["https://vid/b.mp4"]
+    assert captured["mode"] == "720p"
+    assert captured["character_orientation"] == "video"
+    assert res.meta.get("motion_mode") == "native"
+    assert res.media_url.endswith(".mp4")
+
+
+def test_video_duration_kling_is_string():
+    from app.adapters.kie_adapter import _video_duration_for_kie
+
+    assert _video_duration_for_kie("kling/v2-5-turbo-text-to-video-pro", 5) == "5"
+    assert _video_duration_for_kie("bytedance/seedance-2-fast", 5) == 5
 
 
 def test_director_minimal_skips_post_ladder():
