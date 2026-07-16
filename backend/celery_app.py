@@ -108,10 +108,21 @@ app.conf.update(
             "schedule": 86400.0,
             "options": {"queue": "pipeline_q"},
         },
+        # Weekly paid video out-frame sample (no-op unless MODEL_SMOKE_LIVE_VIDEO_WEEKLY=1)
+        "model-health-live-video-weekly": {
+            "task": "app.tasks.health_tasks.smoke_live_video_weekly",
+            "schedule": 604800.0,
+            "options": {"queue": "pipeline_q"},
+        },
     } if os.getenv("VIS_COLLECTION_AUTO", "true").lower() == "true" else {
         "model-health-smoke-daily": {
             "task": "app.tasks.health_tasks.smoke_active_models",
             "schedule": 86400.0,
+            "options": {"queue": "pipeline_q"},
+        },
+        "model-health-live-video-weekly": {
+            "task": "app.tasks.health_tasks.smoke_live_video_weekly",
+            "schedule": 604800.0,
             "options": {"queue": "pipeline_q"},
         },
     },

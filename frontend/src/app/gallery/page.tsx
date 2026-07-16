@@ -488,14 +488,33 @@ export default function GalleryPage() {
                     className="btn-primary w-full"
                   >✨ 做同款</a>
                   <div className="flex gap-2">
-                    <a href={`/explore/${lightbox.task_id}`} className="btn-secondary flex-1 text-sm text-center">分享页</a>
                     <button
-                      onClick={() => {
-                        const url = `${window.location.origin}/explore/${lightbox.task_id}`;
-                        navigator.clipboard.writeText(url);
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const { publishShare } = await import("@/lib/api");
+                          await publishShare(lightbox.task_id);
+                          window.location.href = `/explore/${lightbox.task_id}`;
+                        } catch (e: any) {
+                          alert(e?.message || "公开分享失败（需为作品所有者）");
+                        }
                       }}
                       className="btn-secondary flex-1 text-sm"
-                    >复制链接</button>
+                    >公开并打开</button>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const { publishShare } = await import("@/lib/api");
+                          await publishShare(lightbox.task_id);
+                          const url = `${window.location.origin}/explore/${lightbox.task_id}`;
+                          await navigator.clipboard.writeText(url);
+                          alert("已公开并复制链接");
+                        } catch (e: any) {
+                          alert(e?.message || "公开分享失败（需为作品所有者）");
+                        }
+                      }}
+                      className="btn-secondary flex-1 text-sm"
+                    >公开并复制</button>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => navigator.clipboard.writeText(lightbox.prompt)} className="btn-secondary flex-1 text-sm">复制提示词</button>

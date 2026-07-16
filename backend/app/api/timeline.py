@@ -16,7 +16,7 @@ from sqlalchemy.orm.attributes import flag_modified
 
 from app.db import get_db
 from app.auth import resolve_user_id
-from app.services.credits import deduct_credits, resolve_team_id
+from app.services.credits import deduct_credits, refund_task_credits, resolve_team_id
 from app.models.task import Task
 from app.models.timeline_project import TimelineProject as TimelineProjectRow
 
@@ -365,6 +365,7 @@ async def render_timeline(
         logger.error(f"Failed to dispatch timeline render task: {e}")
         task.status = "failed"
         task.error_message = f"渲染任务调度失败: {e}"
+        await refund_task_credits(db, task_id, reason="timeline_dispatch_failed")
         await db.commit()
         raise HTTPException(
             status_code=500,

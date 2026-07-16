@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.models.task import Task
-from app.services.credits import deduct_credits, resolve_team_id
+from app.services.credits import deduct_credits, refund_task_credits, resolve_team_id
 from app.tasks.image_tasks import generate_image_task
 from app.tasks.video_tasks import generate_video_task
 from app.tasks.pipeline_tasks import run_pipeline
@@ -194,19 +194,27 @@ async def execute_generation(
     if req.image_url:
         celery_params["image_url"] = req.image_url
 
-    # Dispatch appropriate Celery task
-    if req.template:
-        celery_task = run_pipeline.delay(db_task_id=task_id, pipeline_config=[])
-    elif effective_media == "image" or req.media_type == "image":
-        celery_task = generate_image_task.delay(
-            db_task_id=task_id, model=estimated_model,
-            prompt=enhanced_prompt, params=celery_params,
-        )
-    else:
-        celery_task = generate_video_task.delay(
-            db_task_id=task_id, model=estimated_model,
-            prompt=enhanced_prompt, params=celery_params,
-        )
+    # Dispatch appropriate Celery task — refund if broker/dispatch fails after deduct.
+    try:
+        if req.template:
+            celery_task = run_pipeline.delay(db_task_id=task_id, pipeline_config=[])
+        elif effective_media == "image" or req.media_type == "image":
+            celery_task = generate_image_task.delay(
+                db_task_id=task_id, model=estimated_model,
+                prompt=enhanced_prompt, params=celery_params,
+            )
+        else:
+            celery_task = generate_video_task.delay(
+                db_task_id=task_id, model=estimated_model,
+                prompt=enhanced_prompt, params=celery_params,
+            )
+    except Exception as e:
+        logger.error("Generation dispatch failed task=%s: %s", task_id, e)
+        task.status = "failed"
+        task.error_message = f"任务调度失败: {e}"
+        await refund_task_credits(db, task_id, reason="dispatch_failed")
+        await db.flush()
+        raise HTTPException(status_code=500, detail=f"任务调度失败: {e}")
 
     task.celery_task_id = celery_task.id
     task.status = "queued"
@@ -326,68 +334,75 @@ async def edit_image_tool(
         raise HTTPException(status_code=402, detail=f"积分不足，需要 {tool_cost} 积分")
     await db.commit()
 
-    # Resolve source bytes
-    from app.adapters.demo_provider import demo_mode_active, _local_media_path
-    if image_file:
-        data = await image_file.read()
-        ctype = image_file.content_type or "image/png"
-    else:
-        p = _local_media_path(image_url)
-        if p:
-            with open(p, "rb") as f:
-                data = f.read()
-            ctype = "image/png"
+    try:
+        # Resolve source bytes
+        from app.adapters.demo_provider import demo_mode_active, _local_media_path
+        if image_file:
+            data = await image_file.read()
+            ctype = image_file.content_type or "image/png"
         else:
-            import httpx
-            async with httpx.AsyncClient(timeout=60) as c:
-                r = await c.get(image_url)
-                r.raise_for_status()
-                data = r.content
-                ctype = r.headers.get("content-type", "image/png")
+            p = _local_media_path(image_url)
+            if p:
+                with open(p, "rb") as f:
+                    data = f.read()
+                ctype = "image/png"
+            else:
+                import httpx
+                async with httpx.AsyncClient(timeout=60) as c:
+                    r = await c.get(image_url)
+                    r.raise_for_status()
+                    data = r.content
+                    ctype = r.headers.get("content-type", "image/png")
 
-    if demo_mode_active():
-        from app.adapters.demo_provider import run_demo_image_tool
-        url = await _a.to_thread(run_demo_image_tool, op, data, factor, ratio)
-        return {"url": url, "media_type": "image", "model": f"demo-{op}", "demo": True,
-                "operation": op, "cost_credits": tool_cost}
+        if demo_mode_active():
+            from app.adapters.demo_provider import run_demo_image_tool
+            url = await _a.to_thread(run_demo_image_tool, op, data, factor, ratio)
+            return {"url": url, "media_type": "image", "model": f"demo-{op}", "demo": True,
+                    "operation": op, "cost_credits": tool_cost}
 
-    from app.adapters.kie_adapter import KieAdapter
-    from app.services.media_store import persist_results
-    adapter = KieAdapter()
-    pub = await adapter.upload_public_url(data, filename="src.png", content_type=ctype)
+        from app.adapters.kie_adapter import KieAdapter
+        from app.services.media_store import persist_results
+        adapter = KieAdapter()
+        pub = await adapter.upload_public_url(data, filename="src.png", content_type=ctype)
 
-    async def _run():
-        if op == "upscale":
-            return await adapter.upscale_image(image_url=pub, factor=factor)
-        if op == "bg-remove":
-            return await adapter.remove_background(image_url=pub)
-        if op == "extend":
-            return await adapter.extend_image(image_url=pub, target_ratio=ratio, prompt=prompt or "")
-        return await adapter.edit_image(image_urls=[pub], prompt=prompt,
-                                        image_size=ratio if ratio else "auto")
+        async def _run():
+            if op == "upscale":
+                return await adapter.upscale_image(image_url=pub, factor=factor)
+            if op == "bg-remove":
+                return await adapter.remove_background(image_url=pub)
+            if op == "extend":
+                return await adapter.extend_image(image_url=pub, target_ratio=ratio, prompt=prompt or "")
+            return await adapter.edit_image(image_urls=[pub], prompt=prompt,
+                                            image_size=ratio if ratio else "auto")
 
-    # KIE image tools are intermittently flaky ("internal error") — retry.
-    res = None
-    last_err = None
-    for attempt in range(3):
-        try:
-            res = await _run()
-            break
-        except Exception as e:
-            last_err = e
-            msg = str(e).lower()
-            logger.warning("[edit] %s attempt %d failed: %s", op, attempt + 1, e)
-            if "internal error" in msg or "try again" in msg:
-                await _a.sleep(4)
-                continue
-            raise HTTPException(status_code=502, detail=f"{op} 处理失败: {e}")
-    if res is None:
-        raise HTTPException(status_code=502, detail=f"{op} 处理失败: {last_err}")
-    out = {"type": "image", "url": res.media_url, "media_url": res.media_url, "model": res.model}
-    out = (await _a.to_thread(persist_results, [out]))[0]
-    return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
-            "media_type": "image", "model": res.model, "operation": op,
-            "cost": res.cost, "cost_credits": tool_cost}
+        # KIE image tools are intermittently flaky ("internal error") — retry.
+        res = None
+        last_err = None
+        for attempt in range(3):
+            try:
+                res = await _run()
+                break
+            except Exception as e:
+                last_err = e
+                msg = str(e).lower()
+                logger.warning("[edit] %s attempt %d failed: %s", op, attempt + 1, e)
+                if "internal error" in msg or "try again" in msg:
+                    await _a.sleep(4)
+                    continue
+                raise RuntimeError(f"{op} 处理失败: {e}") from e
+        if res is None:
+            raise RuntimeError(f"{op} 处理失败: {last_err}")
+        out = {"type": "image", "url": res.media_url, "media_url": res.media_url, "model": res.model}
+        out = (await _a.to_thread(persist_results, [out]))[0]
+        return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
+                "media_type": "image", "model": res.model, "operation": op,
+                "cost": res.cost, "cost_credits": tool_cost}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await refund_task_credits(db, tool_task_id, reason="image_tool_failed")
+        await db.commit()
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 class EnhanceRequest(BaseModel):

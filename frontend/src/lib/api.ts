@@ -629,6 +629,32 @@ export async function reportGalleryItem(itemId: string): Promise<{ reports: numb
   return res.json();
 }
 
+/** Explicitly publish a completed task for public share / explore listing */
+export async function publishShare(taskId: string): Promise<{ task_id: string; share_public: boolean; share_path: string }> {
+  const res = await fetch(`${API_BASE}/gallery/share/${encodeURIComponent(taskId)}/publish`, {
+    method: "POST",
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `公开分享失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Revoke public share for a task */
+export async function unpublishShare(taskId: string): Promise<{ task_id: string; share_public: boolean }> {
+  const res = await fetch(`${API_BASE}/gallery/share/${encodeURIComponent(taskId)}/unpublish`, {
+    method: "POST",
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `取消公开失败: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Analyze a prompt without submitting — accepts string or object */
 export async function analyzePrompt(input: string | { prompt: string; media_type?: string; quality?: string; model?: string }) {
   const body = typeof input === "string" ? { prompt: input } : input;

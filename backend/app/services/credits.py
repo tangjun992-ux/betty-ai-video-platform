@@ -3,15 +3,22 @@ Shared credit deduction — personal balance or team shared pool.
 
 APIs pass an optional ``team_id`` (via ``X-Team-Id`` header) to spend from the
 team pool when the actor is an active member.
+
+Failed / cancelled tasks refund via ``refund_task_credits`` (async) or
+``refund_task_credits_sync`` (Celery hooks) — both are idempotent per task_id.
 """
 from __future__ import annotations
 
+import json
 import logging
-from typing import Optional
+import os
+from datetime import datetime, timezone
+from typing import Any, Optional
 
 from fastapi import Request
-from sqlalchemy import select, and_
+from sqlalchemy import create_engine, select, and_, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.models.billing import UserBalance, Transaction, TransactionType
 from app.models.team import Team, TeamMember
@@ -251,3 +258,256 @@ async def grant_subscription_to_team_pool(
         user_id, team.team_id[:8], credits,
     )
     return credits
+
+
+def _db_url_sync() -> str:
+    db_url = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
+    if db_url.startswith("sqlite+aiosqlite"):
+        return db_url.replace("sqlite+aiosqlite", "sqlite")
+    if db_url.startswith("postgresql+asyncpg"):
+        return db_url.replace("postgresql+asyncpg", "postgresql")
+    return db_url
+
+
+def _mark_task_refunded_sync(session: Session, task_id: str, amount: int, reason: str) -> None:
+    row = session.execute(
+        text("SELECT parameters FROM tasks WHERE task_id = :tid"),
+        {"tid": task_id},
+    ).first()
+    if not row:
+        return
+    raw = row[0]
+    params: dict[str, Any] = {}
+    if isinstance(raw, dict):
+        params = dict(raw)
+    elif isinstance(raw, str) and raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                params = parsed
+        except Exception:
+            params = {}
+    params["credits_refunded"] = True
+    params["refund_amount"] = amount
+    params["refund_reason"] = reason
+    params["refund_at"] = datetime.now(timezone.utc).isoformat()
+    session.execute(
+        text("UPDATE tasks SET parameters = :p WHERE task_id = :tid"),
+        {"p": json.dumps(params, ensure_ascii=False), "tid": task_id},
+    )
+
+
+def refund_task_credits_sync(task_id: str, *, reason: str = "task_failed") -> dict[str, Any]:
+    """Idempotent refund of the latest CONSUMPTION for ``task_id`` (Celery-safe).
+
+    Restores credits to the original personal or team pool. Safe to call multiple
+    times — subsequent calls return ``already_refunded``.
+    """
+    if not task_id:
+        return {"refunded": False, "reason": "missing_task_id"}
+
+    engine = create_engine(_db_url_sync())
+    with Session(engine) as session:
+        existing = session.execute(
+            text(
+                "SELECT id FROM transactions WHERE task_id = :tid AND type = :typ LIMIT 1"
+            ),
+            {"tid": task_id, "typ": TransactionType.REFUND.value},
+        ).first()
+        if existing:
+            return {"refunded": False, "reason": "already_refunded", "task_id": task_id}
+
+        cons = session.execute(
+            text(
+                "SELECT id, user_id, team_id, amount, model_used FROM transactions "
+                "WHERE task_id = :tid AND type = :typ ORDER BY id DESC LIMIT 1"
+            ),
+            {"tid": task_id, "typ": TransactionType.CONSUMPTION.value},
+        ).mappings().first()
+        if not cons:
+            return {"refunded": False, "reason": "no_consumption", "task_id": task_id}
+
+        amount = abs(int(cons["amount"] or 0))
+        if amount <= 0:
+            return {"refunded": False, "reason": "zero_amount", "task_id": task_id}
+
+        user_id = int(cons["user_id"])
+        team_id = cons["team_id"] or None
+        model_used = cons["model_used"]
+
+        if team_id:
+            bal = session.execute(
+                text("SELECT credits, daily_credits, total_spent FROM team_balance WHERE team_id = :tid"),
+                {"tid": team_id},
+            ).mappings().first()
+            if not bal:
+                return {"refunded": False, "reason": "team_balance_missing", "task_id": task_id}
+            before = int(bal["credits"] or 0) + int(bal["daily_credits"] or 0)
+            session.execute(
+                text(
+                    "UPDATE team_balance SET credits = credits + :amt, "
+                    "total_spent = CASE WHEN total_spent >= :amt THEN total_spent - :amt ELSE 0 END "
+                    "WHERE team_id = :tid"
+                ),
+                {"amt": amount, "tid": team_id},
+            )
+            after = before + amount
+        else:
+            bal = session.execute(
+                text(
+                    "SELECT credits, daily_credits, plan_credits, total_spent "
+                    "FROM user_balance WHERE user_id = :uid"
+                ),
+                {"uid": user_id},
+            ).mappings().first()
+            if not bal:
+                return {"refunded": False, "reason": "user_balance_missing", "task_id": task_id}
+            before = (
+                int(bal["credits"] or 0)
+                + int(bal["daily_credits"] or 0)
+                + int(bal["plan_credits"] or 0)
+            )
+            session.execute(
+                text(
+                    "UPDATE user_balance SET credits = credits + :amt, "
+                    "total_spent = CASE WHEN total_spent >= :amt THEN total_spent - :amt ELSE 0 END "
+                    "WHERE user_id = :uid"
+                ),
+                {"amt": amount, "uid": user_id},
+            )
+            after = before + amount
+
+        session.execute(
+            text(
+                "INSERT INTO transactions "
+                "(user_id, task_id, team_id, type, amount, balance_before, balance_after, "
+                "description, model_used, created_at, updated_at) "
+                "VALUES (:uid, :tid, :team, :typ, :amt, :before, :after, :desc, :model, :now, :now)"
+            ),
+            {
+                "uid": user_id,
+                "tid": task_id,
+                "team": team_id,
+                "typ": TransactionType.REFUND.value,
+                "amt": amount,
+                "before": before,
+                "after": after,
+                "desc": f"任务失败退款 ({reason}) {task_id[:8]}",
+                "model": model_used,
+                "now": datetime.now(timezone.utc).replace(tzinfo=None),
+            },
+        )
+        try:
+            _mark_task_refunded_sync(session, task_id, amount, reason)
+        except Exception as e:
+            logger.warning("mark task refunded failed task=%s: %s", task_id, e)
+        session.commit()
+        logger.info(
+            "Credits refunded: task=%s amount=%d reason=%s scope=%s",
+            task_id[:8], amount, reason, f"team={team_id}" if team_id else f"user={user_id}",
+        )
+        return {
+            "refunded": True,
+            "task_id": task_id,
+            "amount": amount,
+            "reason": reason,
+            "team_id": team_id,
+            "user_id": user_id,
+        }
+
+
+async def refund_task_credits(
+    db: AsyncSession,
+    task_id: str,
+    *,
+    reason: str = "task_failed",
+) -> dict[str, Any]:
+    """Async idempotent refund using the request DB session."""
+    if not task_id:
+        return {"refunded": False, "reason": "missing_task_id"}
+
+    existing = await db.execute(
+        select(Transaction).where(
+            Transaction.task_id == task_id,
+            Transaction.type == TransactionType.REFUND.value,
+        ).limit(1)
+    )
+    if existing.scalar_one_or_none():
+        return {"refunded": False, "reason": "already_refunded", "task_id": task_id}
+
+    cons_res = await db.execute(
+        select(Transaction).where(
+            Transaction.task_id == task_id,
+            Transaction.type == TransactionType.CONSUMPTION.value,
+        ).order_by(Transaction.id.desc()).limit(1)
+    )
+    cons = cons_res.scalar_one_or_none()
+    if not cons:
+        return {"refunded": False, "reason": "no_consumption", "task_id": task_id}
+
+    amount = abs(int(cons.amount or 0))
+    if amount <= 0:
+        return {"refunded": False, "reason": "zero_amount", "task_id": task_id}
+
+    user_id = int(cons.user_id)
+    team_id = cons.team_id or None
+
+    if team_id:
+        balance = await _ensure_team_balance(db, team_id)
+        before = int(balance.credits or 0) + int(getattr(balance, "daily_credits", 0) or 0)
+        balance.credits = int(balance.credits or 0) + amount
+        balance.total_spent = max(0, int(balance.total_spent or 0) - amount)
+        after = int(balance.credits or 0) + int(getattr(balance, "daily_credits", 0) or 0)
+    else:
+        balance = await _ensure_user_balance(db, user_id)
+        before = await available_personal_credits(balance)
+        balance.credits = int(balance.credits or 0) + amount
+        balance.total_spent = max(0, int(balance.total_spent or 0) - amount)
+        after = await available_personal_credits(balance)
+
+    db.add(Transaction(
+        user_id=user_id,
+        task_id=task_id,
+        team_id=team_id,
+        type=TransactionType.REFUND.value,
+        amount=amount,
+        balance_before=before,
+        balance_after=after,
+        model_used=cons.model_used,
+        description=f"任务失败退款 ({reason}) {task_id[:8]}",
+    ))
+
+    # Best-effort: stamp task.parameters when Task row exists
+    try:
+        from app.models.task import Task
+        tres = await db.execute(select(Task).where(Task.task_id == task_id))
+        task = tres.scalar_one_or_none()
+        if task is not None:
+            params = dict(task.parameters) if isinstance(task.parameters, dict) else {}
+            if isinstance(task.parameters, str) and task.parameters:
+                try:
+                    parsed = json.loads(task.parameters)
+                    if isinstance(parsed, dict):
+                        params = parsed
+                except Exception:
+                    pass
+            params["credits_refunded"] = True
+            params["refund_amount"] = amount
+            params["refund_reason"] = reason
+            params["refund_at"] = datetime.now(timezone.utc).isoformat()
+            task.parameters = params
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(task, "parameters")
+    except Exception as e:
+        logger.warning("async mark task refunded failed task=%s: %s", task_id, e)
+
+    await db.flush()
+    logger.info("Credits refunded (async): task=%s amount=%d reason=%s", task_id[:8], amount, reason)
+    return {
+        "refunded": True,
+        "task_id": task_id,
+        "amount": amount,
+        "reason": reason,
+        "team_id": team_id,
+        "user_id": user_id,
+    }

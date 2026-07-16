@@ -1,17 +1,32 @@
 """
 Gallery/Explore API — community showcase from real completed tasks.
+
+Public visibility requires an explicit publish action (``parameters.share_public``).
+Seed demo items remain visible in non-production when enabled.
 """
 import json
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Query, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_, text
+from sqlalchemy.orm.attributes import flag_modified
 from typing import Optional
 from app.db import get_db
+from app.auth import resolve_user_id
 from app.models.task import Task
 from app.models.user import User
 from app.models.billing import Transaction, TransactionType
 
 router = APIRouter()
+
+
+def _is_share_public(params: dict) -> bool:
+    """True only when the owner explicitly published the work."""
+    if not isinstance(params, dict):
+        return False
+    val = params.get("share_public")
+    return val is True or val == 1 or str(val).lower() in ("true", "1", "yes")
 
 _LIKES_DDL = (
     "CREATE TABLE IF NOT EXISTS gallery_likes "
@@ -236,6 +251,9 @@ async def explore_gallery(
                 is_seed_item = params.get("seed_marker") == "demo_seed_v1"
                 if is_seed_item and not show_seed:
                     continue
+                # Privacy gate: completed ≠ public. Owner must publish.
+                if not is_seed_item and not _is_share_public(params):
+                    continue
 
                 ts = t.completed_at or t.created_at
                 item_key = f"{t.task_id}_{len(items)}"
@@ -280,11 +298,69 @@ async def explore_gallery(
     return {"items": paged, "total": total, "limit": limit, "offset": offset, "styles": STYLE_OPTIONS}
 
 
+async def _owned_completed_task(
+    db: AsyncSession, task_id: str, user_id: int,
+) -> Task:
+    res = await db.execute(select(Task).where(Task.task_id == task_id))
+    task = res.scalar_one_or_none()
+    if not task or task.status != "completed":
+        raise HTTPException(status_code=404, detail="作品不存在或未完成")
+    if int(task.user_id or 0) != int(user_id):
+        raise HTTPException(status_code=403, detail="只能公开自己的作品")
+    return task
+
+
+@router.post("/share/{task_id}/publish", summary="公开分享作品（显式发布）")
+async def publish_share(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    """Owner opts-in to public permalink + explore listing."""
+    if not task_id or len(task_id) < 8:
+        raise HTTPException(status_code=400, detail="无效的分享 ID")
+    task = await _owned_completed_task(db, task_id, user_id)
+    from app.services.moderation import is_safe as _mod_safe
+    if not (_is_safe(task.prompt or "") and _mod_safe(task.prompt or "")):
+        raise HTTPException(status_code=400, detail="内容未通过安全审核，无法公开")
+    params = _safe_dict(task.parameters)
+    params["share_public"] = True
+    params["share_published_at"] = datetime.now(timezone.utc).isoformat()
+    task.parameters = params
+    flag_modified(task, "parameters")
+    await db.commit()
+    return {
+        "task_id": task_id,
+        "share_public": True,
+        "share_path": f"/explore/{task_id}",
+        "share_url": f"/api/v1/gallery/share/{task_id}",
+    }
+
+
+@router.post("/share/{task_id}/unpublish", summary="取消公开分享")
+async def unpublish_share(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    if not task_id or len(task_id) < 8:
+        raise HTTPException(status_code=400, detail="无效的分享 ID")
+    task = await _owned_completed_task(db, task_id, user_id)
+    params = _safe_dict(task.parameters)
+    params["share_public"] = False
+    params["share_unpublished_at"] = datetime.now(timezone.utc).isoformat()
+    task.parameters = params
+    flag_modified(task, "parameters")
+    await db.commit()
+    return {"task_id": task_id, "share_public": False}
+
+
 @router.get("/share/{task_id}", summary="公开分享作品（稳定 permalink）")
 async def share_item(task_id: str, db: AsyncSession = Depends(get_db)):
     """Public share payload by task_id — no auth required.
 
-    Hidden / moderated / unsafe prompts are not exposed. Increments view count.
+    Requires explicit owner publish (``share_public``). Hidden / moderated /
+    unsafe prompts are not exposed. Increments view count.
     """
     if not task_id or len(task_id) < 8:
         raise HTTPException(status_code=400, detail="无效的分享 ID")
@@ -297,6 +373,10 @@ async def share_item(task_id: str, db: AsyncSession = Depends(get_db)):
     if not row:
         raise HTTPException(status_code=404, detail="作品不存在或未公开")
     task, user = row
+    params = _safe_dict(task.parameters)
+    is_seed = params.get("seed_marker") == "demo_seed_v1"
+    if not is_seed and not _is_share_public(params):
+        raise HTTPException(status_code=404, detail="作品不存在或未公开")
     results = _safe_list(task.results)
     if not results:
         raise HTTPException(status_code=404, detail="作品无媒体")
@@ -327,7 +407,6 @@ async def share_item(task_id: str, db: AsyncSession = Depends(get_db)):
     likes_map = await _stored_likes(db)
     views_map = await _stored_views(db)
     author = _author_fields(user)
-    params = _safe_dict(task.parameters)
     media_type = r0.get("type") or task.media_type or "image"
     model = r0.get("model") or task.selected_model or "unknown"
     return {

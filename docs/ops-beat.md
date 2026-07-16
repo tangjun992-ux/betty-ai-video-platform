@@ -31,6 +31,26 @@ celery -A celery_app worker -Q video_q,image_q,pipeline_q,director_q,celery --co
 - 管理员复核：`GET /api/v1/admin/model-health/quarantined`
 - 解除隔离：`POST /api/v1/admin/model-health/{model_id}/clear-quarantine`（需 admin 角色）
 
+## 每周 live_video 抽样（付费，需显式开启）
+
+Beat 已注册 `model-health-live-video-weekly`（每 7 天），任务名：
+`app.tasks.health_tasks.smoke_live_video_weekly`。
+
+| 变量 | 说明 |
+|------|------|
+| `MODEL_SMOKE_LIVE_VIDEO_WEEKLY=1` | 允许周检真正跑付费 video outframe |
+| `MODEL_SMOKE_LIVE_VIDEO=1` | 兼容门控（与手动脚本一致） |
+
+未开启时任务 **no-op 返回**（`skipped: true`），不会产生上游费用。  
+KPI：仅 `evidence.path == live_video` 计入 `outframe_ok`；`live_skipped_video` 记入 `outframe_skipped`，**不计成功**。
+
+手动等价：
+
+```bash
+cd backend
+MODEL_SMOKE_LIVE_VIDEO=1 python scripts/smoke_live_video_sample.py
+```
+
 ## Stripe 生产环境变量
 
 | 变量 | 说明 |

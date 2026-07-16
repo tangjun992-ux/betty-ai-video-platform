@@ -45,7 +45,8 @@ def test_timeline_render_creates_task_row():
     project_id = save.json()["id"]
 
     fake_celery = MagicMock(id="celery-fake-1")
-    with patch("app.services.credits.deduct_credits", new_callable=AsyncMock) as mock_deduct, \
+    # Patch where timeline imported the symbol (not the credits module path).
+    with patch("app.api.timeline.deduct_credits", new_callable=AsyncMock) as mock_deduct, \
          patch("app.tasks.timeline_tasks.process_timeline_render") as mock_task:
         mock_deduct.return_value = True
         mock_task.delay = MagicMock(return_value=fake_celery)

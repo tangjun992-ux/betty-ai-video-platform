@@ -45,7 +45,7 @@ export default function ExploreSharePage() {
       const r = await fetch(`${API_BASE}/gallery/share/${encodeURIComponent(taskId)}`);
       if (!r.ok) {
         const d = await r.json().catch(() => ({}));
-        throw new Error(d.detail || "作品不存在");
+        throw new Error(d.detail || "作品不存在或未公开（需作者显式发布）");
       }
       setItem(await r.json());
     } catch (e: any) {

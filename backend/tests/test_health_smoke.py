@@ -21,3 +21,4 @@ def test_smoke_task_registered():
     from celery_app import app
     app.loader.import_default_modules()
     assert "app.tasks.health_tasks.smoke_active_models" in app.tasks
+    assert "app.tasks.health_tasks.smoke_live_video_weekly" in app.tasks

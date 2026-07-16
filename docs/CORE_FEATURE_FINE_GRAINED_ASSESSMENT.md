@@ -156,11 +156,11 @@
 | 子项 | 分 | 证据 |
 |------|----|------|
 | 链路完整度 | **78** | `/gallery/share/{task_id}` + FE explore |
-| 产品诚实度 | **50** | 文案称「未公开」但实现为：任意人持有 `task_id` 即可读完成任务（仅安全词/下架过滤） |
-| 生产就绪度 | **55** | 缺显式 publish 门闩 |
-| **加权** | **60** | |
+| 产品诚实度 | **85**（修后） | 须 `share_public`；publish/unpublish API + FE |
+| 生产就绪度 | **75** | 门闩已落地；社区氛围仍弱于 Yapper |
+| **加权** | **78** | |
 
-**继续优化：** `parameters.share_public` 或 `Task.is_public`；分享动作显式打开。
+**继续优化：** 个人作品页「已公开」状态展示；举报与下架闭环运营。
 
 ---
 
@@ -170,8 +170,8 @@
 |------|----|------|
 | 链路完整度 | **70** | 个人/团队池、计划积分 rollover 代码在 |
 | 产品诚实度 | **65** | readiness 探针可暴露 Stripe 未就绪 |
-| 生产就绪度 | **35** | Stripe Price/Webhook **未配置**；生成失败无自动退款 |
-| **加权** | **50** | |
+| 生产就绪度 | **55**（修后） | 失败幂等退款已通；Stripe Price/Webhook **仍未配置** |
+| **加权** | **62** | |
 
 ---
 
@@ -230,11 +230,11 @@ flowchart LR
 4. ~~Lipsync `send_task` 传 `model_name`；studio 提高 resolution~~  
 5. ~~`/generate/edit` 鉴权（`resolve_user_id`）+ 按 operation 扣积分~~  
 
-### P1（下一迭代）
-1. 生成/工具失败自动退款（幂等）  
-2. Share publish 门闩（`share_public`）  
-3. live_video 周检进 CI/ops-beat（允许 flaky 隔离，不计假成功）  
-4. edit 失败退款；工具成本与上游 `res.cost` 对齐看板  
+### P1（本迭代已修 — 详见 `P1_REFUND_SHARE_LIVE_VIDEO.md`）
+1. ~~生成/工具失败自动退款（幂等）~~  
+2. ~~Share publish 门闩（`share_public`）~~  
+3. ~~live_video 周检进 Beat（env 门控；不计 `live_skipped` 为成功）~~  
+4. ~~edit 失败退款~~；工具成本与上游 `res.cost` 对齐看板（⏳ 下轮）  
 
 ### P2（体验与护城河）
 1. 多参考图 / 真正分镜 API  
@@ -245,4 +245,4 @@ flowchart LR
 
 ## 6. 一句话结论
 
-Betty 的**路由、目录诚实、运维冒烟**已接近 Yapper 级工作室；但 **Developer API、Timeline 异步轮询、FE 图生链路、图像工具计费** 四处足以否定「生产就绪」叙事。先修 P0，再谈对标分数上修。
+P0 阻断项与 P1 退款/隐私/周检已落地并通过自动化验证；综合就绪约 **~70**。Betty 仍是 **Yapper 类多模型网关工作室**——下一刀应做工具成本看板与真分镜，而非重复已完成项。

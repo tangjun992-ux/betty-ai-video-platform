@@ -36,6 +36,17 @@ async def capabilities():
             "share_permalink": {
                 "available": True,
                 "path": "/explore/{task_id}",
+                "requires_publish": True,
+                "note": "须调用 POST /gallery/share/{task_id}/publish 后 permalink 才公开。",
+            },
+            "failure_refund": {
+                "available": True,
+                "note": "任务 failed/cancelled 时幂等退还预扣积分；调度失败与图像工具失败同步退款。",
+            },
+            "live_video_weekly_smoke": {
+                "available": True,
+                "gated_by": "MODEL_SMOKE_LIVE_VIDEO_WEEKLY=1",
+                "note": "周检仅在显式开启时跑付费 live_video；live_skipped 不计 outframe_ok。",
             },
         },
     }

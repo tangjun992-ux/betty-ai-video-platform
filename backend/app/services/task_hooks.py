@@ -287,6 +287,16 @@ def on_task_terminal(db_task_id: str, *, status: str) -> dict[str, Any]:
         return {"ok": False, "reason": "missing"}
     # Prefer the status just written (row may lag in rare races).
     task["status"] = status or task.get("status")
+
+    refund: dict[str, Any] = {"refunded": False, "reason": "not_applicable"}
+    if (status or "").lower() in ("failed", "cancelled"):
+        try:
+            from app.services.credits import refund_task_credits_sync
+            refund = refund_task_credits_sync(db_task_id, reason=f"task_{status}")
+        except Exception as e:
+            logger.warning("task refund failed task=%s: %s", db_task_id, e)
+            refund = {"refunded": False, "reason": str(e)}
+
     wh = deliver_webhook(db_task_id, task=task)
     if task.get("webhook_url"):
         try:
@@ -294,4 +304,4 @@ def on_task_terminal(db_task_id: str, *, status: str) -> dict[str, Any]:
         except Exception as e:
             logger.warning("persist webhook status failed task=%s: %s", db_task_id, e)
     em = notify_task_email(db_task_id, task=task)
-    return {"ok": True, "webhook": wh, "email": em}
+    return {"ok": True, "webhook": wh, "email": em, "refund": refund}
