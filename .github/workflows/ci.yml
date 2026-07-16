@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend · tests + migrations
+    name: Backend · full pytest + migrations
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -28,8 +28,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install "moto[s3]" pytest
-      - name: Self-contained unit tests
-        run: pytest tests/test_moderation.py tests/test_storage.py -q
+      - name: Full unit / API test suite
+        env:
+          ENV: test
+          DATABASE_URL: "sqlite+aiosqlite:////tmp/ci_tests.db"
+        run: pytest tests/ -q --tb=line
       - name: Alembic migrations apply on a fresh DB
         env:
           DATABASE_URL: "sqlite:////tmp/ci_alembic.db"
@@ -51,9 +54,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Lint
-        continue-on-error: true
         run: npm run lint --if-present
       - name: Build
         env:
+          NEXT_PUBLIC_TELEMETRY_DISABLED: "1"
           NEXT_TELEMETRY_DISABLED: "1"
         run: npm run build

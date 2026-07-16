@@ -39,8 +39,8 @@ PLANS: list[PricingPlan] = [
         credits_per_month=1000,
         features=[
             PlanFeature(name="Seedance 2.0 全模态视频", included=False),
-            PlanFeature(name="16+ 专业图片模型", included=True),
-            PlanFeature(name="23+ 专业视频模型", included=False),
+            PlanFeature(name="已验证图片模型（含 Imagen / GPT Image）", included=True),
+            PlanFeature(name="已验证视频模型（Seedance / Kling）", included=False),
             PlanFeature(name="高级唇形同步", included=True),
             PlanFeature(name="高级图片编辑器", included=True),
             PlanFeature(name="视频 & 图片放大", included=True),
@@ -58,8 +58,8 @@ PLANS: list[PricingPlan] = [
         credits_per_month=3000,
         features=[
             PlanFeature(name="Seedance 2.0 全模态视频", included=True),
-            PlanFeature(name="16+ 专业图片模型", included=True),
-            PlanFeature(name="23+ 专业视频模型", included=True),
+            PlanFeature(name="已验证图片模型（含 Imagen / GPT Image）", included=True),
+            PlanFeature(name="已验证视频模型（Seedance / Kling）", included=True),
             PlanFeature(name="高级唇形同步", included=True),
             PlanFeature(name="高级图片编辑器", included=True),
             PlanFeature(name="视频 & 图片放大", included=True),
@@ -79,8 +79,8 @@ PLANS: list[PricingPlan] = [
         badge="最受欢迎 🔥",
         features=[
             PlanFeature(name="Seedance 2.0 全模态视频", included=True),
-            PlanFeature(name="16+ 专业图片模型", included=True),
-            PlanFeature(name="23+ 专业视频模型", included=True),
+            PlanFeature(name="已验证图片模型（含 Imagen / GPT Image）", included=True),
+            PlanFeature(name="已验证视频模型（Seedance / Kling）", included=True),
             PlanFeature(name="高级唇形同步", included=True),
             PlanFeature(name="高级图片编辑器", included=True),
             PlanFeature(name="视频 & 图片放大", included=True),
@@ -98,8 +98,8 @@ PLANS: list[PricingPlan] = [
         credits_per_month=15000,
         features=[
             PlanFeature(name="Seedance 2.0 全模态视频", included=True),
-            PlanFeature(name="16+ 专业图片模型", included=True),
-            PlanFeature(name="23+ 专业视频模型", included=True),
+            PlanFeature(name="已验证图片模型（含 Imagen / GPT Image）", included=True),
+            PlanFeature(name="已验证视频模型（Seedance / Kling）", included=True),
             PlanFeature(name="高级唇形同步", included=True),
             PlanFeature(name="高级图片编辑器", included=True),
             PlanFeature(name="视频 & 图片放大", included=True),

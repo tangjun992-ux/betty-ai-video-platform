@@ -926,7 +926,15 @@ class DirectorExecutor:
         # firing all shots at once stalls them all in 'waiting'. Serialize real
         # video generation (1 at a time) so each shot gets a GPU slot in turn.
         # Demo renders are fast/local → keep them parallel.
-        vid_sem = asyncio.Semaphore(8 if self.dry_run else 1)
+        # Real video providers queue concurrent shots on limited GPUs.
+        # DIRECTOR_VIDEO_CONCURRENCY (default 2) raises throughput vs serial-1
+        # while staying below provider saturation; demo stays highly parallel.
+        import os as _os
+        try:
+            real_conc = max(1, min(8, int(_os.getenv("DIRECTOR_VIDEO_CONCURRENCY", "2"))))
+        except ValueError:
+            real_conc = 2
+        vid_sem = asyncio.Semaphore(8 if self.dry_run else real_conc)
 
         # 预处理：跳过步骤直接标记完成 (满足依赖)
         for s in remaining:

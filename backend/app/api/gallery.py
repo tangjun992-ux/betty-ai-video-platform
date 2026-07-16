@@ -302,6 +302,38 @@ async def like_item(item_key: str, undo: bool = Query(default=False), db: AsyncS
     return {"item_key": item_key, "likes": stored, "liked": not undo}
 
 
+@router.post("/{item_key}/remix", summary="Remix 作品（进入创作）")
+async def remix_item(item_key: str, db: AsyncSession = Depends(get_db)):
+    """Return remix payload so the client can open Create with source media + prompt."""
+    if not item_key or "_" not in item_key:
+        raise HTTPException(status_code=400, detail="无效的作品 ID")
+    task_id = item_key.rsplit("_", 1)[0]
+    from app.models.task import Task
+    from sqlalchemy import select as sa_select
+    row = (await db.execute(sa_select(Task).where(Task.task_id == task_id))).scalar_one_or_none()
+    if not row or row.status != "completed":
+        raise HTTPException(status_code=404, detail="作品不存在")
+    results = row.results if isinstance(row.results, list) else []
+    media_url = ""
+    if results and isinstance(results[0], dict):
+        media_url = results[0].get("media_url") or results[0].get("url") or ""
+    prompt = row.prompt or ""
+    media_type = row.media_type or "image"
+    from app.services.moderation import check_media_url, moderation_reject
+    m = check_media_url(media_url, caption=prompt)
+    if not m.allowed:
+        raise moderation_reject(m)
+    return {
+        "remix": True,
+        "source_item_key": item_key,
+        "prompt": prompt,
+        "media_type": media_type,
+        "media_url": media_url,
+        "model": row.selected_model or row.requested_model,
+        "create_path": f"/create/{'video' if media_type == 'video' else 'image'}",
+    }
+
+
 @router.post("/{item_key}/report", summary="举报作品")
 async def report_item(item_key: str, db: AsyncSession = Depends(get_db)):
     """Community report. Increments the report count and auto-hides the item

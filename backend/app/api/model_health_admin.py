@@ -32,13 +32,19 @@ async def list_quarantined(
         if model_health.is_quarantined(m.id) or snap.circuit_open:
             items.append({
                 "model_id": m.id,
-                "name": m.name,
+                "name": m.name if hasattr(m, "name") else m.display_name,
                 "status": m.status,
                 "quarantined": model_health.is_quarantined(m.id),
                 "circuit_open": snap.circuit_open,
                 "health": snap.public_dict(),
             })
     return {"total": len(items), "models": items}
+
+
+@router.get("/catalog", summary="目录诚信与验真状态")
+async def admin_catalog(_: User = Depends(require_admin)):
+    from app.services.model_catalog import catalog_integrity
+    return catalog_integrity()
 
 
 @router.post("/{model_id}/clear-quarantine", summary="解除模型隔离（复核通过）")

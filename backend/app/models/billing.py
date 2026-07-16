@@ -48,6 +48,9 @@ class UserBalance(Base):
     daily_credits = Column(Integer, default=0)
     daily_credits_max = Column(Integer, default=10)
     last_reset_date = Column(DateTime(timezone=True), nullable=True)
+    # Subscription allotment with rollover cap (≤ 2× monthly plan credits).
+    plan_credits = Column(Integer, nullable=False, default=0)
+    plan_monthly_allotment = Column(Integer, nullable=False, default=0)
 
     total_spent = Column(Integer, default=0)
     total_tasks = Column(Integer, default=0)

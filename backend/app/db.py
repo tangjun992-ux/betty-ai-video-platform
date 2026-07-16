@@ -71,6 +71,14 @@ def _migrate_team_and_transaction_columns(connection):
             cols = {c["name"] for c in insp.get_columns("transactions")}
             if "team_id" not in cols:
                 connection.execute(text("ALTER TABLE transactions ADD COLUMN team_id VARCHAR(36)"))
+        if "user_balance" in tables:
+            cols = {c["name"] for c in insp.get_columns("user_balance")}
+            if "plan_credits" not in cols:
+                connection.execute(text("ALTER TABLE user_balance ADD COLUMN plan_credits INTEGER DEFAULT 0"))
+            if "plan_monthly_allotment" not in cols:
+                connection.execute(
+                    text("ALTER TABLE user_balance ADD COLUMN plan_monthly_allotment INTEGER DEFAULT 0")
+                )
     except Exception:
         pass
 

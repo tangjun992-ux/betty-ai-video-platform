@@ -67,9 +67,9 @@ MODELS = [
     ),
     ModelInfo(
         id="imagen-4", provider="KIE.ai → Google", display_name="Imagen 4",
-        description="Google 摄影级写实与光影",
+        description="Google 摄影级写实与光影（网关已映射验证）",
         capabilities=ModelCapability(media_types=["image"], max_resolution="4K", max_duration_s=0, avg_latency_s=11, styles=["photorealistic", "landscape", "food", "product"], cost_per_image_credits=4, cost_per_5s_video_credits=0),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="active",
     ),
     ModelInfo(
         id="ideogram-v3", provider="KIE.ai → Ideogram", display_name="Ideogram V3",
@@ -165,21 +165,21 @@ MODELS = [
     ),
     ModelInfo(
         id="kling-2.5-turbo", provider="KIE.ai → Kuaishou", display_name="Kling 2.5 Turbo",
-        description="快手旗舰，运动连贯/性价比高",
+        description="快手旗舰，运动连贯/性价比高（网关 ID 已识别）",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=60, styles=["cinematic", "dynamic", "realistic"], cost_per_image_credits=0, cost_per_5s_video_credits=7),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="active",
     ),
     ModelInfo(
         id="kling-2.1-master", provider="KIE.ai → Kuaishou", display_name="Kling 2.1 Master",
-        description="大师版，复杂运镜",
+        description="大师版，复杂运镜（网关 ID 已识别）",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=90, styles=["cinematic", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=9),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="active",
     ),
     ModelInfo(
         id="kling-2.1-pro", provider="KIE.ai → Kuaishou", display_name="Kling 2.1 Pro",
-        description="专业图生视频",
+        description="专业图生视频（网关 ID 已识别）",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=70, styles=["realistic", "product"], cost_per_image_credits=0, cost_per_5s_video_credits=7),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="active",
     ),
     ModelInfo(
         id="kling-1.6", provider="KIE.ai → Kuaishou", display_name="Kling 1.6",

@@ -63,6 +63,30 @@ async def is_active_team_member(db: AsyncSession, team_id: str, user_id: int) ->
     return res.scalar_one_or_none() is not None
 
 
+async def available_personal_credits(balance: UserBalance) -> int:
+    return (
+        int(balance.credits or 0)
+        + int(getattr(balance, "daily_credits", 0) or 0)
+        + int(getattr(balance, "plan_credits", 0) or 0)
+    )
+
+
+def apply_plan_credit_rollover(balance: UserBalance, monthly: int) -> int:
+    """Grant monthly plan credits with ≤2× allotment rollover cap (Yapper FAQ).
+
+    Unused plan_credits carry into the next cycle, capped so
+    plan_credits ≤ 2 * monthly after the grant. Purchased ``credits`` are untouched.
+    """
+    if monthly <= 0:
+        return int(getattr(balance, "plan_credits", 0) or 0)
+    current = int(getattr(balance, "plan_credits", 0) or 0)
+    # Carry at most one month of unused allotment → total ≤ 2× after grant.
+    carry = min(current, monthly)
+    balance.plan_credits = carry + monthly
+    balance.plan_monthly_allotment = monthly
+    return balance.plan_credits
+
+
 async def deduct_credits(
     db: AsyncSession,
     user_id: int,
@@ -81,28 +105,46 @@ async def deduct_credits(
         if not await is_active_team_member(db, team_id, user_id):
             return False
         balance = await _ensure_team_balance(db, team_id)
+        total_available = balance.credits + getattr(balance, "daily_credits", 0)
+        if total_available < cost:
+            return False
+        remaining = cost
+        credits_before = total_available
+        daily = getattr(balance, "daily_credits", 0) or 0
+        if daily > 0:
+            deduct_daily = min(daily, remaining)
+            balance.daily_credits = daily - deduct_daily
+            remaining -= deduct_daily
+        if remaining > 0:
+            balance.credits -= remaining
+        credits_after = balance.credits + getattr(balance, "daily_credits", 0)
     else:
         balance = await _ensure_user_balance(db, user_id)
+        total_available = await available_personal_credits(balance)
+        if total_available < cost:
+            return False
+        remaining = cost
+        credits_before = total_available
 
-    total_available = balance.credits + getattr(balance, "daily_credits", 0)
-    if total_available < cost:
-        return False
+        daily = getattr(balance, "daily_credits", 0) or 0
+        if daily > 0:
+            deduct_daily = min(daily, remaining)
+            balance.daily_credits = daily - deduct_daily
+            remaining -= deduct_daily
 
-    remaining = cost
-    credits_before = balance.credits + getattr(balance, "daily_credits", 0)
+        plan = int(getattr(balance, "plan_credits", 0) or 0)
+        if remaining > 0 and plan > 0:
+            take = min(plan, remaining)
+            balance.plan_credits = plan - take
+            remaining -= take
 
-    daily = getattr(balance, "daily_credits", 0) or 0
-    if daily > 0:
-        deduct_daily = min(daily, remaining)
-        balance.daily_credits = daily - deduct_daily
-        remaining -= deduct_daily
+        if remaining > 0:
+            balance.credits -= remaining
 
-    if remaining > 0:
-        balance.credits -= remaining
+        credits_after = await available_personal_credits(balance)
 
     balance.total_spent = (balance.total_spent or 0) + cost
     balance.total_tasks = (balance.total_tasks or 0) + 1
-    credits_after = balance.credits + getattr(balance, "daily_credits", 0)
 
     desc = description or f"Generation task {task_id[:8]}..."
     txn = Transaction(

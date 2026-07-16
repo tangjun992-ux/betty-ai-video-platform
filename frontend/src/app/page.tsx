@@ -178,7 +178,7 @@ const MODELS = [
 
 // 真实产品事实（非虚构增长数据）— 诚实且经得起推敲
 const STATS = [
-  { value: "5+", label: "已验证 AI 模型", icon: TrendingUp },
+  { value: "9+", label: "已验证 AI 模型", icon: TrendingUp },
   { value: "4K", label: "超高清输出", icon: Award },
   { value: "秒级", label: "图片生成 · 分钟级出片", icon: Timer },
   { value: "一句话", label: "Agent 自动成片", icon: Bot },
@@ -459,7 +459,7 @@ function ModelsSection() {
             Powered by
           </p>
           <h2 className="text-2xl font-bold text-text-primary mb-2">
-            全球顶级 AI 模型矩阵
+            已验证可用 AI 模型
           </h2>
           <p className="text-body-sm text-text-tertiary">
             持续接入最新模型，创作永不过时

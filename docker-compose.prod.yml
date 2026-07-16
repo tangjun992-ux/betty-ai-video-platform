@@ -59,7 +59,8 @@ services:
       - SEEDANCE_API_KEY=${SEEDANCE_API_KEY}
       - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
       - KLING_SECRET_KEY=${KLING_SECRET_KEY}
-      - STORAGE_TYPE=${STORAGE_TYPE:-local}
+      # Production default: object storage. Override STORAGE_TYPE=local only for smoke tests.
+      - STORAGE_TYPE=${STORAGE_TYPE:-s3}
       - STORAGE_PATH=/app/storage
       - MEDIA_CDN_BASE_URL=${MEDIA_CDN_BASE_URL:-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
@@ -83,7 +84,7 @@ services:
       - media_storage:/app/storage
     restart: unless-stopped
     # Horizontal scale: stateless API behind a load balancer (rate-limit + auth
-    # are Redis/JWT backed, so replicas are safe). Scale with `--scale api=N`.
+    # are Redis/JWT backed; WebSocket progress uses Redis pub/sub). Scale with `--scale api=N`.
     deploy:
       replicas: ${API_REPLICAS:-2}
       resources:
@@ -101,12 +102,13 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - REDIS_URL=redis://redis:6379/0
       - KIE_API_KEY=${KIE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SEEDANCE_API_KEY=${SEEDANCE_API_KEY}
       - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
       - KLING_SECRET_KEY=${KLING_SECRET_KEY}
-      - STORAGE_TYPE=${STORAGE_TYPE:-local}
+      - STORAGE_TYPE=${STORAGE_TYPE:-s3}
       - STORAGE_PATH=/app/storage
       - MEDIA_CDN_BASE_URL=${MEDIA_CDN_BASE_URL:-}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}

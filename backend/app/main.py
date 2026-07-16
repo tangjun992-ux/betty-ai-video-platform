@@ -64,6 +64,14 @@ async def lifespan(app: FastAPI):
     from app.services.media_store import backfill_generated_media
     backfill_task = asyncio.create_task(backfill_generated_media())
 
+    # Multi-replica WebSocket progress: start Redis listener on API boot.
+    try:
+        from app.api.websocket import _ensure_redis_listener
+        _ensure_redis_listener(asyncio.get_running_loop())
+        print("[LIFESPAN] WebSocket Redis pub/sub listener started")
+    except Exception as e:
+        print(f"[LIFESPAN] WebSocket Redis listener skipped: {e}")
+
     yield
     backfill_task.cancel()
     print("[LIFESPAN] Shutting down...")

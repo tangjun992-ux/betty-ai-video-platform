@@ -51,6 +51,12 @@ def smoke_active_models(self):
             model_health.record_success(m.id, latency_ms)
             model_health.clear_quarantine(m.id)
             results["ok"] += 1
+            # Mapping integrity: active models must have a KIE ID when not in demo.
+            from app.adapters.kie_adapter import KIE_MODEL_IDS
+            from app.services.model_catalog import should_be_active
+            if should_be_active(m.id) and m.id not in KIE_MODEL_IDS:
+                logger.error("MODEL_HEALTH_ALERT model=%s missing KIE map", m.id)
+                results["failed"].append(m.id)
         else:
             model_health.record_failure(m.id, err or "smoke failed", retryable=True)
             model_health.set_quarantine(m.id, reason=err or "smoke failed")

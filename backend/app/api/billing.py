@@ -22,7 +22,7 @@ from app.models.payment_order import PaymentOrder
 from app.models.user import User
 from app.api.pricing import PLANS
 from app.services.entitlements import plan_subscription_role, pick_higher_role, user_role
-from app.services.credits import grant_subscription_to_team_pool
+from app.services.credits import grant_subscription_to_team_pool, apply_plan_credit_rollover, available_personal_credits
 from app.rate_limiter import rate_limit
 from app.auth import resolve_user_id
 from app.services.receipt_email import send_receipt_email
@@ -170,15 +170,19 @@ async def credit_packs():
 async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Depends(resolve_user_id)):
     bal = await _get_balance(db, user_id)
     await db.commit()
+    total = await available_personal_credits(bal)
     return {
-        "credits": bal.credits + bal.daily_credits,
+        "credits": total,
         "purchased_credits": bal.credits,
+        "plan_credits": int(getattr(bal, "plan_credits", 0) or 0),
+        "plan_monthly_allotment": int(getattr(bal, "plan_monthly_allotment", 0) or 0),
         "daily_credits": bal.daily_credits,
         "daily_credits_max": bal.daily_credits_max,
         "total_spent": bal.total_spent,
         "total_tasks": bal.total_tasks,
         "total_purchased": bal.total_purchased,
         "stripe_enabled": bool(settings.STRIPE_API_KEY),
+        "rollover_cap_multiplier": 2,
     }
 
 
@@ -336,19 +340,32 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
                 "kind": req.kind, "id": req.id, "credits": str(credits),
                 "order_no": order_no, "user_id": str(user_id),
                 "quantity": str(req.quantity),
+                "cycle": req.cycle,
             }
             if extra.get("team_id"):
                 meta["team_id"] = extra["team_id"]
             if extra.get("seats"):
                 meta["seats"] = str(extra["seats"])
-            session = stripe.checkout.Session.create(
-                mode="payment",
-                line_items=[_stripe_line_item(req, credits, price_usd, label)],
-                success_url=settings.STRIPE_SUCCESS_URL,
-                cancel_url=settings.STRIPE_CANCEL_URL,
-                metadata=meta,
-            )
-            return {"mode": "stripe", "checkout_url": session.url, "credits": credits, "order_no": order_no}
+            line = _stripe_line_item(req, credits, price_usd, label)
+            # Real subscriptions when a Stripe Price ID is configured for the plan.
+            checkout_mode = "subscription" if (req.kind == "plan" and "price" in line) else "payment"
+            create_kwargs = {
+                "mode": checkout_mode,
+                "line_items": [line],
+                "success_url": settings.STRIPE_SUCCESS_URL,
+                "cancel_url": settings.STRIPE_CANCEL_URL,
+                "metadata": meta,
+            }
+            if checkout_mode == "subscription":
+                create_kwargs["subscription_data"] = {"metadata": meta}
+            session = stripe.checkout.Session.create(**create_kwargs)
+            return {
+                "mode": "stripe",
+                "checkout_mode": checkout_mode,
+                "checkout_url": session.url,
+                "credits": credits,
+                "order_no": order_no,
+            }
         except Exception as e:
             logger.error("stripe checkout failed: %s", e)
             raise HTTPException(status_code=502, detail=f"支付网关错误: {e}")
@@ -372,10 +389,26 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
         }
 
     bal = await _get_balance(db, user_id)
-    before = bal.credits + bal.daily_credits
-    bal.credits += credits
-    bal.total_purchased += credits
-    after = bal.credits + bal.daily_credits
+    before = await available_personal_credits(bal)
+    if req.kind == "plan":
+        plan = next((p for p in PLANS if p.id == req.id), None)
+        monthly = int(plan.credits_per_month) if plan else credits
+        # Yearly one-shot grant: apply monthly rollover once per month equivalent
+        # for the first month, then add remaining months as plan_credits (capped).
+        apply_plan_credit_rollover(bal, monthly)
+        if credits > monthly:
+            # Additional prepaid months (yearly) — still respect 2× cap after each add.
+            extra_months = credits // monthly - 1
+            for _ in range(max(0, extra_months)):
+                apply_plan_credit_rollover(bal, monthly)
+        bal.total_purchased = (bal.total_purchased or 0) + credits
+        after = await available_personal_credits(bal)
+        desc = f"订阅 {label}（plan_credits rollover，+{credits}）"
+    else:
+        bal.credits += credits
+        bal.total_purchased += credits
+        after = await available_personal_credits(bal)
+        desc = f"购买 {label}（+{credits} 积分）"
     txn = Transaction(
         user_id=user_id,
         type=TransactionType.PURCHASE.value,
@@ -385,7 +418,7 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
         amount_usd=price_usd,
         payment_method="dev-grant",
         payment_id=order_no,
-        description=f"购买 {label}（+{credits} 积分）",
+        description=desc,
     )
     db.add(txn)
     await _apply_plan_role(db, user_id, req.kind, req.id)
@@ -486,16 +519,32 @@ async def _grant_order(db: AsyncSession, order: PaymentOrder, *, email: Optional
         return bal.credits + bal.daily_credits
 
     bal = await _get_balance(db, uid)
-    before = bal.credits + bal.daily_credits
-    bal.credits += order.credits
-    bal.total_purchased += order.credits
-    after = bal.credits + bal.daily_credits
+    before = await available_personal_credits(bal)
+    if order.kind == "plan":
+        plan = next((p for p in PLANS if p.id == order.item_id), None)
+        monthly = int(plan.credits_per_month) if plan else int(order.credits or 0)
+        apply_plan_credit_rollover(bal, monthly)
+        # One-time yearly checkout still prepaid: apply remaining months with cap.
+        total = int(order.credits or 0)
+        if monthly > 0 and total > monthly:
+            for _ in range(total // monthly - 1):
+                apply_plan_credit_rollover(bal, monthly)
+        bal.total_purchased = (bal.total_purchased or 0) + total
+        after = await available_personal_credits(bal)
+        desc = f"{order.label}（订阅 plan_credits · {order.provider}）"
+        amount = total
+    else:
+        bal.credits += order.credits
+        bal.total_purchased += order.credits
+        after = await available_personal_credits(bal)
+        desc = f"{order.label}（+{order.credits} 积分 · {order.provider}）"
+        amount = order.credits
     db.add(Transaction(
         user_id=uid,
-        type=TransactionType.PURCHASE.value, amount=order.credits,
+        type=TransactionType.PURCHASE.value, amount=amount,
         balance_before=before, balance_after=after, amount_usd=order.amount_usd,
         payment_method=order.provider, payment_id=order.order_no,
-        description=f"{order.label}（+{order.credits} 积分 · {order.provider}）",
+        description=desc,
     ))
     order.granted = True
     await _upgrade_role_for_plan(db, uid, order)
@@ -663,6 +712,38 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     except Exception as e:
         logger.error("stripe webhook parse failed: %s", e)
         raise HTTPException(status_code=400, detail=f"invalid webhook: {e}")
+
+    if etype == "invoice.paid":
+        # Recurring subscription renewal — grant one month of plan credits.
+        meta = data_obj.get("subscription_details", {}).get("metadata") or {}
+        if not meta:
+            # Fallback: lines metadata / parent subscription metadata
+            lines = (data_obj.get("lines") or {}).get("data") or []
+            if lines:
+                meta = (lines[0].get("metadata") or {})
+        plan_id = meta.get("id") or meta.get("plan_id")
+        user_id_raw = meta.get("user_id")
+        if not plan_id or not user_id_raw:
+            return {"received": True, "ignored": "invoice.paid missing metadata"}
+        plan = next((p for p in PLANS if p.id == plan_id), None)
+        if not plan:
+            return {"received": True, "error": f"unknown plan {plan_id}"}
+        uid = int(user_id_raw)
+        bal = await _get_balance(db, uid)
+        before = await available_personal_credits(bal)
+        apply_plan_credit_rollover(bal, plan.credits_per_month)
+        after = await available_personal_credits(bal)
+        db.add(Transaction(
+            user_id=uid, type=TransactionType.PURCHASE.value,
+            amount=plan.credits_per_month, balance_before=before, balance_after=after,
+            payment_method="stripe", payment_id=data_obj.get("id"),
+            description=f"订阅续费 {plan.name}（+{plan.credits_per_month} plan_credits）",
+        ))
+        await grant_subscription_to_team_pool(
+            db, uid, plan_id, plan.credits_per_month, order_no=str(data_obj.get("id") or ""),
+        )
+        await db.commit()
+        return {"received": True, "renewed": plan_id, "balance": after}
 
     if etype != "checkout.session.completed":
         return {"received": True, "ignored": etype}

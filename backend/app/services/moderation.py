@@ -170,6 +170,25 @@ def moderation_reject(result: ModerationResult):
     )
 
 
+def check_media_url(url: str, *, caption: str = "") -> ModerationResult:
+    """Asset-level gate: caption/prompt check + optional OpenAI when keyed.
+
+    Pure URL hosts are not scanned (no download). Callers should pass any
+    associated prompt/caption for keyword screening.
+    """
+    text = (caption or "").strip()
+    if text:
+        local = check_prompt(text)
+        if not local.allowed:
+            return local
+        openai_hit = _openai_moderation(text)
+        if openai_hit is not None and not openai_hit.allowed:
+            return openai_hit
+    if not (url or "").strip():
+        return ModerationResult(allowed=False, category="illegal", reason="缺少媒体地址", risk_score=0.5)
+    return ModerationResult(allowed=True)
+
+
 def is_safe(text: str) -> bool:
     """Boolean convenience wrapper (e.g. for gallery display filtering)."""
     return check_prompt(text or "").allowed
