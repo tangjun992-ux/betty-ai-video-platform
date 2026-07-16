@@ -80,6 +80,7 @@ export default function CreateImagePage() {
   // Submission tracking for empty state logic
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [imageModels, setImageModels] = useState(IMAGE_MODELS_FALLBACK);
+  const [remixImageUrl, setRemixImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/models/?status=active`)
@@ -126,9 +127,10 @@ export default function CreateImagePage() {
       setActiveTool(preset.tool);
       if (preset.prompt && !prompt) setPrompt(preset.prompt);
     }
-    // Remix pre-fill (?prompt=&model=) from explore/library page
+    // Remix pre-fill (?prompt=&model=&image_url=) from explore/library page
     const remixPrompt = params.get("prompt");
     const remixModel = params.get("model");
+    const remixImage = params.get("image_url") || params.get("ref");
     if (remixPrompt) {
       setPrompt(remixPrompt);
       setPrefillPrompt(remixPrompt);
@@ -139,6 +141,9 @@ export default function CreateImagePage() {
         (m) => m.id === remixModel || m.id.endsWith(`/${short}`) || m.id.startsWith(short)
       );
       if (matched) setSelectedModel(matched.id);
+    }
+    if (remixImage) {
+      setRemixImageUrl(remixImage);
     }
   }, [imageModels, setPrompt, setSelectedModel]); // remix pre-fill when models load
 
@@ -203,6 +208,10 @@ export default function CreateImagePage() {
           if (uploaded.url) urls.push(uploaded.url);
         }
         referenceImages = urls.length ? urls : undefined;
+      }
+      // Explore Remix may pass a remote media URL without a local File
+      if (remixImageUrl) {
+        referenceImages = [remixImageUrl, ...(referenceImages || [])].slice(0, 4);
       }
 
       // 2) Submit generation

@@ -79,6 +79,7 @@ export default function AgentPage() {
   const [refImageUrl, setRefImageUrl] = useState<string | null>(null);
   const [uploadingRef, setUploadingRef] = useState(false);
   const [duration, setDuration] = useState(15);
+  const [minimal, setMinimal] = useState(true); // Yapper quick-direct: 1 image + 1 video by default
   const [plan, setPlan] = useState<Plan | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [phase, setPhase] = useState<"idle" | "planning" | "planned" | "running" | "done">("idle");
@@ -240,7 +241,13 @@ export default function AgentPage() {
     try {
       const res = await fetch(`${API_BASE}/director/plan`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief: b, has_ref_image: refImage, duration: dur, ref_image_url: refImageUrl }),
+        body: JSON.stringify({
+          brief: b,
+          has_ref_image: refImage,
+          duration: dur,
+          ref_image_url: refImageUrl,
+          minimal,
+        }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Plan = await res.json();
@@ -344,6 +351,7 @@ export default function AgentPage() {
         body: JSON.stringify({
           brief: plan.brief, has_ref_image: refImage, duration, dry_run: false, plan,
           session_uid: activeUid || undefined,
+          minimal,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -409,7 +417,9 @@ export default function AgentPage() {
     try {
       const res = await fetch(`${API_BASE}/director/run/stream`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brief: plan.brief, has_ref_image: refImage, duration, dry_run: dryRun, plan: planForRun }),
+        body: JSON.stringify({
+          brief: plan.brief, has_ref_image: refImage, duration, dry_run: dryRun, plan: planForRun, minimal,
+        }),
         signal: ctrl.signal,
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -562,6 +572,19 @@ export default function AgentPage() {
                     {[5, 10, 15, 30].map((d) => <option key={d} value={d} className="bg-cosmic-surface">{d}s</option>)}
                   </select>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setMinimal((v) => !v)}
+                  title="最短路径：enhance → 1 图 → 1 视（跳过配音/字幕/合成）"
+                  className={cn(
+                    "px-2.5 py-1.5 rounded-lg text-xs border transition-colors",
+                    minimal
+                      ? "bg-brand/10 text-brand border-brand/30"
+                      : "border-cosmic-border text-text-secondary hover:text-text-primary"
+                  )}
+                >
+                  {minimal ? "快速成片" : "完整成片"}
+                </button>
                 {/* composer modes — 对标 yapper Help Prompt / Help Ideate */}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[11px] text-text-tertiary mr-1">导演大脑</span>

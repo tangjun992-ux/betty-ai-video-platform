@@ -117,13 +117,18 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
         if kie.is_available() and hasattr(kie, "generate_motion"):
             _broadcast_progress(db_task_id, 45, "generating", "KIE motion 专用通道生成中...")
             _update_task(db_task_id, progress=45, current_stage="generating")
+            motion_model = (
+                model
+                or params.get("model")
+                or ("motion-control-studio" if params.get("tier") == "studio" else "motion-control")
+            )
             result = _run_async(kie.generate_motion(
                 image_url=image_url,
                 video_url=video_url,
                 prompt=motion_prompt,
-                model_id="seedance-2.0-fast",
+                model_id=motion_model,
                 duration=int(params.get("duration", 5) or 5),
-                resolution=params.get("resolution", "720p"),
+                resolution=params.get("resolution", "720p") or ("1080p" if params.get("tier") == "studio" else "720p"),
             ))
             rd = result.to_dict() if hasattr(result, "to_dict") else result
             media_url = rd.get("media_url") or rd.get("url") or ""

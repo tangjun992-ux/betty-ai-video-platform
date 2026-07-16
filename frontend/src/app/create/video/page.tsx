@@ -143,17 +143,28 @@ export default function CreateVideoPage() {
       .catch(() => {});
   }, []);
 
-  // ── Remix pre-fill from URL (?prompt=&model=) ──
+  // ── Remix pre-fill from URL (?prompt=&model=&image_url=) ──
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const p = params.get("prompt");
     const m = params.get("model");
+    const img = params.get("image_url") || params.get("ref");
     if (p) setPrompt(p);
     if (m) {
       const matched = videoModels.find(
         (v) => v.id === m || v.id.endsWith(`/${m}`)
       );
       if (matched) setSelectedModel(matched.id);
+    }
+    if (img) {
+      // Seed a remote reference image for i2v remix (Yapper Explore → Create)
+      setReferences((prev) => {
+        if (prev.some((r) => r.preview === img || r.name === "remix-ref")) return prev;
+        return [
+          ...prev,
+          { id: uid(), type: "image", file: null as any, preview: img, name: "remix-ref" },
+        ];
+      });
     }
   }, [videoModels, setPrompt, setSelectedModel]);
 
@@ -230,11 +241,15 @@ export default function CreateVideoPage() {
         : prompt;
 
       // Upload image references (multi-ref; first used for i2v / storyboard)
-      const imageRefs = references.filter((r) => r.type === "image" && r.file).slice(0, 4);
+      // Remix may inject a remote URL with file=null (Explore → Create).
       const referenceImages: string[] = [];
-      for (const ref of imageRefs) {
-        const uploaded = await uploadImage(ref.file!);
-        if (uploaded.url) referenceImages.push(uploaded.url);
+      for (const ref of references.filter((r) => r.type === "image").slice(0, 4)) {
+        if (ref.file) {
+          const uploaded = await uploadImage(ref.file);
+          if (uploaded.url) referenceImages.push(uploaded.url);
+        } else if (ref.preview && (ref.preview.startsWith("http") || ref.preview.startsWith("/"))) {
+          referenceImages.push(ref.preview);
+        }
       }
       const imageUrl = referenceImages[0];
 

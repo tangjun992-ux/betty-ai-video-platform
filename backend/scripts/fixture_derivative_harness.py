@@ -107,6 +107,76 @@ def check_motion_library() -> dict:
     return report
 
 
+def check_lipsync_library() -> dict:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "fixtures" / "lipsync"
+    portrait = root / "portrait.png"
+    line = root / "line.wav"
+    report = {
+        "mode": "lipsync_library",
+        "fixture_dir": str(root),
+        "portrait_ok": portrait.is_file() and portrait.stat().st_size > 100,
+        "audio_ok": line.is_file() and line.stat().st_size > 100,
+        "honesty": "inputs only — quality depends on upstream lipsync SKU",
+    }
+    report["passed"] = report["portrait_ok"] and report["audio_ok"]
+    return report
+
+
+def run_lipsync_live_optional() -> dict:
+    """Optional paid lipsync probe (LIPSYNC_FIXTURE_LIVE=1)."""
+    from pathlib import Path
+
+    if os.getenv("LIPSYNC_FIXTURE_LIVE", "").lower() not in ("1", "true", "yes", "on"):
+        return {"skipped": True, "reason": "LIPSYNC_FIXTURE_LIVE not enabled"}
+    if not os.getenv("KIE_API_KEY", "").strip():
+        # Also allow settings-loaded key
+        try:
+            from app.config import settings
+            if not settings.KIE_API_KEY:
+                return {"skipped": True, "reason": "KIE_API_KEY missing"}
+        except Exception:
+            return {"skipped": True, "reason": "KIE_API_KEY missing"}
+
+    root = Path(__file__).resolve().parents[1] / "fixtures" / "lipsync"
+    portrait = root / "portrait.png"
+    line = root / "line.wav"
+    if not (portrait.is_file() and line.is_file()):
+        return {"ok": False, "error": "fixtures missing — run generate_lipsync_fixtures.py"}
+
+    async def _run():
+        from app.adapters.kie_adapter import KieAdapter
+        from app.adapters.demo_provider import demo_mode_active
+
+        if demo_mode_active():
+            return {"ok": False, "error": "demo_mode active — refuse fake lipsync live"}
+        adapter = KieAdapter()
+        img_url = await adapter.upload_public_url(
+            portrait.read_bytes(), filename="portrait.png", content_type="image/png",
+        )
+        aud_url = await adapter.upload_public_url(
+            line.read_bytes(), filename="line.wav", content_type="audio/wav",
+        )
+        res = await adapter.generate_lipsync(
+            image_url=img_url,
+            audio_url=aud_url,
+            prompt="talking avatar natural lip sync",
+        )
+        out = {
+            "ok": bool(getattr(res, "media_url", "")),
+            "media_url": getattr(res, "media_url", ""),
+            "model": getattr(res, "model", ""),
+            "cost": getattr(res, "cost", 0),
+        }
+        report_path = root / "last_run.json"
+        report_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        out["report_path"] = str(report_path)
+        return out
+
+    return asyncio.run(_run())
+
+
 def run_motion_live_optional() -> dict:
     """Optional paid motion probe using fixture files (MOTION_FIXTURE_LIVE=1)."""
     from pathlib import Path
@@ -168,11 +238,32 @@ def main() -> int:
     else:
         report["checks"].append({"name": "motion_fixture_files", "ok": True, "detail": "still+ref present"})
 
+    ls = check_lipsync_library()
+    report["lipsync_library"] = ls
+    if not ls.get("passed"):
+        report["passed"] = False
+        report["checks"].append({
+            "name": "lipsync_fixture_files", "ok": False,
+            "detail": "run scripts/generate_lipsync_fixtures.py",
+        })
+    else:
+        report["checks"].append({"name": "lipsync_fixture_files", "ok": True, "detail": "portrait+line present"})
+
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    if os.getenv("FIXTURE_LIVE", "").lower() in ("1", "true", "yes") or \
-       os.getenv("MOTION_FIXTURE_LIVE", "").lower() in ("1", "true", "yes"):
-        live = run_motion_live_optional()
-        print(json.dumps({"motion_live": live}, ensure_ascii=False, indent=2))
+    live_env = (
+        os.getenv("FIXTURE_LIVE", "").lower() in ("1", "true", "yes")
+        or os.getenv("MOTION_FIXTURE_LIVE", "").lower() in ("1", "true", "yes")
+        or os.getenv("LIPSYNC_FIXTURE_LIVE", "").lower() in ("1", "true", "yes")
+    )
+    if live_env:
+        if os.getenv("MOTION_FIXTURE_LIVE", "").lower() in ("1", "true", "yes", "on") or \
+           os.getenv("FIXTURE_LIVE", "").lower() in ("1", "true", "yes"):
+            live = run_motion_live_optional()
+            print(json.dumps({"motion_live": live}, ensure_ascii=False, indent=2), file=sys.stderr)
+        if os.getenv("LIPSYNC_FIXTURE_LIVE", "").lower() in ("1", "true", "yes", "on") or \
+           os.getenv("FIXTURE_LIVE", "").lower() in ("1", "true", "yes"):
+            live_ls = run_lipsync_live_optional()
+            print(json.dumps({"lipsync_live": live_ls}, ensure_ascii=False, indent=2), file=sys.stderr)
     return 0 if report.get("passed") else 1
 
 

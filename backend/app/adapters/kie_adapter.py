@@ -84,6 +84,11 @@ KIE_MODEL_IDS = {
     # KIE video IDs → self
     "bytedance/seedance-2": "bytedance/seedance-2",
     "bytedance/seedance-2-fast": "bytedance/seedance-2-fast",
+    # Motion Control (Yapper parity) — best-effort via Seedance i2v + videoUrl;
+    # not a native Kling Motion / Act-One SKU until upstream exposes one.
+    "motion-control": "bytedance/seedance-2-fast",
+    "motion-control-studio": "bytedance/seedance-2",
+    "motion-control-demo": "bytedance/seedance-2-fast",
 }
 
 

@@ -369,11 +369,18 @@ class PromptRouter:
 
             model_score += style_bonus
 
-            # Live reliability feeds back into routing. Healthy/unseen models are
-            # neutral; degraded models receive up to a 30-point penalty.
-            health_score = model_health.score(model_id)
+            # Live reliability feeds back into routing. Proven outframe winners
+            # get a boost; degraded / unproven models receive a penalty.
+            snap = model_health.snapshot(model_id)
+            health_score = snap.score
             health_penalty = max(0.0, (100.0 - health_score) * 0.30)
             model_score -= health_penalty
+            if snap.successes >= 1:
+                model_score += min(12.0, snap.successes * 3.0)
+                reasons.append(f"live 出片证据 ×{snap.successes}")
+            elif snap.total == 0:
+                model_score -= 4.0
+                reasons.append("尚未 live 验真")
             if health_penalty:
                 reasons.append(f"实时健康 {health_score:.0f}/100")
 

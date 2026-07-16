@@ -20,7 +20,9 @@ def memory_registry() -> ModelHealthRegistry:
 def test_unseen_model_is_healthy():
     r = memory_registry()
     snap = r.snapshot("model-a")
-    assert snap.score == 100.0
+    # Unproven models are slightly below perfect so live winners win Auto routing.
+    assert snap.score == 85.0
+    assert snap.success_rate == 0.85
     assert not snap.circuit_open
 
 

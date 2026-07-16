@@ -75,11 +75,32 @@ export default function ExploreSharePage() {
     }
   };
 
-  const remix = () => {
+  const remix = async () => {
     if (!item) return;
+    try {
+      // Prefer API remix payload (includes media_url for true i2i / i2v)
+      const r = await fetch(`${API_BASE}/gallery/${encodeURIComponent(item.id)}/remix`, {
+        method: "POST",
+      });
+      if (r.ok) {
+        const data = await r.json();
+        const params = new URLSearchParams();
+        if (data.prompt) params.set("prompt", data.prompt);
+        if (data.model) params.set("model", data.model);
+        if (data.media_url) {
+          params.set("image_url", data.media_url);
+          params.set("ref", data.media_url);
+        }
+        router.push(`${data.create_path || item.create_path}?${params}`);
+        return;
+      }
+    } catch {
+      /* fall through */
+    }
     const p = encodeURIComponent(item.prompt || "");
     const m = encodeURIComponent(item.model_used || "");
-    router.push(`${item.create_path}?prompt=${p}&model=${m}`);
+    const u = encodeURIComponent(item.url || "");
+    router.push(`${item.create_path}?prompt=${p}&model=${m}&image_url=${u}`);
   };
 
   if (loading) {

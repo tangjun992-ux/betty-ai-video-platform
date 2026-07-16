@@ -75,6 +75,16 @@ async def capabilities():
                 "backend": "/lipsync",
                 "note": "Talking Avatar UI 走唇形同步链路（图+音频/文本）。",
             },
+            "director_minimal": {
+                "available": True,
+                "note": "PlanRequest.minimal / 快速成片：enhance→1图→1视，跳过配音字幕合成。",
+            },
+            "live_smoke": {
+                "image_sample": "scripts/smoke_live_image_sample.py",
+                "video_sample": "scripts/smoke_live_video_sample.py",
+                "gates": ["MODEL_SMOKE_LIVE", "MODEL_SMOKE_LIVE_VIDEO", "MODEL_SMOKE_LIVE_*_WEEKLY"],
+                "note": "outframe_ok 仅计入真出片；mapping 不再污染 Auto 路由成功率。",
+            },
         },
     }
 

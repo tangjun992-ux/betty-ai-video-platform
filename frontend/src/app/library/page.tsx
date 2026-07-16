@@ -267,11 +267,31 @@ export default function LibraryPage() {
   };
 
   const remix = (item: LibraryItem) => {
-    if (!item.prompt) return;
+    if (!item.prompt && !item.url) return;
     const target = item.media_type === "video" ? "/create/video" : "/create/image";
-    const params = new URLSearchParams({ prompt: item.prompt });
+    const params = new URLSearchParams();
+    if (item.prompt) params.set("prompt", item.prompt);
     if (item.model) params.set("model", item.model);
+    if (item.url) {
+      params.set("image_url", item.url);
+      params.set("ref", item.url);
+    }
     router.push(`${target}?${params}`);
+  };
+
+  const publishToExplore = async (item: LibraryItem) => {
+    const taskId = (item as any).task_id || (item.id?.includes("_") ? item.id.split("_")[0] : item.id);
+    if (!taskId) {
+      toast.error("无法发布", "缺少 task_id");
+      return;
+    }
+    try {
+      const { publishShare } = await import("@/lib/api");
+      await publishShare(String(taskId));
+      toast.success("已发布到 Explore", "作品现已公开可分享");
+    } catch (e: any) {
+      toast.error("发布失败", e?.message || "请稍后重试");
+    }
   };
 
   const tabCount = (key: string): number => {
@@ -634,6 +654,15 @@ export default function LibraryPage() {
                     <button onClick={() => remix(detail)} className="btn-primary">
                       <Sparkles className="w-4 h-4" />
                       做同款
+                    </button>
+                  )}
+                  {detail.source === "generated" && (
+                    <button
+                      type="button"
+                      onClick={() => publishToExplore(detail)}
+                      className="btn-secondary"
+                    >
+                      发布到 Explore
                     </button>
                   )}
                   <a

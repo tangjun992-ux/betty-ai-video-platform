@@ -119,6 +119,7 @@ def main():
                 continue
 
             ts = now - timedelta(hours=i * 3, minutes=(i * 17) % 60)
+            task_id = str(uuid.uuid4())
             params = {
                 "resolution": res,
                 "duration": dur if media == "video" else None,
@@ -126,6 +127,7 @@ def main():
                 "style": style,
                 "routing_info": json.dumps({"detected_styles": [style]}),
                 "seed_marker": SEED_MARKER,
+                "share_public": True,  # Explore-ready (Yapper density)
             }
             session.execute(
                 text("""
@@ -140,7 +142,7 @@ def main():
                      :ts, :ts, :cost, :cost, :results, :ts, :ts)
                 """),
                 {
-                    "task_id": str(uuid.uuid4()),
+                    "task_id": task_id,
                     "prompt": prompt,
                     "media_type": media,
                     "model": model,
@@ -150,10 +152,32 @@ def main():
                     "results": json.dumps(results),
                 },
             )
+            # Engagement counters for Popular sort (Yapper Explore flywheel)
+            item_key = f"{task_id}_0"
+            session.execute(text(
+                "CREATE TABLE IF NOT EXISTS gallery_likes (item_key TEXT PRIMARY KEY, likes INTEGER NOT NULL DEFAULT 0)"
+            ))
+            session.execute(text(
+                "CREATE TABLE IF NOT EXISTS gallery_views (item_key TEXT PRIMARY KEY, views INTEGER NOT NULL DEFAULT 0)"
+            ))
+            session.execute(
+                text(
+                    "INSERT INTO gallery_likes (item_key, likes) VALUES (:k, :n) "
+                    "ON CONFLICT(item_key) DO UPDATE SET likes = excluded.likes"
+                ),
+                {"k": item_key, "n": int(likes)},
+            )
+            session.execute(
+                text(
+                    "INSERT INTO gallery_views (item_key, views) VALUES (:k, :n) "
+                    "ON CONFLICT(item_key) DO UPDATE SET views = excluded.views"
+                ),
+                {"k": item_key, "n": int(views)},
+            )
             created += 1
             print(f"  + [{created}/{len(SPECS)}] {media:5s} {style:12s} {prompt[:36]}")
         session.commit()
-        print(f"\nSeeded {created} gallery items.")
+        print(f"\nSeeded {created} gallery items (with likes/views).")
 
 
 if __name__ == "__main__":

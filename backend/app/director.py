@@ -204,9 +204,17 @@ def _n_shots(duration: int) -> int:
 # ─────────────────────────────── 规划器 ───────────────────────────────
 class DirectorPlanner:
     def plan(self, brief: str, has_ref_image: bool = False, duration: int = 5,
-             ref_image_url: str | None = None) -> DirectorPlan:
+             ref_image_url: str | None = None, *, minimal: bool = False) -> DirectorPlan:
+        """Plan a director workflow.
+
+        ``minimal=True`` (Yapper quick-direct): skip post ladder (audio/subtitle/compose)
+        so the shortest video path is enhance → 1 keyframe image → 1 video shot.
+        """
         brief = (brief or "").strip()
         has_ref_image = has_ref_image or bool(ref_image_url)
+        # Brief keywords can force minimal / quick mode (对标 Yapper "just direct")
+        if _has(brief, ["快速成片", "最短路径", "minimal", "quick direct", "只要视频", "不要配音"]):
+            minimal = True
         # Parse an explicit duration from the brief ("30秒 / 30s / 30 seconds") so the
         # storyboard length matches the user's stated intent, not just the UI dropdown.
         dm = re.search(r"(\d{1,3})\s*(?:秒|s\b|sec|seconds?)", brief, re.I)
@@ -342,8 +350,10 @@ class DirectorPlanner:
 
         # 视频类意图自动追加成片步骤：配音 → 字幕 → 合成 (对标 yapper Agent 成片)
         # 口播(talking)已自带配音+唇形，成品即唇形视频，无需再拼接。
+        # minimal / 短时长：跳过后期阶梯，保留最短 1 图 + 1 视（Yapper quick-direct）。
         video_steps = [s for s in steps if s.action in ("video", "lipsync")]
-        if video_steps and intent != "talking":
+        skip_finish = minimal or (duration <= 5 and intent in ("video_from_text", "video_from_image") and len(video_steps) <= 1)
+        if video_steps and intent != "talking" and not skip_finish:
             vid_ids = [s.id for s in video_steps]
             s_audio = DirectorStep(id=sid(), action="audio", title="AI 配音 · 解说 (TTS)",
                 model_id="elevenlabs-tts", model_name="ElevenLabs TTS",

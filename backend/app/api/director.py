@@ -53,6 +53,10 @@ class PlanRequest(BaseModel):
     has_ref_image: bool = Field(default=False)
     duration: int = Field(default=5, ge=1, le=60)
     ref_image_url: Optional[str] = Field(default=None, description="参考图 URL（真正参与图生视频/关键帧）")
+    minimal: bool = Field(
+        default=False,
+        description="最短路径：跳过配音/字幕/合成，仅 enhance+1图+1视（对标 Yapper quick-direct）",
+    )
 
 
 class RunRequest(PlanRequest):
@@ -81,8 +85,13 @@ def _resolve_plan(req: RunRequest):
     if req.plan and req.plan.get("steps"):
         return plan_from_dict(req.plan)
     _moderate_brief(req.brief)
-    return DirectorPlanner().plan(req.brief, has_ref_image=req.has_ref_image,
-                                  duration=req.duration, ref_image_url=req.ref_image_url)
+    return DirectorPlanner().plan(
+        req.brief,
+        has_ref_image=req.has_ref_image,
+        duration=req.duration,
+        ref_image_url=req.ref_image_url,
+        minimal=bool(req.minimal),
+    )
 
 
 async def _charge_director_plan(
@@ -108,8 +117,13 @@ async def _charge_director_plan(
 @router.post("/plan", summary="生成导演式创作计划")
 async def make_plan(req: PlanRequest):
     _moderate_brief(req.brief)
-    plan = planner.plan(req.brief, has_ref_image=req.has_ref_image,
-                        duration=req.duration, ref_image_url=req.ref_image_url)
+    plan = planner.plan(
+        req.brief,
+        has_ref_image=req.has_ref_image,
+        duration=req.duration,
+        ref_image_url=req.ref_image_url,
+        minimal=bool(req.minimal),
+    )
     return plan.to_dict()
 
 

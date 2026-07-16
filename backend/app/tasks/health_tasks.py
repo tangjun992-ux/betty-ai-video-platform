@@ -45,54 +45,37 @@ def smoke_live_video_weekly(self):
         return report
 
     os.environ.setdefault("MODEL_SMOKE_LIVE_VIDEO", "1")
-    from app.services.model_smoke import probe_model, save_last_smoke
-    from app.api.models_info import MODELS
-    from app.services.model_health import model_health, quarantine_ttl_for_reason
-    import time
+    from app.services.model_smoke import run_live_video_sample
 
-    models = ("seedance-2.0-fast", "kling-2.5-turbo")
-    by_id = {m.id: m for m in MODELS}
-    report = {
-        "mode": "live_video_sample",
-        "probed": 0,
-        "ok": 0,
-        "outframe_ok": 0,
-        "outframe_skipped": 0,
-        "failed": [],
-        "quarantined": [],
-        "skipped": [],
-        "details": [],
-    }
-    for mid in models:
-        m = by_id.get(mid)
-        if not m:
-            report["failed"].append(mid)
-            report["details"].append({"model_id": mid, "ok": False, "error": "not in catalog"})
-            continue
-        report["probed"] += 1
-        media = list(m.capabilities.media_types or ["video"])
-        probe = probe_model(mid, media, mode="live_video")
-        report["details"].append({"model_id": mid, **probe})
-        path = (probe.get("evidence") or {}).get("path") or ""
-        if probe.get("ok") and path == "live_video":
-            model_health.record_success(mid, probe.get("latency_ms") or 0)
-            model_health.clear_quarantine(mid)
-            report["ok"] += 1
-            report["outframe_ok"] += 1
-        elif probe.get("ok"):
-            report["skipped"].append(mid)
-            report["outframe_skipped"] += 1
-        else:
-            err = probe.get("error") or "live_video sample failed"
-            model_health.record_failure(mid, err, retryable=True)
-            model_health.set_quarantine(mid, reason=err, ttl=quarantine_ttl_for_reason(err))
-            report["failed"].append(mid)
-            report["quarantined"].append(mid)
-
-    report["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    save_last_smoke(report)
+    report = run_live_video_sample()
     logger.info(
         "live_video weekly smoke: probed=%s outframe_ok=%s skipped=%s failed=%s",
-        report["probed"], report["outframe_ok"], report["outframe_skipped"], report["failed"],
+        report["probed"], report["outframe_ok"], report.get("outframe_skipped"), report["failed"],
+    )
+    return report
+
+
+@app.task(name="app.tasks.health_tasks.smoke_live_image_weekly", bind=True, max_retries=0)
+def smoke_live_image_weekly(self):
+    """Weekly paid image out-frame sample — gated by MODEL_SMOKE_LIVE_IMAGE_WEEKLY or MODEL_SMOKE_LIVE."""
+    weekly = os.getenv("MODEL_SMOKE_LIVE_IMAGE_WEEKLY", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    live = os.getenv("MODEL_SMOKE_LIVE", "").strip().lower() in ("1", "true", "yes", "on")
+    if not (weekly or live):
+        return {
+            "mode": "live_image_sample",
+            "skipped": True,
+            "reason": "MODEL_SMOKE_LIVE_IMAGE_WEEKLY not enabled",
+            "probed": 0,
+            "outframe_ok": 0,
+        }
+    os.environ.setdefault("MODEL_SMOKE_LIVE", "1")
+    from app.services.model_smoke import run_live_image_sample
+
+    report = run_live_image_sample()
+    logger.info(
+        "live_image weekly smoke: probed=%s outframe_ok=%s failed=%s",
+        report["probed"], report["outframe_ok"], report["failed"],
     )
     return report

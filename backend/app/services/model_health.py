@@ -46,7 +46,8 @@ class HealthSnapshot:
 
     @property
     def success_rate(self) -> float:
-        return self.successes / self.total if self.total else 1.0
+        # Unproven models are slightly below "perfect" so proven live winners win Auto.
+        return self.successes / self.total if self.total else 0.85
 
     @property
     def avg_latency_ms(self) -> int:
@@ -57,7 +58,13 @@ class HealthSnapshot:
         if self.circuit_open:
             return 0.0
         latency_score = 1.0 if not self.avg_latency_ms else max(0.0, 1.0 - self.avg_latency_ms / 300_000)
-        return round((self.success_rate * 0.85 + latency_score * 0.15) * 100, 1)
+        base = (self.success_rate * 0.85 + latency_score * 0.15) * 100
+        # Small bonus once we have real outframe evidence (Yapper-like default quality bias).
+        if self.successes >= 2:
+            base = min(100.0, base + 5.0)
+        elif self.total == 0:
+            base = min(base, 85.0)
+        return round(base, 1)
 
     def public_dict(self) -> dict:
         data = asdict(self)

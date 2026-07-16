@@ -99,7 +99,14 @@ def process_lipsync(
                 from app.adapters.demo_provider import render_demo_speech
                 audio_public = render_demo_speech(text)
             else:
-                res = asyncio.run(KieAdapter().generate_speech(text, voice="Rachel"))
+                voice = (voice_id or "Rachel").strip() or "Rachel"
+                # Azure-style neural ids → ElevenLabs-friendly short names when needed
+                if voice.startswith("zh-CN-") or voice.startswith("en-US-"):
+                    if any(k in voice for k in ("Xiaoxiao", "Xiaoyi", "Jenny")):
+                        voice = "Rachel"
+                    else:
+                        voice = "Adam"
+                res = asyncio.run(KieAdapter().generate_speech(text, voice=voice))
                 audio_public = res.media_url  # public KIE tempfile
         elif audio_url:
             audio_public = _to_public(audio_url, "audio/mpeg") if not demo else audio_url

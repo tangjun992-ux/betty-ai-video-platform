@@ -296,9 +296,9 @@ export default function GalleryPage() {
               const remixHref = (() => {
                 const p = encodeURIComponent(item.prompt || "");
                 const m = encodeURIComponent(item.model_used || "");
-                return item.media_type === "video"
-                  ? `/create/video?prompt=${p}&model=${m}`
-                  : `/create/image?prompt=${p}&model=${m}`;
+                const u = encodeURIComponent(item.url || "");
+                const base = item.media_type === "video" ? "/create/video" : "/create/image";
+                return `${base}?prompt=${p}&model=${m}&image_url=${u}`;
               })();
               return (
                 <div

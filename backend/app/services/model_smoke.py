@@ -75,11 +75,12 @@ def probe_model(model_id: str, media_types: list[str], *, mode: str | None = Non
                 if mode != "live_video":
                     # Live image-only day: video models get mapping+key check only.
                     return {"kie_id": kie_id, "path": "live_skipped_video", "note": "set MODEL_SMOKE_LIVE_VIDEO=1"}
+                # Seedance/Kling reject sub-5s durations (422 Invalid duration).
                 res = await adapter.generate_video(
                     "smoke test short motion",
                     model_id=model_id,
-                    duration=2,
-                    resolution="480p",
+                    duration=5,
+                    resolution="720p",
                 )
                 url = getattr(res, "media_url", "") or ""
                 if not url:
@@ -142,17 +143,23 @@ def run_active_smoke(*, mode: str | None = None) -> dict:
         path = (probe.get("evidence") or {}).get("path") or ""
         is_skip = path.startswith("live_skipped")
         is_outframe = path in ("live_image", "live_video")
+        is_mapping = path in ("mapping_only", "demo_render")
         if probe["ok"]:
-            model_health.record_success(m.id, probe["latency_ms"])
-            model_health.clear_quarantine(m.id)
-            if is_skip:
-                # Do NOT count as out-frame success — video was not actually generated.
+            # Honesty: only paid outframe paths inflate success_rate used by Auto router.
+            if is_outframe:
+                model_health.record_success(m.id, probe["latency_ms"])
+                model_health.clear_quarantine(m.id)
+                results["ok"] += 1
+                results["outframe_ok"] += 1
+            elif is_skip:
                 results["skipped"].append(m.id)
                 results["outframe_skipped"] += 1
+            elif is_mapping:
+                # Mapping proves KIE id — clear quarantine but do NOT count as outframe success.
+                model_health.clear_quarantine(m.id)
+                results["ok"] += 1
             else:
                 results["ok"] += 1
-                if is_outframe:
-                    results["outframe_ok"] += 1
         else:
             # Mapping-only failures with demo active shouldn't quarantine production.
             quarantine = mode in ("live", "live_video") or "missing KIE map" in (probe["error"] or "")
@@ -238,3 +245,108 @@ def get_last_smoke() -> dict | None:
     with model_health._lock:
         mem = model_health._memory.get(_LAST_SMOKE_KEY)
         return dict(mem) if isinstance(mem, dict) else None
+
+
+DEFAULT_LIVE_VIDEO_SAMPLE = ("seedance-2.0-fast", "kling-2.5-turbo")
+DEFAULT_LIVE_IMAGE_SAMPLE = ("gpt-image-2", "nano-banana", "nano-banana-pro", "imagen-4")
+
+
+def run_live_video_sample(models: list[str] | tuple[str, ...] | None = None) -> dict:
+    """Shared paid live-video sample (scripts + weekly Beat). Only live_video → outframe_ok."""
+    from app.api.models_info import MODELS
+    from app.services.model_health import model_health, quarantine_ttl_for_reason
+
+    models = list(models or DEFAULT_LIVE_VIDEO_SAMPLE)
+    by_id = {m.id: m for m in MODELS}
+    report: dict[str, Any] = {
+        "mode": "live_video_sample",
+        "probed": 0,
+        "ok": 0,
+        "outframe_ok": 0,
+        "outframe_skipped": 0,
+        "failed": [],
+        "quarantined": [],
+        "skipped": [],
+        "details": [],
+    }
+    for mid in models:
+        m = by_id.get(mid)
+        if not m:
+            report["failed"].append(mid)
+            report["details"].append({"model_id": mid, "ok": False, "error": "not in catalog"})
+            continue
+        report["probed"] += 1
+        media = list(m.capabilities.media_types or ["video"])
+        probe = probe_model(mid, media, mode="live_video")
+        report["details"].append({"model_id": mid, **probe})
+        path = (probe.get("evidence") or {}).get("path") or ""
+        if probe.get("ok") and path == "live_video":
+            model_health.record_success(mid, probe.get("latency_ms") or 0)
+            model_health.clear_quarantine(mid)
+            report["ok"] += 1
+            report["outframe_ok"] += 1
+        elif probe.get("ok"):
+            report["skipped"].append(mid)
+            report["outframe_skipped"] += 1
+        else:
+            err = probe.get("error") or "live_video sample failed"
+            model_health.record_failure(mid, err, retryable=True)
+            model_health.set_quarantine(mid, reason=err, ttl=quarantine_ttl_for_reason(err))
+            report["failed"].append(mid)
+            report["quarantined"].append(mid)
+
+    report["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if report["probed"] > 0 and report["outframe_ok"] == 0:
+        logger.error(
+            "MODEL_HEALTH_ALERT live_video_sample outframe_ok=0 probed=%s failed=%s",
+            report["probed"], report["failed"],
+        )
+    save_last_smoke(report)
+    return report
+
+
+def run_live_image_sample(models: list[str] | tuple[str, ...] | None = None) -> dict:
+    """Paid live-image sample for active image SKUs — feeds Auto router honesty."""
+    from app.api.models_info import MODELS
+    from app.services.model_health import model_health, quarantine_ttl_for_reason
+
+    models = list(models or DEFAULT_LIVE_IMAGE_SAMPLE)
+    by_id = {m.id: m for m in MODELS}
+    report: dict[str, Any] = {
+        "mode": "live_image_sample",
+        "probed": 0,
+        "ok": 0,
+        "outframe_ok": 0,
+        "failed": [],
+        "quarantined": [],
+        "details": [],
+    }
+    for mid in models:
+        m = by_id.get(mid)
+        if not m:
+            report["failed"].append(mid)
+            report["details"].append({"model_id": mid, "ok": False, "error": "not in catalog"})
+            continue
+        report["probed"] += 1
+        media = list(m.capabilities.media_types or ["image"])
+        probe = probe_model(mid, media, mode="live")
+        report["details"].append({"model_id": mid, **probe})
+        path = (probe.get("evidence") or {}).get("path") or ""
+        if probe.get("ok") and path == "live_image":
+            model_health.record_success(mid, probe.get("latency_ms") or 0)
+            model_health.clear_quarantine(mid)
+            report["ok"] += 1
+            report["outframe_ok"] += 1
+        elif probe.get("ok"):
+            # mapping-only under live mode should not happen for image; treat as soft
+            report["ok"] += 1
+        else:
+            err = probe.get("error") or "live_image sample failed"
+            model_health.record_failure(mid, err, retryable=True)
+            model_health.set_quarantine(mid, reason=err, ttl=quarantine_ttl_for_reason(err))
+            report["failed"].append(mid)
+            report["quarantined"].append(mid)
+
+    report["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    save_last_smoke(report)
+    return report
