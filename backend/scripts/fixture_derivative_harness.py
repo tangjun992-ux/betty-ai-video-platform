@@ -87,11 +87,92 @@ def check_dry() -> dict:
     return report
 
 
+def check_motion_library() -> dict:
+    """Verify canonical Motion fixture files exist and are non-empty."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "fixtures" / "motion"
+    still = root / "still.png"
+    ref = root / "ref.mp4"
+    report = {
+        "mode": "motion_library",
+        "fixture_dir": str(root),
+        "still_ok": still.is_file() and still.stat().st_size > 100,
+        "ref_ok": ref.is_file() and ref.stat().st_size > 100,
+        "still_bytes": still.stat().st_size if still.is_file() else 0,
+        "ref_bytes": ref.stat().st_size if ref.is_file() else 0,
+        "honesty": "inputs only — not Act-One quality references",
+    }
+    report["passed"] = report["still_ok"] and report["ref_ok"]
+    return report
+
+
+def run_motion_live_optional() -> dict:
+    """Optional paid motion probe using fixture files (MOTION_FIXTURE_LIVE=1)."""
+    from pathlib import Path
+
+    if os.getenv("MOTION_FIXTURE_LIVE", "").lower() not in ("1", "true", "yes", "on"):
+        return {"skipped": True, "reason": "MOTION_FIXTURE_LIVE not enabled"}
+    if not os.getenv("KIE_API_KEY", "").strip():
+        return {"skipped": True, "reason": "KIE_API_KEY missing"}
+
+    root = Path(__file__).resolve().parents[1] / "fixtures" / "motion"
+    still = root / "still.png"
+    ref = root / "ref.mp4"
+    if not (still.is_file() and ref.is_file()):
+        return {"ok": False, "error": "fixtures missing"}
+
+    async def _run():
+        from app.adapters.kie_adapter import KieAdapter
+        from app.adapters.demo_provider import demo_mode_active
+
+        if demo_mode_active():
+            return {"ok": False, "error": "demo_mode active — refuse fake motion live"}
+        adapter = KieAdapter()
+        img_url = await adapter.upload_public_url(
+            still.read_bytes(), filename="still.png", content_type="image/png",
+        )
+        vid_url = await adapter.upload_public_url(
+            ref.read_bytes(), filename="ref.mp4", content_type="video/mp4",
+        )
+        res = await adapter.generate_motion(
+            image_url=img_url,
+            video_url=vid_url,
+            prompt="natural body motion transfer",
+            duration=2,
+        )
+        out = {
+            "ok": bool(getattr(res, "media_url", "")),
+            "media_url": getattr(res, "media_url", ""),
+            "model": getattr(res, "model", ""),
+            "cost": getattr(res, "cost", 0),
+        }
+        report_path = root / "last_run.json"
+        report_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+        out["report_path"] = str(report_path)
+        return out
+
+    return asyncio.run(_run())
+
+
 def main() -> int:
     report = check_dry()
+    lib = check_motion_library()
+    report["motion_library"] = lib
+    if not lib.get("passed"):
+        report["passed"] = False
+        report["checks"].append({
+            "name": "motion_fixture_files", "ok": False,
+            "detail": "run scripts/generate_motion_fixtures.py",
+        })
+    else:
+        report["checks"].append({"name": "motion_fixture_files", "ok": True, "detail": "still+ref present"})
+
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    if os.getenv("FIXTURE_LIVE", "").lower() in ("1", "true", "yes"):
-        print(json.dumps({"note": "FIXTURE_LIVE set — use smoke_live_video_sample / admin smoke for paid E2E"}, ensure_ascii=False))
+    if os.getenv("FIXTURE_LIVE", "").lower() in ("1", "true", "yes") or \
+       os.getenv("MOTION_FIXTURE_LIVE", "").lower() in ("1", "true", "yes"):
+        live = run_motion_live_optional()
+        print(json.dumps({"motion_live": live}, ensure_ascii=False, indent=2))
     return 0 if report.get("passed") else 1
 
 

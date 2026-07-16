@@ -63,6 +63,29 @@ MODEL_SMOKE_LIVE_VIDEO=1 python scripts/smoke_live_video_sample.py
 | `STRIPE_PRICE_PRO_MONTHLY` / `_YEARLY` | Pro 套餐 Price ID |
 | `STRIPE_PRICE_TEAM_SEAT_MONTHLY` | 团队额外席位 Price ID |
 
+**推荐注入（Dashboard 或脚本）：**
+
+```bash
+cd backend
+python scripts/bootstrap_stripe_prices.py --dry-run --json-only   # 预览金额
+STRIPE_API_KEY=sk_test_... python scripts/bootstrap_stripe_prices.py --write-env .env
+```
+
+脚本按 `betty_plan_id` / `betty_cycle` metadata 幂等创建 Product/Price，并把 `price_*` 写入 env。
+
 **订阅就绪：** 配置 API Key + 至少一个 `*_MONTHLY` Price ID → Checkout `mode=subscription`。  
 未配置对应 Price ID 时该套餐回退 `price_data` 一次性支付（开发可用；生产应配齐）。  
 状态探针：`GET /api/v1/billing/stripe-status` / `GET /api/v1/system/readiness`。
+
+## OIDC / CDN（生产）
+
+| 变量 | 说明 |
+|------|------|
+| `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | 企业 SSO |
+| `OIDC_REQUIRED_IN_PRODUCTION` | `1` 时生产缺配阻塞 readiness |
+| `STORAGE_TYPE=s3` | 生产禁止 local |
+| `MEDIA_CDN_BASE_URL` 或 `S3_PUBLIC_BASE_URL` | 媒体公共基址 |
+| `AWS_ACCESS_KEY_ID` / `AWS_S3_BUCKET` | S3 必需项 |
+
+前端：配置后登录页出现「企业 SSO」；回调落地 `/auth/callback?token=`。  
+详见 `docs/P2_MOTION_OIDC_STRIPE.md`。

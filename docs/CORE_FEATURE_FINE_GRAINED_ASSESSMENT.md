@@ -238,13 +238,13 @@ flowchart LR
 5. ~~多参考图 / 真 i2i / `POST /director/storyboard`~~  
 6. ~~Stripe Starter–Pro Price 配置面（生产填真实 Price ID）~~  
 
-### P2（体验与护城河）
-1. Motion 质量对照样片库（不对标 Act-One 话术）  
-2. SSO/OIDC 接真实 IdP；CDN 对象存储  
-3. Stripe Dashboard 创建并注入真实 Price ID（环境操作）  
+### P2（已修 — 见 `P2_MOTION_OIDC_STRIPE.md`）
+1. ~~Motion 标准输入样片库 + FE 加载 + harness（不对标 Act-One）~~  
+2. ~~OIDC discovery/CSRF/FE callback；CDN 公共基址 + readiness 门禁~~（真实 IdP/桶仍需部署注入）  
+3. ~~Stripe bootstrap 脚本（dry-run + mock live + `--write-env`）~~（本环境无 `STRIPE_API_KEY`，未创建真实 Price）  
 
 ---
 
 ## 6. 一句话结论
 
-P0 + P1（退款/分享/周检/成本看板/真分镜/Stripe 配置面）均已落地并自动化验证；综合就绪约 **~74**。Betty 仍是 **Yapper 类多模型网关工作室**——下轮勿重复已交付项，优先 Motion 样片库与生产密钥注入。
+P0 + P1 + P2（样片库/OIDC 加固/Stripe bootstrap）均已落地并自动化验证；综合就绪约 **~76**。Betty 仍是 **Yapper 类多模型网关工作室**——下轮勿重复已交付项，优先 **真实密钥注入**（Stripe/OIDC/CDN）与 live_video 周检。

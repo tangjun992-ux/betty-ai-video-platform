@@ -69,6 +69,49 @@ export default function MotionControlPage() {
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const [loadingSample, setLoadingSample] = useState(false);
+
+  const loadCanonicalSample = useCallback(async () => {
+    setLoadingSample(true);
+    setError(null);
+    try {
+      const r = await fetch(`${API_BASE}/motion/samples`);
+      if (!r.ok) throw new Error("样片库不可用");
+      const data = await r.json();
+      const sample = data.samples?.[0];
+      if (!sample) throw new Error("暂无样片资产");
+      // Paths are /api/v1/... — prefix host from API_BASE
+      const origin = API_BASE.replace(/\/api\/v1\/?$/, "");
+      const imgUrl = sample.image_path.startsWith("http")
+        ? sample.image_path
+        : `${origin}${sample.image_path}`;
+      const vidUrl = sample.video_path.startsWith("http")
+        ? sample.video_path
+        : `${origin}${sample.video_path}`;
+      const [imgBlob, vidBlob] = await Promise.all([
+        fetch(imgUrl).then((x) => {
+          if (!x.ok) throw new Error("样片图片下载失败");
+          return x.blob();
+        }),
+        fetch(vidUrl).then((x) => {
+          if (!x.ok) throw new Error("样片视频下载失败");
+          return x.blob();
+        }),
+      ]);
+      const imgFile = new File([imgBlob], "still.png", { type: "image/png" });
+      const vidFile = new File([vidBlob], "ref.mp4", { type: "video/mp4" });
+      setImageFile(imgFile);
+      setImagePreview(URL.createObjectURL(imgFile));
+      setVideoFile(vidFile);
+      setVideoPreview(URL.createObjectURL(vidFile));
+      setPrompt(sample.prompt || "");
+      setSelectedStyle(sample.style || "realistic");
+    } catch (e: any) {
+      setError(e?.message || "加载样片失败");
+    } finally {
+      setLoadingSample(false);
+    }
+  }, []);
 
   const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -204,6 +247,21 @@ export default function MotionControlPage() {
         </p>
         <CapabilityNotice feature="motion" className="mb-6" onDemoChange={setDemoMode} />
       </motion.div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={loadCanonicalSample}
+          disabled={loadingSample || submitting}
+          className="btn-secondary text-sm inline-flex items-center gap-2 disabled:opacity-40"
+        >
+          <Lightbulb className="w-4 h-4" />
+          {loadingSample ? "加载样片中..." : "加载标准输入样片"}
+        </button>
+        <span className="text-xs text-text-secondary">
+          样片库仅提供输入资产，用于验证链路；输出不对标 Act-One
+        </span>
+      </div>
 
       {/* Wizard progress */}
       <div className="grid grid-cols-3 gap-2 mb-6">

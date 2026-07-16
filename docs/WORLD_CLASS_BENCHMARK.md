@@ -13,7 +13,7 @@
 | **Yapper** | 最接近的竞品；工作室工具面约 **85–90%** 对齐，主差距在**出片稳定与模型深度** |
 | **Kling / Runway / Luma** | 可借道网关调用部分能力，但**无原生模型护城河**；Motion/视频质量不可宣称对等 |
 | **Midjourney / OpenAI 一等公民** | 图片体验与社区闭环差距大；Betty 是工具聚合，非审美社区 |
-| **综合生产就绪** | **~74 / 100**（P1 成本看板/真分镜/Stripe 配置面已计入；不可对外宣称「全面对标顶级实验室」） |
+| **综合生产就绪** | **~76 / 100**（P2 样片库/OIDC 加固/Stripe bootstrap 已计入；生产密钥与 live_video 仍未闭合） |
 
 ---
 
@@ -24,17 +24,17 @@
 | 产品工具矩阵 | **88** | 90 | 70 | 85 | 65 | Betty 创建页齐全（图/视/唇形/Motion/时间线/工具） |
 | 文生图质量稳定性 | **62** | 75 | 55 | 60 | 50 | 实测 2/4 active 图片 live 成功；上游排队影响大 |
 | 文生视频质量稳定性 | **45** | 70 | **92** | **90** | **85** | 本环境 **0 次** live_video 真出片验真 |
-| Motion / 动作控制 | **48** | 55 | **88** | **90** | 50 | Betty = best-effort；≠ Act-One / Kling Motion |
+| Motion / 动作控制 | **52** | 55 | **88** | **90** | 50 | 输入样片库+UI；输出仍 best-effort ≠ Act-One |
 | 唇形同步 | **60** | 65 | 75 | 55 | 40 | 有真链路；依赖 KIE 排队，未做 fixture live |
 | 时间线 / 合成 | **72** | 70 | 40 | **88** | 45 | 本地 ffmpeg 可靠；弱于 Runway 生成式剪辑 |
-| Agent / 多镜叙事 | **68** | 75 | 40 | 70 | 35 | Director 有 plan/run；深度依赖子任务 live |
-| 开发者 API / Webhook | **75** | 70 | **85** | **88** | 70 | HMAC webhook + `execute_generation` 公开 API（细粒度评估见 CORE_FEATURE_FINE_GRAINED） |
+| Agent / 多镜叙事 | **78** | 75 | 40 | 70 | 35 | 真分镜 API（独立 step）；深度仍依赖子任务 live |
+| 开发者 API / Webhook | **75** | 70 | **85** | **88** | 70 | HMAC webhook + `execute_generation` 公开 API |
 | 社区 / 分享 / Remix | **78** | **88** | 60 | 65 | 55 | 显式 publish 门闩；氛围仍弱于 Yapper/MJ |
-| 计费订阅闭环 | **55** | **85** | 80 | 85 | 75 | 失败退款已落地；Stripe Price/Webhook **未配置** |
-| 企业协作 / SSO | **50** | 55 | 45 | **75** | 40 | 团队积分+ACL+审片骨架；OIDC 未接 IdP |
+| 计费订阅闭环 | **72** | **85** | 80 | 85 | 75 | bootstrap 可注入 Price；本环境无 Key 未建真实 Price |
+| 企业协作 / SSO | **58** | 55 | 45 | **75** | 40 | OIDC discovery/CSRF/FE；本环境未接真实 IdP |
 | 目录诚实 / 信任 | **80** | 70 | 75 | 80 | 70 | active/beta/lab 分层；guess 已折叠 |
 | 可观测 / 运维 | **76** | 60 | 70 | 75 | 55 | 冒烟分层 KPI、隔离、状态页、CI |
-| **加权综合** | **~70** | **~74** | **~72** | **~78** | **~58** | *竞品分为行业经验估计，非其内部数据；P1 后退款/分享/周检计入 |
+| **加权综合** | **~76** | **~74** | **~72** | **~78** | **~58** | *竞品分为行业经验估计；P2 工程面↑，出片/密钥仍拖累 |
 
 \*竞品分用于相对定位，非第三方审计。
 
@@ -51,7 +51,7 @@
 | live 视频 | **未抽样成功记录** | 需 `smoke_live_video_sample.py` 周检 |
 | pytest | **140** 用例收集 | 契约充分，**不能替代 live** |
 | demo_mode | false（有 KIE Key） | 工程上可走真 Adapter |
-| Stripe / CDN / SSO | 未配置 | 生产门禁代码在，配置未齐 |
+| Stripe / CDN / SSO | 本环境未配置密钥 | bootstrap+OIDC/CDN 门禁就绪；需部署注入 |
 
 ---
 
@@ -114,10 +114,12 @@
 | 早期表面 parity | ~55 | 页面多、验真少 |
 | ROI + P0–P2 加固 | ~62 | 门禁、冒烟、CI |
 | Webhook/分享/收藏/ACL | ~63 | 信任面补齐 |
-| **本轮（路由扩池+lab折叠+fixture）** | **~65** | 工程分↑；出片分仍受 live_video 拖累 |
+| 路由扩池+lab折叠+fixture | ~65 | 工程分↑ |
+| P1 退款/分镜/Price 配置面 | ~74 | 商业与 Agent 面 |
+| **本轮 P2（样片库/OIDC/bootstrap）** | **~76** | 工程+配置面↑；真 Price/IdP/CDN/live_video 仍缺 |
 
-要冲到 **75+**，必须同时完成：  
-live_video 周检稳定 ≥2 SKU、图片 live ≥3/4、Stripe+CDN 生产配置、Lipsync/Motion 各 1 条 fixture live。
+要冲到 **80+**，必须同时完成：  
+live_video 周检稳定 ≥2 SKU、图片 live ≥3/4、Stripe+CDN **真实密钥注入**、OIDC 端到端、Lipsync/Motion 各 1 条 fixture live。
 
 ---
 

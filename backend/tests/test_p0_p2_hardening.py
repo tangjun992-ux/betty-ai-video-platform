@@ -94,9 +94,10 @@ def test_kie_generate_motion_payload():
 
 
 def test_oidc_status_unconfigured():
-    from app.api.oidc import oidc_status
-    st = oidc_status()
+    from app.services.oidc_ready import oidc_status
+    st = oidc_status(discover=False).public_dict()
     assert "configured" in st
+    assert st["configured"] is False
 
 
 def test_check_media_url_blocks_empty():

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, Eye, EyeOff, LogIn } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, LogIn, Building2 } from "lucide-react";
 import { useAuthStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { login } from "@/lib/api";
+import { login, API_BASE } from "@/lib/api";
 import { BrandMark } from "@/components/BrandLogo";
 
 export default function LoginPage() {
@@ -20,6 +20,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [ssoConfigured, setSsoConfigured] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/auth/oidc/status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setSsoConfigured(Boolean(d?.configured)))
+      .catch(() => setSsoConfigured(false));
+  }, []);
 
   function validate() {
     const e: typeof errors = {};
@@ -181,6 +189,26 @@ export default function LoginPage() {
                 </>
               )}
             </button>
+
+            {ssoConfigured && (
+              <>
+                <div className="relative py-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-cosmic-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="px-2 bg-transparent text-text-secondary">或</span>
+                  </div>
+                </div>
+                <a
+                  href={`${API_BASE}/auth/oidc/login`}
+                  className="btn-secondary w-full h-11 text-base inline-flex items-center justify-center gap-2"
+                >
+                  <Building2 className="w-4 h-4" />
+                  企业 SSO 登录
+                </a>
+              </>
+            )}
           </motion.form>
 
           {/* Footer Link */}

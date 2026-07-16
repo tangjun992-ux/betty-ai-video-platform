@@ -131,15 +131,19 @@ async def catalog_report():
 async def readiness():
     from app.services.stripe_ready import stripe_status
     from app.services.storage_ready import storage_status
-    from app.api.oidc import oidc_status
+    from app.services.oidc_ready import oidc_status
     from app.config import settings
 
     stripe = stripe_status().public_dict()
     storage = storage_status().public_dict()
-    sso = oidc_status()
+    sso = oidc_status(discover=False).public_dict()
     ok = True
     if settings.is_production:
-        ok = stripe["production_ok"] and storage["production_ok"]
+        ok = (
+            stripe["production_ok"]
+            and storage["production_ok"]
+            and sso.get("production_ok", True)
+        )
     return {
         "ok": ok,
         "env": settings.ENV,

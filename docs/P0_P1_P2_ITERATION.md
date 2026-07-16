@@ -11,7 +11,13 @@
 - Motion 文案 + 定价改为「运动迁移（best-effort）」
 - 工具链 golden：upscale / bg-remove / edit mock 契约测试
 
-## P2
+## P2（续 — 2026-07-16，见 `P2_MOTION_OIDC_STRIPE.md`）
+
+- Motion 标准输入样片库 + `/motion/samples` + FE 一键加载 + harness
+- OIDC discovery / state CSRF / FE callback；CDN `public_media_base` + readiness
+- `bootstrap_stripe_prices.py`（dry-run + mock live；真实 Price 需 `STRIPE_API_KEY`）
+
+## P2（早期）
 - Guess SKU → `status=lab`（默认列表隐藏，需 `include_lab=1`）
 - 项目审片评论：`GET/POST /projects/{id}/reviews`
 

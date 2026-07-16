@@ -1,14 +1,17 @@
 """
 Motion Control API — 动作迁移/驱动: 图片 + 参考视频 → 动态视频
 
-对标 Runway Act-One / Vidu 动作驱动功能。
+对标 Runway Act-One / Vidu 动作驱动功能（能力为 best-effort，见 capabilities）。
+Includes a canonical fixture sample library for input validation (not quality claims).
 """
 import uuid
 import logging
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +23,12 @@ from app.tasks.motion_tasks import process_motion_task
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "motion"
+_SAMPLE_FILES = {
+    "still.png": "image/png",
+    "ref.mp4": "video/mp4",
+}
 
 
 # ─── Models ────────────────────────────────────────────
@@ -165,3 +174,45 @@ async def submit_motion(
         estimated_cost_credits=cost,
         poll_url=f"/api/v1/tasks/{task_id}",
     )
+
+
+@router.get("/motion/samples", summary="Motion 样片库目录（输入资产，非质量对标）")
+async def list_motion_samples():
+    """Canonical fixture pairs for loading sample inputs in the Motion UI / harness.
+
+    Honesty: these are *inputs* for pipeline validation — not Act-One quality refs.
+    """
+    still = _FIXTURE_DIR / "still.png"
+    ref = _FIXTURE_DIR / "ref.mp4"
+    available = still.is_file() and ref.is_file()
+    samples = []
+    if available:
+        samples.append({
+            "id": "canonical-v1",
+            "title": "标准输入样片对",
+            "desc": "正面人物静帧 + 2s 参考动作（生成资产，可再分发）",
+            "image_path": "/api/v1/motion/samples/canonical-v1/still.png",
+            "video_path": "/api/v1/motion/samples/canonical-v1/ref.mp4",
+            "style": "realistic",
+            "prompt": "自然肢体迁移，全身动作，柔和光影",
+            "note": "best_effort 输入样片；输出质量不对标 Kling Motion / Runway Act-One",
+        })
+    return {
+        "available": available,
+        "mode": "best_effort",
+        "fixture_dir": str(_FIXTURE_DIR),
+        "samples": samples,
+        "live_gate": "MOTION_FIXTURE_LIVE=1",
+    }
+
+
+@router.get("/motion/samples/{sample_id}/{filename}", summary="下载 Motion 样片文件")
+async def get_motion_sample_file(sample_id: str, filename: str):
+    if sample_id != "canonical-v1":
+        raise HTTPException(status_code=404, detail="样片不存在")
+    if filename not in _SAMPLE_FILES:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    path = _FIXTURE_DIR / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="样片文件缺失，请运行 scripts/generate_motion_fixtures.py")
+    return FileResponse(path, media_type=_SAMPLE_FILES[filename], filename=filename)

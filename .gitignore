@@ -44,3 +44,7 @@ backend/outputs/
 # Temp
 /tmp/
 backend/dump.rdb
+
+# Frontend test artifacts
+frontend/playwright-report/
+frontend/test-results/
