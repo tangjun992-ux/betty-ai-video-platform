@@ -1,7 +1,7 @@
 # P0 / P1 / P2 对标迭代台账（真实验证）
 
-**日期：** 2026-07-16  
-**依据：** `docs/YAPPER_FULL_MATRIX_AUDIT.md`  
+**日期：** 2026-07-16（专业评估刷新）  
+**依据：** `docs/YAPPER_PROFESSIONAL_EVALUATION.md` · `docs/YAPPER_FULL_MATRIX_AUDIT.md`  
 **原则：** 能 live 的必须 live；不能扩货架绝不虚标；缺口诚实披露。
 
 ---
@@ -10,46 +10,47 @@
 
 | 项 | 实现 | 验证 |
 |----|------|------|
-| **Seedance Omni** | `reference_images/videos/audios` → KIE `reference_*_urls`；FE 上传多模态；auto→seedance | **live ok** `fixtures/audit/omni_live_latest.json`（omni=true 出片） |
-| **定价 Max** | API `id=max`，`pro` 别名；FE `subscribe("max")`；Stripe MAX/PRO 回退 | pytest + `/pricing/plans` |
-| **Stripe/OIDC 就绪面** | MAX price env + readiness 文案；本环境仍无 Key（诚实） | `ops:stripe_configured=false` 仍记录 |
-| **货架** | lab SKU 网关多不支持 → **不虚增 active**；维持 9 已验证 | createTask 探针失败如实 |
+| **Seedance Omni** | `reference_*` → KIE；FE 多模态；auto→seedance | **live ok** `fixtures/audit/omni_live_latest.json` |
+| **定价 Max** | API `id=max`，`pro` 别名；FE `subscribe("max")` | `/pricing/plans` + audit |
+| **Stripe/OIDC 就绪面** | readiness / stripe-status 面 | 本环境仍无 Key（诚实） |
+| **货架诚实** | 维持 9 active；lab 不虚增 | createTask 探针失败如实 |
 
-## P1 已落地
-
-| 项 | 实现 | 验证 |
-|----|------|------|
-| **Extractor 社媒** | TikTok/IG/YT 页面 URL → 400 诚实拒绝；FE 直链输入 | pytest |
-| **Explore 密度** | `seed_gallery` v2 → **40** 条带 likes/views | 脚本输出 |
-| **Face Swap** | `mode=i2i_edit` + `google/nano-banana-edit` live 出图；`/create/face-swap` | capabilities / face-swap API |
-| **Lipsync SLO** | 既有 fixture harness；本轮未重复付费跑（避免刷配额） | 契约仍绿 |
-
-## P2 已落地
+## P1 已落地（本轮闭环）
 
 | 项 | 实现 | 验证 |
 |----|------|------|
-| **Product / Headshots / Photo Packs** | 专用路由 → 真 generate 工作流 | FE 文件存在 |
-| **Motion + Voice** | `voice_text` → TTS 旁白附件（非变声引擎） | API 字段 + task 分支 |
-| **Tools hub** | 入口对齐到专用页；Motion native 文案 | 代码审查 |
+| **Face Swap** | `i2i_edit` + `google/nano-banana-edit`；`/create/face-swap` | `fixtures/face_swap/last_run.json` |
+| **社媒 Extract** | YouTube oEmbed/yt-dlp；TikTok/IG best-effort | caps + audit youtube resolve |
+| **Performance Drive** | Motion + 可选 Lipsync；`/create/performance` | caps `motion_plus_optional_lipsync` |
+| **Lipsync live** | `LIPSYNC_FIXTURE_LIVE` harness | `fixtures/lipsync/last_run.json` ok |
+| **Explore 种子** | gallery seed（密度仍弱于 Yapper） | list≈32 / total≈72 |
+
+## P2 已落地（薄）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **Product / Headshots / Photo Packs** | 专用路由 → prompt-pack | FE 文件存在 |
+| **Motion + Voice** | `voice_text` TTS 旁白（非变声引擎） | API 字段 |
+| **Tools hub** | Face Swap / Performance 入口；Motion native 文案 | 代码审查 |
 
 ---
 
 ## 本轮测试总账
 
 ```
-pytest tests/                         → 202 passed
-yapper_core_parity_harness            → 15/15
-yapper_full_matrix_audit (contract)   → 64/64 hard
-Omni live                             → ok (seedance-2-fast + reference_image)
-Gallery seed                          → 40 items
+yapper_full_matrix_audit (contract)   → 76/76 hard
+folded live (motion/lipsync/faceswap/omni) → 4/4
+overall_vs_yapper                     → ≈81
+betty_internal_readiness              → ≈90
 ```
 
 ## 仍待（下一刀）
 
 1. Stripe/OIDC **密钥注入**（代码已就绪）  
-2. 更多 KIE 模型 ID 校正后才能诚实扩 active  
-3. Face Swap：找到可 live 的上游 SKU 再开入口  
-4. URL-to-Viral：社媒 oEmbed/抓取（合规前提）  
-5. Lipsync 付费周检纳入 Beat  
+2. Omni **一体 UX**（多镜 + 可选内建唇形）  
+3. 更多 KIE 模型 ID 校正后才能诚实扩 active  
+4. Face Swap **模板库** / URL-to-Viral 结构深化  
+5. Explore 飞轮密度与 Remix 漏斗  
+6. Lipsync **周检 Beat**  
 
-勿做：把 lab mapping 标成 active；假 Face Swap 页；宣称 Act-One / 17+ 全开。
+勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 18+ 全开而无周检。

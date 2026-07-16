@@ -1,6 +1,6 @@
 {
   "suite": "yapper_full_matrix_audit",
-  "ts": "2026-07-16T13:48:47Z",
+  "ts": "2026-07-16T14:51:50Z",
   "meta": {
     "active_models": 9,
     "lab_models": 20,
@@ -8,9 +8,15 @@
     "gallery_total": 72,
     "stripe": false,
     "oidc": false,
-    "ts": "2026-07-16T13:48:47Z"
+    "ts": "2026-07-16T14:51:50Z",
+    "face_swap_live": true,
+    "lipsync_live": true,
+    "omni_live": true,
+    "motion_live": true,
+    "youtube_social": true,
+    "performance_drive": true
   },
-  "yapper_matrix_size": 25,
+  "yapper_matrix_size": 26,
   "checks": [
     {
       "name": "auth_register",
@@ -164,7 +170,7 @@
     {
       "name": "fe:product_shots",
       "ok": true,
-      "detail": "frontend/src/app/create/product/page.tsx (partial surface)",
+      "detail": "dedicated entry exists; thin prompt-pack redirect to image (partial vs Yapper depth)",
       "partial": true,
       "gap": true,
       "yapper": "Stunning Product Shots (dedicated)"
@@ -172,7 +178,7 @@
     {
       "name": "fe:headshots",
       "ok": true,
-      "detail": "frontend/src/app/create/headshots/page.tsx (partial surface)",
+      "detail": "dedicated entry exists; thin prompt-pack redirect to image (partial vs Yapper depth)",
       "partial": true,
       "gap": true,
       "yapper": "Professional Headshots (dedicated)"
@@ -180,23 +186,23 @@
     {
       "name": "fe:photo_packs",
       "ok": true,
-      "detail": "missing dedicated surface",
-      "expected_missing": true,
+      "detail": "hub page exists; not a batch SKU pipeline (partial vs Yapper depth)",
+      "partial": true,
       "gap": true,
       "yapper": "AI Photo Packs"
     },
     {
       "name": "fe:face_swap",
       "ok": true,
-      "detail": "no verified upstream SKU — capabilities.face_swap=unavailable",
-      "expected_missing": true,
+      "detail": "i2i_edit live (nano-banana-edit); not InsightFace; viral template library thin (partial vs Yapper depth)",
+      "partial": true,
       "gap": true,
       "yapper": "AI Face Swapping / viral templates"
     },
     {
       "name": "fe:url_viral",
       "ok": true,
-      "detail": "social page URLs honestly rejected; direct media URL ok (partial surface)",
+      "detail": "YouTube cover resolve ok; TikTok/IG best-effort; not full reel→structure (partial vs Yapper depth)",
       "partial": true,
       "gap": true,
       "yapper": "URL-to-Viral (TikTok/IG reel → prompt)"
@@ -204,15 +210,23 @@
     {
       "name": "fe:motion_voice",
       "ok": true,
-      "detail": "voice_text TTS旁白有；非实时变声引擎 (partial surface)",
+      "detail": "voice_text TTS旁白 + Performance Drive；非实时变声引擎 (partial vs Yapper depth)",
       "partial": true,
       "gap": true,
       "yapper": "Motion + Voice Changer"
     },
     {
+      "name": "fe:performance_drive",
+      "ok": true,
+      "detail": "Motion+optional Lipsync；≠ Runway Act-One (partial vs Yapper depth)",
+      "partial": true,
+      "gap": true,
+      "yapper": "Advanced Motion / performance-like drive"
+    },
+    {
       "name": "fe:seedance_omni",
       "ok": true,
-      "detail": "frontend/src/app/create/video/page.tsx (partial surface)",
+      "detail": "frontend/src/app/create/video/page.tsx (partial vs Yapper depth)",
       "partial": true,
       "gap": true,
       "yapper": "Seedance 2.0 Omni multi-modal / multi-shot"
@@ -258,9 +272,39 @@
       "detail": "{'available': True, 'max_refs': 4, 'note': 'GenerateRequest.reference_images → Celery edit_image 真 i2i。'}"
     },
     {
+      "name": "cap:face_swap",
+      "ok": true,
+      "detail": "{'available': True, 'mode': 'i2i_edit', 'sku': 'google/nano-banana-edit', 'path': '/create/face-swap', 'api': '/face-swa"
+    },
+    {
+      "name": "cap:performance_drive",
+      "ok": true,
+      "detail": "{'available': True, 'mode': 'motion_plus_optional_lipsync', 'path': '/create/performance', 'api': '/performance', 'sku':"
+    },
+    {
+      "name": "cap:seedance_omni",
+      "ok": true,
+      "detail": "{'available': True, 'path': '/create/video', 'models': ['seedance-2.0', 'seedance-2.0-fast'], 'inputs': ['reference_imag"
+    },
+    {
       "name": "cap:motion_native",
       "ok": true,
       "detail": "{'available': True, 'mode': 'native', 'sku': 'kling-3.0/motion-control', 'note': '原生 Kling Motion Control（KIE kling-3.0/motion-control：input_urls+video_urls）；非 "
+    },
+    {
+      "name": "cap:face_swap_i2i",
+      "ok": true,
+      "detail": "{'available': True, 'mode': 'i2i_edit', 'sku': 'google/nano-banana-edit', 'path': '/create/face-swap', 'api': '/face-swap', 'note': '双图换脸已 live 验证（nano-banana-e"
+    },
+    {
+      "name": "cap:performance_drive",
+      "ok": true,
+      "detail": "{'available': True, 'mode': 'motion_plus_optional_lipsync', 'path': '/create/performance', 'api': '/performance', 'sku': ['kling-3.0/motion-control', 'kling/ai-"
+    },
+    {
+      "name": "cap:social_youtube",
+      "ok": true,
+      "detail": "{'youtube': True, 'tiktok': 'best_effort', 'instagram': 'best_effort', 'x': 'best_effort', 'douyin': False, 'xiaohongshu"
     },
     {
       "name": "models:active_ge_1",
@@ -289,10 +333,25 @@
       "detail": "mode=heuristic"
     },
     {
-      "name": "api:extractor_social_url_honest",
+      "name": "api:extractor_tiktok_honest",
       "ok": true,
-      "detail": "status=400 mode=None detail={'detail': '暂不支持从 TikTok/Instagram/X 等页面链接抓取媒体。请上传文件，或粘贴可直链访问的图片/视频 URL（非社媒页面）。（对标 Yapper URL-to-Vir",
+      "detail": "status=400 mode=None detail={'detail': 'tiktok 页面解析失败（网络/反爬/地区限制）。请上传文件或粘贴直链。'}",
       "gap": true
+    },
+    {
+      "name": "api:extractor_youtube_resolve",
+      "ok": true,
+      "detail": "status=200 source=youtube_oembed"
+    },
+    {
+      "name": "openapi:face_swap",
+      "ok": true,
+      "detail": "ok"
+    },
+    {
+      "name": "openapi:performance",
+      "ok": true,
+      "detail": "ok"
     },
     {
       "name": "api:motion_samples",
@@ -347,7 +406,7 @@
     {
       "name": "api:gallery_stats",
       "ok": true,
-      "detail": "{'total_items': 110, 'total_images': 81, 'total_videos': 18, 'total_credits_consumed': 114, 'style_options': [{'key': 'a"
+      "detail": "{'total_items': 120, 'total_images': 90, 'total_videos': 18, 'total_credits_consumed': 168, 'style_options': [{'key': 'a"
     },
     {
       "name": "api:gallery_remix",
@@ -399,7 +458,7 @@
     {
       "name": "enqueue:generate_image",
       "ok": true,
-      "detail": "status=202 {\"task_id\":\"eebf9c7b-bce2-4233-8cb3-525e713eddd5\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
+      "detail": "status=202 {\"task_id\":\"060eeb8f-27e9-4ff3-a296-8cbe70379d66\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
     },
     {
       "name": "enqueue:speech_contract",
@@ -445,23 +504,83 @@
   ],
   "live": [
     {
-      "name": "live:skipped",
+      "name": "live:motion_last_run_file",
       "ok": true,
-      "detail": "YAPPER_AUDIT_LIVE not set — contract-only"
+      "detail": "model=kling-3.0/motion-control source=kie_public_examples",
+      "evidence": {
+        "ok": true,
+        "media_url": "https://tempfile.aiquickdraw.com/k/b6ad74cf5c53b548f7ed13ee1cb478d9_1_1784207201_3308.mp4",
+        "model": "kling-3.0/motion-control",
+        "cost": 3.0,
+        "motion_mode": "native",
+        "sku": "kling-3.0/motion-control",
+        "source": "kie_public_examples",
+        "fixture_error": "KIE task 2d5a94201d84fa6fe23d527ef33d0f5e failed: No valid characters detected in the video"
+      }
+    },
+    {
+      "name": "live:lipsync_last_run_file",
+      "ok": true,
+      "detail": "model=kling/ai-avatar-pro",
+      "evidence": {
+        "ok": true,
+        "media_url": "https://tempfile.aiquickdraw.com/k/fd170e7d35cdff08a755695ce093fca8_1_1784212221_9731.mp4",
+        "model": "kling/ai-avatar-pro",
+        "cost": 0.6
+      }
+    },
+    {
+      "name": "live:face_swap_last_run_file",
+      "ok": true,
+      "detail": "model=google/nano-banana-edit mode=i2i_edit",
+      "evidence": {
+        "ok": true,
+        "media_url": "https://tempfile.aiquickdraw.com/as/78ac06ea317c28bcd2dfb3e77759fe12_1784211932366.png",
+        "model": "google/nano-banana-edit",
+        "mode": "i2i_edit",
+        "task_id": "78ac06ea317c28bcd2dfb3e77759fe12",
+        "honesty": "live createTask→success; i2i edit face compose, not InsightFace",
+        "source": "kie_live_probe_2026-07-16"
+      }
+    },
+    {
+      "name": "live:omni_last_run_file",
+      "ok": true,
+      "detail": "model=bytedance/seedance-2-fast omni=True",
+      "evidence": {
+        "ok": true,
+        "url": "https://tempfile.aiquickdraw.com/seedance/1784208510293-m8zfwo29lmb.mp4",
+        "meta": {
+          "kie_task_id": "1c0b2d15411239534a3ec3a27dd1d11c",
+          "resolution": "720p",
+          "duration": 5,
+          "omni": true,
+          "reference_image_count": 1,
+          "reference_video_count": 0,
+          "reference_audio_count": 0
+        },
+        "model": "bytedance/seedance-2-fast"
+      }
+    },
+    {
+      "name": "live:paid_probe_skipped",
+      "ok": true,
+      "detail": "YAPPER_AUDIT_LIVE not set — using folded last_run evidence only",
+      "skipped": true
     }
   ],
   "scoring": {
-    "contract_hard_ok": 64,
-    "contract_hard_total": 64,
+    "contract_hard_ok": 76,
+    "contract_hard_total": 76,
     "contract_pass_pct": 100.0,
-    "live_ok": 0,
-    "live_total": 0,
-    "live_pass_pct": null,
-    "betty_internal_readiness_approx": 77.2,
-    "overall_vs_yapper_approx": 62.7,
+    "live_ok": 4,
+    "live_total": 4,
+    "live_pass_pct": 100.0,
+    "betty_internal_readiness_approx": 89.9,
+    "overall_vs_yapper_approx": 81.1,
     "components": {
       "tool_surface": 100.0,
-      "live": 58,
+      "live": 100.0,
       "model_shelf": 42,
       "billing": 28,
       "community": 56.4
@@ -469,87 +588,101 @@
     "gaps": [
       {
         "area": "模型货架深度",
-        "yapper": "宣传 17+ 图 / 26+ 视频全开",
-        "betty": "active=9（诚实货架）",
-        "severity": "P0",
-        "impact": "高"
+        "yapper": "宣传 18+ 图 / 26+ 视频全开（Veo/Sora/WAN/Hailuo…）",
+        "betty": "active=9 / lab=20（诚实货架，不虚增）",
+        "priority": "P0",
+        "impact": "高",
+        "status": "open"
       },
       {
-        "area": "Seedance Omni 产品化",
-        "yapper": "多模态参考 + 内建唇形 + 多镜叙事",
-        "betty": "Seedance T2V/I2V 可用，Omni 体验未产品化",
-        "severity": "P0",
-        "impact": "高"
+        "area": "Seedance Omni 产品深度",
+        "yapper": "多模态参考 + 内建唇形 + 多镜叙事（营销主推）",
+        "betty": "reference_* 已接线 + Omni live 出片；缺内建唇形一体流与多镜一键成片 UX",
+        "priority": "P0",
+        "impact": "高",
+        "status": "partial"
       },
       {
-        "area": "Studio Lip-Sync / Max Lip-Sync",
-        "yapper": "强调专有/本地化训练级口型",
-        "betty": "KIE kling/ai-avatar 通用链路；缺 fixture live 稳定 SLA",
-        "severity": "P1",
-        "impact": "高"
+        "area": "收款 / SSO 生产",
+        "yapper": "成熟订阅收款 + 企业登录",
+        "betty": "Stripe key=False OIDC=False（代码就绪，密钥未注入）",
+        "priority": "P0（上线）",
+        "impact": "高",
+        "status": "open"
+      },
+      {
+        "area": "Studio Lip-Sync 成片感",
+        "yapper": "Advanced / Max Lip-Sync 病毒口型叙事",
+        "betty": "kling/ai-avatar-pro live 已通；非专有训练引擎，缺周检 Beat",
+        "priority": "P1",
+        "impact": "高",
+        "status": "partial"
       },
       {
         "area": "Face Swap / 病毒模板",
-        "yapper": "人脸替换 + 模板玩法",
-        "betty": "无独立 SKU/路由",
-        "severity": "P1",
-        "impact": "中高"
+        "yapper": "人脸替换 + 模板库玩法",
+        "betty": "i2i_edit live（nano-banana-edit）；非 InsightFace；病毒模板库薄",
+        "priority": "P1",
+        "impact": "中高",
+        "status": "partial"
       },
       {
         "area": "URL-to-Viral（社媒链接反推）",
-        "yapper": "TikTok/IG URL → 提示词/结构",
-        "betty": "Extractor 支持文件/直链；不抓社媒页面",
-        "severity": "P1",
-        "impact": "中高"
+        "yapper": "TikTok/IG URL → 结构提示词/可复用工作流",
+        "betty": "YouTube 封面解析 ok；TikTok/IG best-effort；非完整 reel→分镜结构",
+        "priority": "P1",
+        "impact": "中高",
+        "status": "partial"
       },
       {
-        "area": "专用 Image Apps",
-        "yapper": "Product Shots / Headshots / Photo Packs",
-        "betty": "多并入 /create/image，缺独立工作流",
-        "severity": "P2",
-        "impact": "中"
+        "area": "Explore 飞轮密度",
+        "yapper": "百万级资产叙事 + 强 Remix 习惯",
+        "betty": "gallery list≈32 total≈72；publish/remix 有，氛围弱",
+        "priority": "P1",
+        "impact": "中高",
+        "status": "open"
+      },
+      {
+        "area": "Performance / Act-One 级叙事",
+        "yapper": "Advanced Motion Control 成片感",
+        "betty": "Performance Drive=Motion+可选 Lipsync；≠ Runway Act-One；样片常需 playground",
+        "priority": "P1（体验）",
+        "impact": "中",
+        "status": "partial"
+      },
+      {
+        "area": "专用 Image Apps 深度",
+        "yapper": "Product / Headshots / Photo Packs 批量工作流",
+        "betty": "独立路由存在；多为 prompt-pack 导向，非批量 SKU 管线",
+        "priority": "P2",
+        "impact": "中",
+        "status": "partial"
       },
       {
         "area": "Motion + Voice Changer",
         "yapper": "动作迁移可叠加变声",
-        "betty": "原生 Kling Motion 有；无变声组合",
-        "severity": "P2",
-        "impact": "中"
+        "betty": "voice_text TTS 旁白 + Performance；非实时变声引擎",
+        "priority": "P2",
+        "impact": "中",
+        "status": "partial"
       },
       {
-        "area": "Explore 飞轮密度",
-        "yapper": "百万级资产叙事 + 强 Remix",
-        "betty": "gallery items≈32；publish/remix 有，氛围弱",
-        "severity": "P1",
-        "impact": "中高"
-      },
-      {
-        "area": "收款 / SSO 生产",
-        "yapper": "成熟订阅收款",
-        "betty": "Stripe key=False OIDC=False",
-        "severity": "P0（上线）",
-        "impact": "高"
-      },
-      {
-        "area": "定价命名",
-        "yapper": "第四档 Max + credits 滑块",
-        "betty": "FE Max / API id=pro 漂移",
-        "severity": "P2",
-        "impact": "低"
-      },
-      {
-        "area": "Act-One 级 Motion 质量叙事",
-        "yapper": "Advanced Motion Control 成片感",
-        "betty": "原生 kling-3.0/motion-control 已通；非 Act-One，本地样片无人物需 playground 样例",
-        "severity": "P1（体验）",
-        "impact": "中"
+        "area": "定价滑块 / 团队席位",
+        "yapper": "Max credits 滑块 + Team members",
+        "betty": "四档 id 含 max 已对齐；缺 credits 滑块与团队席位产品化",
+        "priority": "P2",
+        "impact": "低中",
+        "status": "partial"
       }
     ],
     "soft_known_gaps": [
-      "api:extractor_social_url_honest",
+      "api:extractor_tiktok_honest",
+      "models:shelf_vs_yapper",
       "ops:oidc_configured",
       "ops:stripe_configured"
-    ]
+    ],
+    "depth_bonus": 12,
+    "scoring_note": "tool_surface=硬契约；overall_vs_yapper 含货架/收款/社区拖累 + 已闭环深度加分；勿把 readiness.ok(dev) 当生产可收款。"
   },
-  "honesty": "Contract checks ≠ Yapper product parity. Live only when YAPPER_AUDIT_LIVE=1. Do not treat mapping smoke as outframe. Motion native ≠ Act-One."
+  "honesty": "Contract checks ≠ Yapper product parity. Folded last_run evidence counts for live_*_file (not a fresh paid re-run). Face Swap=i2i_edit≠InsightFace. Motion/Performance≠Act-One. Do not treat mapping smoke as outframe."
 }

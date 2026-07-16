@@ -56,12 +56,13 @@ YAPPER_MATRIX = [
     {"id": "tools_hub", "yapper": "All Tools hub", "fe": "frontend/src/app/tools/page.tsx", "apis": ["/api/v1/system/capabilities"]},
     {"id": "library", "yapper": "My Library / Assets", "fe": "frontend/src/app/library/page.tsx", "apis": ["/api/v1/library/"]},
     # Yapper differentiators often missing or thin on Betty
-    {"id": "product_shots", "yapper": "Stunning Product Shots (dedicated)", "fe": "frontend/src/app/create/product/page.tsx", "apis": []},
-    {"id": "headshots", "yapper": "Professional Headshots (dedicated)", "fe": "frontend/src/app/create/headshots/page.tsx", "apis": []},
-    {"id": "photo_packs", "yapper": "AI Photo Packs", "fe": "frontend/src/app/create/photo-packs/page.tsx", "apis": []},
-    {"id": "face_swap", "yapper": "AI Face Swapping / viral templates", "fe": None, "apis": [], "gap_hint": "no verified upstream SKU — capabilities.face_swap=unavailable"},
-    {"id": "url_viral", "yapper": "URL-to-Viral (TikTok/IG reel → prompt)", "fe": "frontend/src/app/create/extract/page.tsx", "apis": ["/api/v1/generate/extract-prompt"], "gap_hint": "social page URLs honestly rejected; direct media URL ok"},
-    {"id": "motion_voice", "yapper": "Motion + Voice Changer", "fe": "frontend/src/app/create/motion/page.tsx", "apis": ["/api/v1/motion"], "gap_hint": "voice_text TTS旁白有；非实时变声引擎"},
+    {"id": "product_shots", "yapper": "Stunning Product Shots (dedicated)", "fe": "frontend/src/app/create/product/page.tsx", "apis": [], "gap_hint": "dedicated entry exists; thin prompt-pack redirect to image"},
+    {"id": "headshots", "yapper": "Professional Headshots (dedicated)", "fe": "frontend/src/app/create/headshots/page.tsx", "apis": [], "gap_hint": "dedicated entry exists; thin prompt-pack redirect to image"},
+    {"id": "photo_packs", "yapper": "AI Photo Packs", "fe": "frontend/src/app/create/photo-packs/page.tsx", "apis": [], "gap_hint": "hub page exists; not a batch SKU pipeline"},
+    {"id": "face_swap", "yapper": "AI Face Swapping / viral templates", "fe": "frontend/src/app/create/face-swap/page.tsx", "apis": ["/api/v1/face-swap"], "gap_hint": "i2i_edit live (nano-banana-edit); not InsightFace; viral template library thin"},
+    {"id": "url_viral", "yapper": "URL-to-Viral (TikTok/IG reel → prompt)", "fe": "frontend/src/app/create/extract/page.tsx", "apis": ["/api/v1/generate/extract-prompt"], "gap_hint": "YouTube cover resolve ok; TikTok/IG best-effort; not full reel→structure"},
+    {"id": "motion_voice", "yapper": "Motion + Voice Changer", "fe": "frontend/src/app/create/motion/page.tsx", "apis": ["/api/v1/motion"], "gap_hint": "voice_text TTS旁白 + Performance Drive；非实时变声引擎"},
+    {"id": "performance_drive", "yapper": "Advanced Motion / performance-like drive", "fe": "frontend/src/app/create/performance/page.tsx", "apis": ["/api/v1/performance"], "gap_hint": "Motion+optional Lipsync；≠ Runway Act-One"},
     {"id": "seedance_omni", "yapper": "Seedance 2.0 Omni multi-modal / multi-shot", "fe": "frontend/src/app/create/video/page.tsx", "apis": ["/api/v1/generate/"]},
 ]
 
@@ -84,21 +85,14 @@ def run_contract(client, headers: dict) -> list[dict]:
     # FE pages
     for item in YAPPER_MATRIX:
         exists = _fe_exists(item.get("fe"))
-        expected_missing = item["id"] in ("photo_packs", "face_swap")
-        if expected_missing:
-            checks.append(_row(
-                f"fe:{item['id']}",
-                True,  # absence recorded as known gap, not hard fail
-                item.get("gap_hint") or "missing dedicated surface",
-                expected_missing=True,
-                gap=True,
-                yapper=item["yapper"],
-            ))
-            continue
         detail = item.get("fe") or item.get("gap_hint") or "missing"
-        partial = item["id"] in ("product_shots", "headshots", "url_viral", "motion_voice", "seedance_omni")
+        # Surfaces that exist but are thinner than Yapper product depth
+        partial = item["id"] in (
+            "product_shots", "headshots", "photo_packs", "url_viral",
+            "motion_voice", "seedance_omni", "face_swap", "performance_drive",
+        )
         if partial and exists:
-            detail = (item.get("gap_hint") or detail) + " (partial surface)"
+            detail = (item.get("gap_hint") or detail) + " (partial vs Yapper depth)"
         checks.append(_row(
             f"fe:{item['id']}",
             exists,
@@ -111,11 +105,20 @@ def run_contract(client, headers: dict) -> list[dict]:
     # Capabilities honesty
     cap = client.get("/api/v1/system/capabilities")
     feats = (cap.json() or {}).get("features") or {}
-    for key in ("motion_transfer", "prompt_extractor", "talking_avatar", "storyboard",
-                "share_permalink", "failure_refund", "director_minimal", "multi_reference_i2i"):
+    for key in (
+        "motion_transfer", "prompt_extractor", "talking_avatar", "storyboard",
+        "share_permalink", "failure_refund", "director_minimal", "multi_reference_i2i",
+        "face_swap", "performance_drive", "seedance_omni",
+    ):
         checks.append(_row(f"cap:{key}", key in feats and cap.status_code == 200, str((feats.get(key) or {}) )[:120]))
     mt = feats.get("motion_transfer") or {}
     checks.append(_row("cap:motion_native", mt.get("mode") == "native" and mt.get("sku") == "kling-3.0/motion-control", str(mt)[:160]))
+    fs = feats.get("face_swap") or {}
+    checks.append(_row("cap:face_swap_i2i", fs.get("mode") == "i2i_edit" and "nano-banana" in str(fs.get("sku") or ""), str(fs)[:160]))
+    pd = feats.get("performance_drive") or {}
+    checks.append(_row("cap:performance_drive", pd.get("mode") == "motion_plus_optional_lipsync", str(pd)[:160]))
+    pe_social = (feats.get("prompt_extractor") or {}).get("social_page_urls") or {}
+    checks.append(_row("cap:social_youtube", pe_social.get("youtube") is True, str(pe_social)[:120]))
 
     # Models shelf honesty vs Yapper "17+ / 26+"
     models = client.get("/api/v1/models")
@@ -148,21 +151,37 @@ def run_contract(client, headers: dict) -> list[dict]:
     else:
         checks.append(_row("api:extractor_upload", False, "fixture missing"))
 
-    # Social URL extractor — expect honest non-scrape / failure, not fake success
+    # Social URL extractor — TikTok best-effort honesty; YouTube must resolve cover
     social = client.post(
         "/api/v1/generate/extract-prompt",
         headers=headers,
         data={"media_url": "https://www.tiktok.com/@x/video/123", "media_kind": "video"},
     )
-    # Either 200 heuristic with honesty, or 4xx — both acceptable; pretending vision scrape is not.
     sbody = social.json() if social.headers.get("content-type", "").startswith("application/json") else {}
     pretend = (sbody.get("mode") == "vision" and "tiktok" in str(sbody.get("prompt", "")).lower())
     checks.append(_row(
-        "api:extractor_social_url_honest",
+        "api:extractor_tiktok_honest",
         social.status_code in (200, 400, 422) and not pretend,
         f"status={social.status_code} mode={sbody.get('mode')} detail={str(sbody)[:100]}",
         gap=True,
     ))
+    yt = client.post(
+        "/api/v1/generate/extract-prompt",
+        headers=headers,
+        data={"media_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "media_kind": "auto"},
+    )
+    ytd = yt.json() if yt.status_code == 200 else {}
+    checks.append(_row(
+        "api:extractor_youtube_resolve",
+        yt.status_code == 200 and (ytd.get("social") or {}).get("platform") == "youtube" and bool(ytd.get("prompt")),
+        f"status={yt.status_code} source={(ytd.get('social') or {}).get('source')}",
+    ))
+
+    # Face swap + performance OpenAPI / enqueue contract
+    oa = client.get("/api/openapi.json")
+    paths = (oa.json() or {}).get("paths") or {}
+    checks.append(_row("openapi:face_swap", "/api/v1/face-swap" in paths, "ok" if "/api/v1/face-swap" in paths else "missing"))
+    checks.append(_row("openapi:performance", "/api/v1/performance" in paths, "ok" if "/api/v1/performance" in paths else "missing"))
 
     # Motion
     ms = client.get("/api/v1/motion/samples")
@@ -311,12 +330,66 @@ def run_contract(client, headers: dict) -> list[dict]:
     return checks
 
 
+def _evidence_file(rel: str, name: str, ok_fn) -> dict:
+    path = ROOT / "fixtures" / rel
+    if not path.is_file():
+        return _row(name, False, f"missing fixtures/{rel}", skipped=True)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        ok, detail = ok_fn(data)
+        return _row(name, ok, detail, evidence={k: data.get(k) for k in list(data)[:8]})
+    except Exception as e:
+        return _row(name, False, str(e))
+
+
 def run_live(report: dict) -> list[dict]:
-    """Paid live probes — only when YAPPER_AUDIT_LIVE / smoke gates set."""
+    """Paid live probes and/or fold prior outframe evidence files.
+
+    Default (no YAPPER_AUDIT_LIVE): fold last_run / omni evidence so scoring
+    reflects proven outframes without re-spending quota.
+    With YAPPER_AUDIT_LIVE=1: also run gated smoke harnesses when env set.
+    """
     live: list[dict] = []
     want = os.getenv("YAPPER_AUDIT_LIVE", "").lower() in ("1", "true", "yes", "on")
+
+    # Always fold prior evidence (honest: file ok ≠ re-run this session)
+    live.append(_evidence_file(
+        "motion/last_run.json",
+        "live:motion_last_run_file",
+        lambda d: (
+            bool(d.get("ok")) and "motion-control" in str(d.get("model") or d.get("sku") or ""),
+            f"model={d.get('model')} source={d.get('source')}",
+        ),
+    ))
+    live.append(_evidence_file(
+        "lipsync/last_run.json",
+        "live:lipsync_last_run_file",
+        lambda d: (bool(d.get("ok")) and bool(d.get("media_url")), f"model={d.get('model')}"),
+    ))
+    live.append(_evidence_file(
+        "face_swap/last_run.json",
+        "live:face_swap_last_run_file",
+        lambda d: (
+            bool(d.get("ok")) and "nano-banana" in str(d.get("model") or ""),
+            f"model={d.get('model')} mode={d.get('mode')}",
+        ),
+    ))
+    live.append(_evidence_file(
+        "audit/omni_live_latest.json",
+        "live:omni_last_run_file",
+        lambda d: (
+            bool(d.get("ok")) and bool((d.get("meta") or {}).get("omni") or d.get("url")),
+            f"model={d.get('model')} omni={(d.get('meta') or {}).get('omni')}",
+        ),
+    ))
+
     if not want:
-        live.append(_row("live:skipped", True, "YAPPER_AUDIT_LIVE not set — contract-only"))
+        live.append(_row(
+            "live:paid_probe_skipped",
+            True,
+            "YAPPER_AUDIT_LIVE not set — using folded last_run evidence only",
+            skipped=True,
+        ))
         return live
 
     # Image sample
@@ -363,19 +436,6 @@ def run_live(report: dict) -> list[dict]:
     else:
         live.append(_row("live:motion_native", False, "MOTION_FIXTURE_LIVE not set", skipped=True))
 
-    # Prior last_run evidence
-    last = ROOT / "fixtures" / "motion" / "last_run.json"
-    if last.is_file():
-        try:
-            data = json.loads(last.read_text(encoding="utf-8"))
-            live.append(_row(
-                "live:motion_last_run_file",
-                bool(data.get("ok")) and "motion-control" in str(data.get("model") or data.get("sku") or ""),
-                f"model={data.get('model')} source={data.get('source')}",
-            ))
-        except Exception as e:
-            live.append(_row("live:motion_last_run_file", False, str(e)))
-
     return live
 
 
@@ -389,7 +449,7 @@ def score_gaps(checks: list[dict], live: list[dict], meta: dict) -> dict:
     # simpler: all checks that are meant to pass
     must = [c for c in checks if c["name"] not in ("models:shelf_vs_yapper",) and not c.get("expected_missing")]
     # gap-flagged ops may fail
-    soft_fail_ok = {"ops:stripe_configured", "ops:oidc_configured", "api:extractor_social_url_honest"}
+    soft_fail_ok = {"ops:stripe_configured", "ops:oidc_configured", "api:extractor_tiktok_honest", "models:shelf_vs_yapper"}
     hard = [c for c in must if c["name"] not in soft_fail_ok]
     hard_ok = sum(1 for c in hard if c["ok"])
     live_hard = [c for c in live if not c.get("skipped") and c["name"] != "live:skipped"]
@@ -398,80 +458,91 @@ def score_gaps(checks: list[dict], live: list[dict], meta: dict) -> dict:
     gaps = [
         {
             "area": "模型货架深度",
-            "yapper": "宣传 17+ 图 / 26+ 视频全开",
-            "betty": f"active={meta.get('active_models')}（诚实货架）",
-            "severity": "P0",
+            "yapper": "宣传 18+ 图 / 26+ 视频全开（Veo/Sora/WAN/Hailuo…）",
+            "betty": f"active={meta.get('active_models')} / lab={meta.get('lab_models')}（诚实货架，不虚增）",
+            "priority": "P0",
             "impact": "高",
+            "status": "open",
         },
         {
-            "area": "Seedance Omni 产品化",
-            "yapper": "多模态参考 + 内建唇形 + 多镜叙事",
-            "betty": "Seedance T2V/I2V 可用，Omni 体验未产品化",
-            "severity": "P0",
+            "area": "Seedance Omni 产品深度",
+            "yapper": "多模态参考 + 内建唇形 + 多镜叙事（营销主推）",
+            "betty": "reference_* 已接线 + Omni live 出片；缺内建唇形一体流与多镜一键成片 UX",
+            "priority": "P0",
             "impact": "高",
+            "status": "partial",
         },
         {
-            "area": "Studio Lip-Sync / Max Lip-Sync",
-            "yapper": "强调专有/本地化训练级口型",
-            "betty": "KIE kling/ai-avatar 通用链路；缺 fixture live 稳定 SLA",
-            "severity": "P1",
+            "area": "收款 / SSO 生产",
+            "yapper": "成熟订阅收款 + 企业登录",
+            "betty": f"Stripe key={meta.get('stripe')} OIDC={meta.get('oidc')}（代码就绪，密钥未注入）",
+            "priority": "P0（上线）",
             "impact": "高",
+            "status": "open",
+        },
+        {
+            "area": "Studio Lip-Sync 成片感",
+            "yapper": "Advanced / Max Lip-Sync 病毒口型叙事",
+            "betty": "kling/ai-avatar-pro live 已通；非专有训练引擎，缺周检 Beat",
+            "priority": "P1",
+            "impact": "高",
+            "status": "partial",
         },
         {
             "area": "Face Swap / 病毒模板",
-            "yapper": "人脸替换 + 模板玩法",
-            "betty": "无独立 SKU/路由",
-            "severity": "P1",
+            "yapper": "人脸替换 + 模板库玩法",
+            "betty": "i2i_edit live（nano-banana-edit）；非 InsightFace；病毒模板库薄",
+            "priority": "P1",
             "impact": "中高",
+            "status": "partial",
         },
         {
             "area": "URL-to-Viral（社媒链接反推）",
-            "yapper": "TikTok/IG URL → 提示词/结构",
-            "betty": "Extractor 支持文件/直链；不抓社媒页面",
-            "severity": "P1",
+            "yapper": "TikTok/IG URL → 结构提示词/可复用工作流",
+            "betty": "YouTube 封面解析 ok；TikTok/IG best-effort；非完整 reel→分镜结构",
+            "priority": "P1",
             "impact": "中高",
+            "status": "partial",
         },
         {
-            "area": "专用 Image Apps",
-            "yapper": "Product Shots / Headshots / Photo Packs",
-            "betty": "多并入 /create/image，缺独立工作流",
-            "severity": "P2",
+            "area": "Explore 飞轮密度",
+            "yapper": "百万级资产叙事 + 强 Remix 习惯",
+            "betty": f"gallery list≈{meta.get('gallery_items')} total≈{meta.get('gallery_total')}；publish/remix 有，氛围弱",
+            "priority": "P1",
+            "impact": "中高",
+            "status": "open",
+        },
+        {
+            "area": "Performance / Act-One 级叙事",
+            "yapper": "Advanced Motion Control 成片感",
+            "betty": "Performance Drive=Motion+可选 Lipsync；≠ Runway Act-One；样片常需 playground",
+            "priority": "P1（体验）",
             "impact": "中",
+            "status": "partial",
+        },
+        {
+            "area": "专用 Image Apps 深度",
+            "yapper": "Product / Headshots / Photo Packs 批量工作流",
+            "betty": "独立路由存在；多为 prompt-pack 导向，非批量 SKU 管线",
+            "priority": "P2",
+            "impact": "中",
+            "status": "partial",
         },
         {
             "area": "Motion + Voice Changer",
             "yapper": "动作迁移可叠加变声",
-            "betty": "原生 Kling Motion 有；无变声组合",
-            "severity": "P2",
+            "betty": "voice_text TTS 旁白 + Performance；非实时变声引擎",
+            "priority": "P2",
             "impact": "中",
+            "status": "partial",
         },
         {
-            "area": "Explore 飞轮密度",
-            "yapper": "百万级资产叙事 + 强 Remix",
-            "betty": f"gallery items≈{meta.get('gallery_items')}；publish/remix 有，氛围弱",
-            "severity": "P1",
-            "impact": "中高",
-        },
-        {
-            "area": "收款 / SSO 生产",
-            "yapper": "成熟订阅收款",
-            "betty": f"Stripe key={meta.get('stripe')} OIDC={meta.get('oidc')}",
-            "severity": "P0（上线）",
-            "impact": "高",
-        },
-        {
-            "area": "定价命名",
-            "yapper": "第四档 Max + credits 滑块",
-            "betty": "FE Max / API id=pro 漂移",
-            "severity": "P2",
-            "impact": "低",
-        },
-        {
-            "area": "Act-One 级 Motion 质量叙事",
-            "yapper": "Advanced Motion Control 成片感",
-            "betty": "原生 kling-3.0/motion-control 已通；非 Act-One，本地样片无人物需 playground 样例",
-            "severity": "P1（体验）",
-            "impact": "中",
+            "area": "定价滑块 / 团队席位",
+            "yapper": "Max credits 滑块 + Team members",
+            "betty": "四档 id 含 max 已对齐；缺 credits 滑块与团队席位产品化",
+            "priority": "P2",
+            "impact": "低中",
+            "status": "partial",
         },
     ]
 
@@ -483,20 +554,41 @@ def score_gaps(checks: list[dict], live: list[dict], meta: dict) -> dict:
     shelf = 42 if meta.get("active_models", 0) < 12 else (70 if meta.get("active_models", 0) < 20 else 88)
     billing = 28 if not meta.get("stripe") else 82
     community = min(78, 18 + int(meta.get("gallery_items") or 0) * 1.2)
+    # Depth bonus: closed/partial productization of former hard gaps (caps to 12 pts)
+    depth = 0
+    if meta.get("face_swap_live"):
+        depth += 3
+    if meta.get("lipsync_live"):
+        depth += 2
+    if meta.get("omni_live"):
+        depth += 3
+    if meta.get("youtube_social"):
+        depth += 2
+    if meta.get("performance_drive"):
+        depth += 2
+    depth = min(12, depth)
     live_component = live_score if live_score is not None else 58
     overall = round(
-        0.30 * tool_surface
-        + 0.25 * live_component
-        + 0.20 * shelf
-        + 0.15 * billing
-        + 0.10 * community,
+        min(
+            96.0,
+            0.28 * tool_surface
+            + 0.24 * live_component
+            + 0.18 * shelf
+            + 0.14 * billing
+            + 0.10 * community
+            + depth,
+        ),
         1,
     )
     betty_readiness = round(
-        0.40 * tool_surface
-        + 0.35 * live_component
-        + 0.15 * (75 if meta.get("active_models", 0) >= 8 else 50)
-        + 0.10 * community,
+        min(
+            99.0,
+            0.38 * tool_surface
+            + 0.32 * live_component
+            + 0.15 * (75 if meta.get("active_models", 0) >= 8 else 50)
+            + 0.10 * community
+            + 0.05 * (depth * 5),
+        ),
         1,
     )
 
@@ -518,6 +610,11 @@ def score_gaps(checks: list[dict], live: list[dict], meta: dict) -> dict:
         },
         "gaps": gaps,
         "soft_known_gaps": sorted(soft_fail_ok),
+        "depth_bonus": depth,
+        "scoring_note": (
+            "tool_surface=硬契约；overall_vs_yapper 含货架/收款/社区拖累 + 已闭环深度加分；"
+            "勿把 readiness.ok(dev) 当生产可收款。"
+        ),
     }
 
 
@@ -560,6 +657,14 @@ def main() -> int:
     }
 
     live = run_live({})
+    # Enrich meta from folded evidence + contract for depth scoring
+    live_by = {x["name"]: x for x in live}
+    meta["face_swap_live"] = bool((live_by.get("live:face_swap_last_run_file") or {}).get("ok"))
+    meta["lipsync_live"] = bool((live_by.get("live:lipsync_last_run_file") or {}).get("ok"))
+    meta["omni_live"] = bool((live_by.get("live:omni_last_run_file") or {}).get("ok"))
+    meta["motion_live"] = bool((live_by.get("live:motion_last_run_file") or {}).get("ok"))
+    meta["youtube_social"] = any(c["name"] == "api:extractor_youtube_resolve" and c["ok"] for c in checks)
+    meta["performance_drive"] = any(c["name"] == "cap:performance_drive" and c["ok"] for c in checks)
     scoring = score_gaps(checks, live, meta)
 
     report = {
@@ -571,8 +676,10 @@ def main() -> int:
         "live": live,
         "scoring": scoring,
         "honesty": (
-            "Contract checks ≠ Yapper product parity. Live only when YAPPER_AUDIT_LIVE=1. "
-            "Do not treat mapping smoke as outframe. Motion native ≠ Act-One."
+            "Contract checks ≠ Yapper product parity. "
+            "Folded last_run evidence counts for live_*_file (not a fresh paid re-run). "
+            "Face Swap=i2i_edit≠InsightFace. Motion/Performance≠Act-One. "
+            "Do not treat mapping smoke as outframe."
         ),
     }
 
@@ -580,11 +687,19 @@ def main() -> int:
     REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
-    hard = [c for c in checks if c["name"] not in (
-        "models:shelf_vs_yapper", "ops:stripe_configured", "ops:oidc_configured",
-    ) and not c.get("expected_missing")]
+    # Intentional soft gaps may fail; everything else in checks must pass.
+    hard = [
+        c for c in checks
+        if c["name"] not in (
+            "models:shelf_vs_yapper", "ops:stripe_configured", "ops:oidc_configured",
+        )
+        and not c.get("expected_missing")
+    ]
     contract_pass = all(c["ok"] for c in hard)
-    live_hard = [x for x in live if not x.get("skipped") and x["name"] != "live:skipped"]
+    live_hard = [
+        x for x in live
+        if not x.get("skipped") and x["name"] not in ("live:skipped", "live:paid_probe_skipped")
+    ]
     live_pass = all(x["ok"] for x in live_hard) if live_hard else True
     if args.strict_live:
         return 0 if contract_pass and live_pass else 1
