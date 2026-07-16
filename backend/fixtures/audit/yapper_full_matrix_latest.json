@@ -1,6 +1,6 @@
 {
   "suite": "yapper_full_matrix_audit",
-  "ts": "2026-07-16T13:28:55Z",
+  "ts": "2026-07-16T13:48:47Z",
   "meta": {
     "active_models": 9,
     "lab_models": 20,
@@ -8,7 +8,7 @@
     "gallery_total": 72,
     "stripe": false,
     "oidc": false,
-    "ts": "2026-07-16T13:28:55Z"
+    "ts": "2026-07-16T13:48:47Z"
   },
   "yapper_matrix_size": 25,
   "checks": [
@@ -317,7 +317,7 @@
     {
       "name": "api:director_plan",
       "ok": true,
-      "detail": "{\"brief\":\"15s product ad\",\"intent\":\"image\",\"summary\":\"已规划 2 步，将产出 1 个资产，预计消耗 4 积分。意图：image\",\"total_c"
+      "detail": "{\"brief\":\"15s product ad\",\"intent\":\"video_from_text\",\"summary\":\"已规划 8 步，3 个分镜，将产出 5 个资产，预计消耗 17 积分。意"
     },
     {
       "name": "api:director_minimal",
@@ -347,7 +347,7 @@
     {
       "name": "api:gallery_stats",
       "ok": true,
-      "detail": "{'total_items': 108, 'total_images': 80, 'total_videos': 18, 'total_credits_consumed': 97, 'style_options': [{'key': 'al"
+      "detail": "{'total_items': 110, 'total_images': 81, 'total_videos': 18, 'total_credits_consumed': 114, 'style_options': [{'key': 'a"
     },
     {
       "name": "api:gallery_remix",
@@ -399,7 +399,7 @@
     {
       "name": "enqueue:generate_image",
       "ok": true,
-      "detail": "status=202 {\"task_id\":\"694d1662-9bb9-4640-9eca-90db67eb7c5c\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
+      "detail": "status=202 {\"task_id\":\"eebf9c7b-bce2-4233-8cb3-525e713eddd5\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
     },
     {
       "name": "enqueue:speech_contract",

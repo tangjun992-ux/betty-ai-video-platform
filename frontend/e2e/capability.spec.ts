@@ -12,23 +12,30 @@ test.describe("能力诚实披露", () => {
     if (await accept.isVisible().catch(() => false)) await accept.click();
     const notice = page.getByTestId("capability-notice-lipsync");
     await expect(notice).toBeVisible({ timeout: 60_000 });
+    await expect(notice).toHaveAttribute("data-loading", "false", { timeout: 15_000 });
     // Demo copy must be explicit that it is not real lip-sync
     if ((await notice.getAttribute("data-demo")) === "true") {
       await expect(notice).toContainText(/并非真实口型|Ken Burns/);
+    } else {
+      await expect(notice).toContainText(/真实|可用/);
     }
   });
 
-  test("运动页在演示模式禁用提交并说明需 Key", async ({ page }) => {
+  test("运动页展示能力提示（演示模式禁用提交 / 真实模式可提交）", async ({ page }) => {
     await page.goto("/create/motion");
     const accept = page.getByRole("button", { name: /接受全部|Accept all/i });
     if (await accept.isVisible().catch(() => false)) await accept.click();
     const notice = page.getByTestId("capability-notice-motion");
     await expect(notice).toBeVisible({ timeout: 60_000 });
+    await expect(notice).toHaveAttribute("data-loading", "false", { timeout: 15_000 });
 
     if ((await notice.getAttribute("data-demo")) === "true") {
-      await expect(notice).toContainText(/需要真实模型能力|配置/);
+      await expect(notice).toContainText(/需要真实模型能力|配置|模型 Key/);
       // Submit CTA reflects the blocked state
       await expect(page.getByRole("button", { name: /需配置模型 Key 后可用/ })).toBeVisible();
+    } else {
+      await expect(notice).toContainText(/Kling Motion|真实生成|原生/);
+      await expect(page.getByRole("button", { name: /开始运动|运动控制|运动迁移/ })).toBeVisible();
     }
   });
 });

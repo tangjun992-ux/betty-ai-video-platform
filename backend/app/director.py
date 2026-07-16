@@ -130,11 +130,17 @@ def _credits_of(model: dict, media_type: str, duration: int = 5) -> int:
 
 
 # ─────────────────────────────── 意图识别 ───────────────────────────────
-_VIDEO_KW = ["视频", "短片", "宣传片", "广告", "动画", "video", "片子", "镜头", "运镜", "vlog", "短视频"]
+_VIDEO_KW = [
+    "视频", "短片", "宣传片", "广告", "动画", "video", "片子", "镜头", "运镜", "vlog", "短视频",
+    # English short-form / ads (matched with word boundaries via _has)
+    "ad", "ads", "commercial", "promo", "trailer", "reel", "reels", "clip", "spot", "film", "movie",
+]
 _TALK_KW = ["口播", "说话", "讲解", "数字人", "主播", "唇形", "talking", "avatar", "配音"]
 _SERIES_KW = ["系列", "分镜", "九宫格", "多张", "一组", "套图", "storyboard", "series"]
 _IMG_KW = ["图片", "图", "海报", "logo", "标志", "头像", "写真", "插画", "封面", "image", "poster"]
 _CAMPAIGN_KW = ["营销", "电商", "带货", "产品", "推广", "campaign", "品牌", "种草"]
+# Explicit still-image-only briefs — used to avoid forcing video in minimal mode
+_IMAGE_ONLY_KW = ["只要图", "只要图片", "静图", "still image", "image only", "海报图", "logo设计"]
 
 
 def _styles_from_brief(brief: str) -> list[str]:
@@ -149,8 +155,18 @@ def _styles_from_brief(brief: str) -> list[str]:
 
 
 def _has(brief: str, kws: list[str]) -> bool:
+    """Substring match for CJK / long tokens; word-boundary for short ASCII (avoid 'ad' in 'ready')."""
     b = brief.lower()
-    return any(k.lower() in b for k in kws)
+    for k in kws:
+        token = k.lower()
+        if not token:
+            continue
+        if token.isascii() and len(token) <= 4:
+            if re.search(rf"(?<![a-z0-9]){re.escape(token)}(?![a-z0-9])", b):
+                return True
+        elif token in b:
+            return True
+    return False
 
 
 # ─────────────────────────── 分镜 / 运镜 编导语汇 ───────────────────────────
@@ -239,6 +255,9 @@ class DirectorPlanner:
         img_aspect = _aspect_for(styles, vertical)
         vid_aspect = "9:16" if vertical else _aspect_for(styles)
 
+        # Yapper quick-direct: minimal ⇒ 默认视频最短路径，除非 brief 明确只要静图
+        force_video = bool(minimal) and not _has(brief, _IMAGE_ONLY_KW) and not _has(brief, _SERIES_KW)
+
         # 意图判定 (优先级: 口播 > 营销片 > 视频 > 系列图 > 单图)
         if _has(brief, _TALK_KW):
             intent = "talking"
@@ -287,8 +306,8 @@ class DirectorPlanner:
                 steps.append(sv)
                 shot_ids.append(sv.id)
 
-        elif _has(brief, _VIDEO_KW) or has_ref_image:
-            n = _n_shots(duration)
+        elif _has(brief, _VIDEO_KW) or has_ref_image or force_video:
+            n = 1 if minimal else _n_shots(duration)
             if has_ref_image:
                 intent = "video_from_image"
                 vid = _pick_model("video", styles, "balanced")

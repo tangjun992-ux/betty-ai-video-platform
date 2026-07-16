@@ -760,7 +760,7 @@ export default function SettingsPage() {
           <h2 className="text-xl font-semibold mb-2">请先登录</h2>
           <p className="text-text-secondary mb-6">登录后即可管理你的账户设置</p>
           <a
-            href="/login"
+            href="/auth/login"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-accent-cyan text-white font-medium hover:bg-accent-cyan/80 transition-all"
           >
             前往登录

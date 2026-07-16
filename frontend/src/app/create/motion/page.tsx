@@ -237,15 +237,14 @@ export default function MotionControlPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-bold mb-1 text-text-accent-cyan">运动迁移</h1>
+        <h1 className="text-2xl font-bold mb-1 text-text-accent-cyan">运动控制</h1>
         <p className="text-sm text-text-secondary mb-3">
-          将参考视频动作迁移到目标人物。当前为 best-effort 通道（非 Kling Motion Control / Runway Act-One 级原生 SKU）。
+          原生 Kling Motion Control：将参考视频动作迁移到目标人物（非 Runway Act-One）。
         </p>
-        <CapabilityNotice feature="motion" className="mb-4" />
-        <p className="text-text-secondary text-sm mb-4">
-          上传人物图片和参考动作视频，AI 将动作迁移到目标人物。当前为 best-effort（非 Kling Motion / Runway Act-One 级原生 SKU）
+        <CapabilityNotice feature="motion" className="mb-4" onDemoChange={setDemoMode} />
+        <p className="text-text-secondary text-sm mb-6">
+          上传人物图片与参考动作视频后提交；失败时任务层可回退，不对标 Act-One 变声/表演管线。
         </p>
-        <CapabilityNotice feature="motion" className="mb-6" onDemoChange={setDemoMode} />
       </motion.div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">

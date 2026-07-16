@@ -138,19 +138,34 @@ def test_director_minimal_skips_post_ladder():
     assert "subtitle" not in actions
 
 
+def test_director_minimal_english_ad_brief():
+    """Regression: English '15s ad' must plan video (not silent image fallback)."""
+    from app.director import DirectorPlanner
+
+    plan = DirectorPlanner().plan("15s ad", duration=5, minimal=True)
+    actions = [s.action for s in plan.steps]
+    assert "video" in actions
+    assert "compose" not in actions
+    # 'ad' must not false-positive inside words like 'ready'
+    still = DirectorPlanner().plan("ready product still image only", duration=5, minimal=True)
+    still_acts = [s.action for s in still.steps]
+    assert "video" not in still_acts
+
+
 def test_director_plan_api_minimal():
     from app.main import app
 
     c = TestClient(app)
-    r = c.post(
-        "/api/v1/director/plan",
-        json={"brief": "做一条短视频广告", "duration": 5, "minimal": True},
-    )
-    assert r.status_code == 200, r.text
-    steps = r.json().get("steps") or []
-    actions = [s.get("action") for s in steps]
-    assert "video" in actions
-    assert "compose" not in actions
+    for brief in ("做一条短视频广告", "15s ad"):
+        r = c.post(
+            "/api/v1/director/plan",
+            json={"brief": brief, "duration": 5, "minimal": True},
+        )
+        assert r.status_code == 200, r.text
+        steps = r.json().get("steps") or []
+        actions = [s.get("action") for s in steps]
+        assert "video" in actions, actions
+        assert "compose" not in actions
 
 
 def test_lipsync_and_motion_fixtures_exist_or_generatable():
