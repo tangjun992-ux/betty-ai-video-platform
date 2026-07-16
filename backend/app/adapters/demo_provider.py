@@ -253,7 +253,9 @@ def render_demo_video(prompt: str, resolution: str, duration: int, style: Option
     Returns (video_url, thumbnail_url).
     """
     w, h = _parse_size(resolution, default=(1280, 720))
-    duration = max(2, min(int(duration or 5), 12))
+    # Honour the full UI duration range (up to 30s; covers 15s long-video); the
+    # old 12s ceiling silently truncated 13–30s requests.
+    duration = max(2, min(int(duration or 5), 30))
     seed = seed or _seed_from(prompt, 0)
     img = _load_local_image(base_image_url) or _fetch_seed_photo(seed, w, h) or _gradient_image(seed, w, h)
     if img.size != (w, h):
@@ -354,55 +356,139 @@ def _probe_duration(path: str) -> float:
         return 5.0
 
 
-def compose_final_video(video_urls: list[str], style: Optional[str] = None,
-                        with_audio: bool = True, narration_url: Optional[str] = None) -> tuple[str, str]:
+# Timeline transition → ffmpeg xfade transition name. "cut" means a hard join
+# (no overlap). Anything unknown degrades gracefully to a plain fade.
+_XFADE_MAP = {
+    "fade": "fade",
+    "dissolve": "dissolve",
+    "slide": "slideleft",
+    "zoom": "smoothleft",
+    "wipe": "wipeleft",
+}
+_XFADE_DUR = 0.5  # overlap seconds for each transition
+
+
+def _normalize_clips(video_urls, clips):
+    """Return a list of clip specs {path, start, end, transition} resolved to
+    local paths. Accepts either the legacy ``video_urls`` (list[str]) or the
+    richer ``clips`` (list[dict] with url/start/end/transition)."""
+    specs = []
+    raw = clips if clips else [{"url": u} for u in (video_urls or [])]
+    for c in raw:
+        url = c.get("url") if isinstance(c, dict) else c
+        p = _local_media_path(url)
+        if not p:
+            continue
+        start = c.get("start") if isinstance(c, dict) else None
+        end = c.get("end") if isinstance(c, dict) else None
+        trans = (c.get("transition") if isinstance(c, dict) else None) or "cut"
+        specs.append({"path": p, "start": start, "end": end,
+                      "transition": str(trans).lower()})
+    return specs
+
+
+def _clip_effective_duration(spec) -> float:
+    """Duration of a clip after applying its trim (start/end)."""
+    src = _probe_duration(spec["path"])
+    start = spec["start"] if spec["start"] is not None else 0.0
+    end = spec["end"] if spec["end"] is not None else src
+    return max(0.1, min(float(end), src) - max(0.0, float(start)))
+
+
+def compose_final_video(video_urls: list[str] | None = None, style: Optional[str] = None,
+                        with_audio: bool = True, narration_url: Optional[str] = None,
+                        clips: Optional[list[dict]] = None) -> tuple[str, str]:
     """
     Stitch multiple shot videos into ONE final film (the Director Agent's hero
-    deliverable). Scales/pads every shot to the first shot's canvas, concatenates
-    with ffmpeg, and muxes audio: a real TTS narration track when provided
-    (narration_url), otherwise a soft procedural ambient bed. Returns
-    (final_video_url, poster_url).
+    deliverable). Scales/pads every shot to the first shot's canvas, then either
+    hard-concatenates (transition="cut") or cross-fades consecutive shots with
+    ffmpeg ``xfade`` (fade/dissolve/slide/zoom), honouring per-clip trim
+    (start/end). Audio is a real TTS narration when provided, otherwise a soft
+    procedural ambient bed. Returns (final_video_url, poster_url).
+
+    ``clips`` (preferred) is a list of dicts {url, start?, end?, transition?};
+    ``video_urls`` is kept for backward compatibility (all "cut", no trim).
     """
-    paths = [p for p in (_local_media_path(u) for u in video_urls) if p]
-    if not paths:
+    specs = _normalize_clips(video_urls, clips)
+    if not specs:
         raise RuntimeError("compose: no local shot videos to stitch")
 
     gen_dir = _generated_dir()
     out_name = f"final_{uuid.uuid4().hex[:12]}.mp4"
     out_path = gen_dir / out_name
 
-    w, h = _probe_size(paths[0])
+    w, h = _probe_size(specs[0]["path"])
     w -= w % 2
     h -= h % 2
 
+    # Effective per-clip durations (post-trim) drive both audio length and the
+    # xfade offsets. With N transitions the film shortens by N * _XFADE_DUR.
+    durs = [_clip_effective_duration(s) for s in specs]
+    n_xfades = sum(1 for s in specs[1:] if s["transition"] != "cut")
+    total_dur = sum(durs) - n_xfades * _XFADE_DUR
+    total_dur = max(0.5, total_dur)
+
     audio_args = []
-    total_dur = sum(_probe_duration(p) for p in paths) if with_audio else 0.0
     narration_path = _local_media_path(narration_url) if narration_url else None
     if with_audio and narration_path:
-        # Real narration voiceover, trimmed to film length via -shortest.
         audio_args = ["-i", narration_path]
     elif with_audio and total_dur > 0:
-        # FINITE soft sine pad (196Hz), length = total film — 无限源会让 ffmpeg 挂起。
+        # FINITE soft sine pad — 无限源会让 ffmpeg 挂起。
         audio_args = ["-f", "lavfi", "-t", f"{total_dur:.2f}",
                       "-i", "sine=frequency=196:sample_rate=44100"]
     else:
         with_audio = False
 
     inputs = []
-    for p in paths:
-        inputs += ["-i", p]
-    audio_idx = len(paths)  # the lavfi audio input index (added after video inputs)
+    for s in specs:
+        inputs += ["-i", s["path"]]
+    audio_idx = len(specs)
 
+    # Per-clip: optional trim → scale/pad → uniform sar/fps.
     filters = []
-    for i in range(len(paths)):
+    for i, s in enumerate(specs):
+        pre = ""
+        if s["start"] is not None or s["end"] is not None:
+            st = max(0.0, float(s["start"] or 0.0))
+            parts = [f"start={st}"]
+            if s["end"] is not None:
+                parts.append(f"end={float(s['end'])}")
+            pre = f"trim={':'.join(parts)},setpts=PTS-STARTPTS,"
         filters.append(
-            f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+            f"[{i}:v]{pre}scale={w}:{h}:force_original_aspect_ratio=decrease,"
             f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25[v{i}]"
         )
-    concat_in = "".join(f"[v{i}]" for i in range(len(paths)))
-    filter_complex = ";".join(filters) + f";{concat_in}concat=n={len(paths)}:v=1:a=0[outv]"
+
+    # Chain the clips. Plain concat when every join is a hard cut; otherwise
+    # progressively xfade so each transition truly renders in the output.
+    if n_xfades == 0:
+        concat_in = "".join(f"[v{i}]" for i in range(len(specs)))
+        filters.append(f"{concat_in}concat=n={len(specs)}:v=1:a=0[outv]")
+    else:
+        cur = "[v0]"
+        cum = durs[0]
+        for i in range(1, len(specs)):
+            trans = specs[i]["transition"]
+            out_lbl = "[outv]" if i == len(specs) - 1 else f"[x{i}]"
+            if trans == "cut":
+                # Hard join via xfade with 0-length would blank a frame; use a
+                # tiny 1-frame fade so the graph stays a single chain.
+                offset = max(0.0, cum - (1.0 / 25))
+                filters.append(
+                    f"{cur}[v{i}]xfade=transition=fade:duration={1.0/25:.3f}:"
+                    f"offset={offset:.3f}{out_lbl}")
+                cum += durs[i] - (1.0 / 25)
+            else:
+                xf = _XFADE_MAP.get(trans, "fade")
+                offset = max(0.0, cum - _XFADE_DUR)
+                filters.append(
+                    f"{cur}[v{i}]xfade=transition={xf}:duration={_XFADE_DUR}:"
+                    f"offset={offset:.3f}{out_lbl}")
+                cum += durs[i] - _XFADE_DUR
+            cur = out_lbl
+
+    filter_complex = ";".join(filters)
     if with_audio:
-        # Narration at full listenable volume; procedural ambient bed kept subtle.
         a_filter = "volume=1.0" if narration_path else "tremolo=f=0.12:d=0.6,volume=0.05"
         filter_complex += f";[{audio_idx}:a]{a_filter}[aud]"
 

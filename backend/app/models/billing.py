@@ -52,6 +52,12 @@ class UserBalance(Base):
     total_tasks = Column(Integer, default=0)
     total_purchased = Column(Integer, default=0)
 
+    # Current subscription plan tracking — persisted on plan checkout so mid-cycle
+    # changes can be prorated against the days remaining in the active cycle.
+    current_plan_id = Column(String(60), nullable=True)
+    plan_started_at = Column(DateTime(timezone=True), nullable=True)
+    plan_cycle = Column(String(20), nullable=True)
+
     user = relationship("User", back_populates="balance")
 
     def __repr__(self):
