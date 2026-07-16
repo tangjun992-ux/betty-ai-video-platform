@@ -1,6 +1,6 @@
 {
   "suite": "platform_full_e2e",
-  "ts": "2026-07-16T14:08:38Z",
+  "ts": "2026-07-16T14:32:31Z",
   "fe_base": "http://127.0.0.1:3000",
   "api_base": "http://127.0.0.1:8000",
   "plan": "docs/PLATFORM_FULL_TEST_PLAN.md",
@@ -8,13 +8,13 @@
     {
       "name": "fe:/",
       "ok": true,
-      "detail": "status=200 bytes=130354",
+      "detail": "status=200 bytes=130367",
       "layer": "L0"
     },
     {
       "name": "fe:/tools",
       "ok": true,
-      "detail": "status=200 bytes=100336",
+      "detail": "status=200 bytes=103680",
       "layer": "L0"
     },
     {
@@ -74,19 +74,19 @@
     {
       "name": "fe:/create/image",
       "ok": true,
-      "detail": "status=200 bytes=109819",
+      "detail": "status=200 bytes=109789",
       "layer": "L0"
     },
     {
       "name": "fe:/create/video",
       "ok": true,
-      "detail": "status=200 bytes=108351",
+      "detail": "status=200 bytes=108321",
       "layer": "L0"
     },
     {
       "name": "fe:/create/lipsync",
       "ok": true,
-      "detail": "status=200 bytes=75910",
+      "detail": "status=200 bytes=75880",
       "layer": "L0"
     },
     {
@@ -116,7 +116,7 @@
     {
       "name": "fe:/create/extract",
       "ok": true,
-      "detail": "status=200 bytes=70636",
+      "detail": "status=200 bytes=70653",
       "layer": "L0"
     },
     {
@@ -159,6 +159,18 @@
       "name": "fe:/create/photo-packs",
       "ok": true,
       "detail": "status=200 bytes=71094",
+      "layer": "L0"
+    },
+    {
+      "name": "fe:/create/face-swap",
+      "ok": true,
+      "detail": "status=200 bytes=71384",
+      "layer": "L0"
+    },
+    {
+      "name": "fe:/create/performance",
+      "ok": true,
+      "detail": "status=200 bytes=71361",
       "layer": "L0"
     },
     {
@@ -212,7 +224,7 @@
     {
       "name": "fe:tools_href_scan",
       "ok": true,
-      "detail": "hrefs=19 dead=[]",
+      "detail": "hrefs=21 dead=[]",
       "layer": "L0"
     },
     {
@@ -258,9 +270,21 @@
       "layer": "L1"
     },
     {
-      "name": "api:cap_face_swap_honest",
+      "name": "api:cap_face_swap_i2i",
       "ok": true,
-      "detail": "",
+      "detail": "google/nano-banana-edit",
+      "layer": "L1"
+    },
+    {
+      "name": "api:cap_social_youtube",
+      "ok": true,
+      "detail": "{'youtube': True, 'tiktok': 'best_effort', 'instagram': 'best_effort', 'x': 'best_effort', 'douyin': False, 'xiaohongshu': False}",
+      "layer": "L1"
+    },
+    {
+      "name": "api:cap_performance_drive",
+      "ok": true,
+      "detail": "Betty Performance Drive：原生 Motion + 可选 Lipsync 口播分轨。不是 Runway Act-One 表演编码器。",
       "layer": "L1"
     },
     {
@@ -288,10 +312,16 @@
       "layer": "L2"
     },
     {
-      "name": "api:extractor_social_reject",
+      "name": "api:extractor_tiktok_honest",
       "ok": true,
-      "detail": "{\"detail\":\"暂不支持从 TikTok/Instagram/X 等页面链接抓取媒体。请上传文件，或粘贴可直链访问的图片/视频 URL（非社媒页面）。（对标 Yapper URL-to-Viral 仍为缺口，不假装已解析。）\"}",
+      "detail": "{\"detail\":\"tiktok 页面解析失败（网络/反爬/地区限制）。请上传文件或粘贴直链。\"}",
       "layer": "L1"
+    },
+    {
+      "name": "api:extractor_youtube_resolve",
+      "ok": true,
+      "detail": "status=200 social=youtube_oembed",
+      "layer": "L2"
     },
     {
       "name": "api:motion_samples",
@@ -416,9 +446,9 @@
     {
       "name": "api:generate_image_enqueue",
       "ok": true,
-      "detail": "status=202 body={\"task_id\":\"049825b9-6bee-43d2-8438-b35ef3ee0941\",\"status\":\"queued\",\"estimated_model\":\"gpt-image-2\",",
+      "detail": "status=202 body={\"task_id\":\"aa3eeb6c-9a83-4deb-8d08-e6e8fdcf0f7f\",\"status\":\"queued\",\"estimated_model\":\"gpt-image-2\",",
       "layer": "L2",
-      "task_id": "049825b9-6bee-43d2-8438-b35ef3ee0941"
+      "task_id": "aa3eeb6c-9a83-4deb-8d08-e6e8fdcf0f7f"
     },
     {
       "name": "ops:stripe",
@@ -445,23 +475,23 @@
     }
   ],
   "scoring": {
-    "hard_ok": 69,
-    "hard_total": 69,
+    "hard_ok": 74,
+    "hard_total": 74,
     "hard_pass_pct": 100.0,
     "live_ok": 0,
     "live_total": 0,
     "by_layer": {
       "L0": {
-        "ok": 45,
-        "total": 45
+        "ok": 47,
+        "total": 47
       },
       "L1": {
-        "ok": 21,
-        "total": 21
+        "ok": 23,
+        "total": 23
       },
       "L2": {
-        "ok": 3,
-        "total": 3
+        "ok": 4,
+        "total": 4
       },
       "L5": {
         "ok": 0,
@@ -486,6 +516,7 @@
         "tool_cost_board",
         "prompt_extractor",
         "talking_avatar",
+        "performance_drive",
         "director_minimal",
         "live_smoke"
       ],

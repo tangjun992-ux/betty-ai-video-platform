@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api import generate, tasks, models_info, health, upload, websocket, gallery, auth, settings, lipsync, motion, timeline, pricing, director, dashboard, library, projects, billing, developer, events, teams, moderation_admin, model_health_admin, system, oidc
+from app.api import generate, tasks, models_info, health, upload, websocket, gallery, auth, settings, lipsync, motion, timeline, pricing, director, dashboard, library, projects, billing, developer, events, teams, moderation_admin, model_health_admin, system, oidc, face_swap, performance
 from app.collector.api import router as collector_router
 
 router = APIRouter()
@@ -28,5 +28,7 @@ router.include_router(developer.router, prefix="", tags=["Developer API"])
 router.include_router(events.router, prefix="", tags=["Product Events"])
 router.include_router(lipsync.router, prefix="", tags=["Lipsync"])
 router.include_router(motion.router, prefix="", tags=["Motion Control"])
+router.include_router(face_swap.router, prefix="", tags=["Face Swap"])
+router.include_router(performance.router, prefix="", tags=["Performance Drive"])
 router.include_router(timeline.router, prefix="", tags=["Timeline"])
 router.include_router(collector_router, tags=["Viral Intelligence"])

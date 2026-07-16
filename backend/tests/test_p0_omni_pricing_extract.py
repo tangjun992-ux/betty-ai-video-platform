@@ -73,15 +73,17 @@ def test_pricing_api_returns_max(client: TestClient):
     assert "pro" in (max_plan.get("aliases") or [])
 
 
-def test_extractor_rejects_tiktok_page(client: TestClient, auth_headers):
+def test_extractor_tiktok_page_honest(client: TestClient, auth_headers):
     r = client.post(
         "/api/v1/generate/extract-prompt",
         headers=auth_headers,
         data={"media_url": "https://www.tiktok.com/@x/video/123", "media_kind": "video"},
     )
-    assert r.status_code == 400
-    detail = r.json().get("detail") or ""
-    assert "TikTok" in detail or "社媒" in detail
+    # Best-effort: usually 400 when IP-blocked; never silent 500
+    assert r.status_code in (200, 400)
+    if r.status_code == 400:
+        detail = r.json().get("detail") or ""
+        assert detail
 
 
 def test_capabilities_omni_and_face_swap(client: TestClient):
@@ -89,13 +91,15 @@ def test_capabilities_omni_and_face_swap(client: TestClient):
     assert r.status_code == 200
     feats = r.json()["features"]
     assert "seedance_omni" in feats
-    assert feats["face_swap"]["available"] is False
-    assert feats["prompt_extractor"].get("social_page_urls") is False
+    assert feats["face_swap"]["mode"] == "i2i_edit"
+    assert feats["face_swap"]["sku"] == "google/nano-banana-edit"
+    social = feats["prompt_extractor"].get("social_page_urls") or {}
+    assert social.get("youtube") is True
 
 
 def test_social_url_helper():
-    from app.services.prompt_extract import is_unsupported_social_page_url
+    from app.services.social_resolve import is_social_page_url, classify_social_platform
 
-    assert is_unsupported_social_page_url("https://www.instagram.com/reel/abc")
-    assert is_unsupported_social_page_url("https://youtu.be/xyz")
-    assert not is_unsupported_social_page_url("https://tempfile.aiquickdraw.com/x.png")
+    assert is_social_page_url("https://www.instagram.com/reel/abc")
+    assert classify_social_platform("https://youtu.be/xyz") == "youtube"
+    assert not is_social_page_url("https://tempfile.aiquickdraw.com/x.png")

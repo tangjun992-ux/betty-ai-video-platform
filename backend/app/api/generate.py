@@ -603,18 +603,26 @@ async def extract_prompt(
     filename = ""
     content_type = ""
     resolved_url = (media_url or "").strip()
-    # Honesty: TikTok/Instagram/page URLs are not scraped (no URL-to-Viral yet).
+    # Social page URLs: resolve to thumbnail/media when possible (YouTube oEmbed / yt-dlp).
+    social_meta: dict = {}
     if resolved_url and not media_file:
-        from app.services.prompt_extract import is_unsupported_social_page_url
-        if is_unsupported_social_page_url(resolved_url):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "暂不支持从 TikTok/Instagram/X 等页面链接抓取媒体。"
-                    "请上传文件，或粘贴可直链访问的图片/视频 URL（非社媒页面）。"
-                    "（对标 Yapper URL-to-Viral 仍为缺口，不假装已解析。）"
-                ),
-            )
+        from app.services.social_resolve import is_social_page_url, resolve_social_page_to_media
+        if is_social_page_url(resolved_url):
+            social = await resolve_social_page_to_media(resolved_url)
+            if not social.get("ok") or not social.get("media_url"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        social.get("honesty")
+                        or "社媒页面解析失败。请上传文件，或粘贴可直链访问的图片/视频 URL。"
+                    ),
+                )
+            social_meta = social
+            resolved_url = social["media_url"]
+            if not media_kind or media_kind in ("", "auto"):
+                media_kind = social.get("media_kind") or "image"
+            filename = filename or f"{social.get('platform', 'social')}-thumb.jpg"
+            content_type = content_type or "image/jpeg"
     if media_file is not None:
         raw = await media_file.read()
         if not raw:
@@ -653,6 +661,18 @@ async def extract_prompt(
         content_type=content_type,
         prefer_vision=True,
     )
+    if social_meta:
+        result["social"] = {
+            "platform": social_meta.get("platform"),
+            "source": social_meta.get("source"),
+            "title": social_meta.get("title"),
+            "author": social_meta.get("author"),
+            "resolved_media_url": social_meta.get("media_url"),
+            "honesty": social_meta.get("honesty"),
+        }
+        # Preserve social honesty alongside vision/heuristic honesty
+        base_h = result.get("honesty") or ""
+        result["honesty"] = f"{social_meta.get('honesty', '')} | {base_h}".strip(" |")
     charged = 0
     if result.get("mode") == "vision":
         extract_id = f"extract-{uuid.uuid4()}"

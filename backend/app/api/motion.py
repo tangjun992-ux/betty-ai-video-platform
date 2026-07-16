@@ -1,7 +1,8 @@
 """
 Motion Control API — 动作迁移/驱动: 图片 + 参考视频 → 动态视频
 
-对标 Runway Act-One / Vidu 动作驱动功能（能力为 best-effort，见 capabilities）。
+原生 Kling Motion Control（见 capabilities.motion_transfer）。
+完整「表演驱动」请用 /performance（Motion + 可选 Lipsync）；≠ Runway Act-One。
 Includes a canonical fixture sample library for input validation (not quality claims).
 """
 import uuid

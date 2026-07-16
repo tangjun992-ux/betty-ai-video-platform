@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Palette, Sparkles, User, Layers, Maximize2, Scissors, Wand2,
   Video, Music, Bot, Camera, Search, Grid3X3, Play, Mic,
-  ArrowRight, Move, Clapperboard, FileSearch
+  ArrowRight, Move, Clapperboard, FileSearch, Drama, Blend
 } from "lucide-react";
 import { Empty } from "@/components/StatusStates";
 import { cn } from "@/lib/utils";
@@ -32,9 +32,11 @@ const ALL_TOOLS: Tool[] = [
   { icon: Mic, label: "唇形同步", desc: "Studio Lip-Syncing — 图+文/音频说话视频", href: "/create/lipsync", color: "from-purple-500 to-pink-500", badge: "Core", useCase: "虚拟主播、口播", group: "video" },
   { icon: User, label: "Talking Avatar", desc: "头像说话视频（图+音频优先）", href: "/create/avatar", color: "from-fuchsia-500 to-pink-600", useCase: "数字人、克隆", group: "video" },
   { icon: Move, label: "运动控制", desc: "原生 Kling Motion Control（非 Act-One）", href: "/create/motion", color: "from-rose-500 to-red-600", badge: "Native", useCase: "舞蹈、动作复制", group: "video" },
+  { icon: Drama, label: "Performance Drive", desc: "Motion + 可选口播（≠ Act-One）", href: "/create/performance", color: "from-rose-600 to-orange-500", badge: "New", useCase: "表演驱动成片", group: "video" },
   { icon: Clapperboard, label: "时间轴编辑", desc: "片段编排、字幕与合成", href: "/create/timeline", color: "from-sky-500 to-blue-600", useCase: "后期成片", group: "video" },
   // Image
   { icon: Sparkles, label: "图片生成", desc: "多模型文生图 / 多参考图 i2i", href: "/create/image", color: "from-violet-500 to-purple-600", badge: "Hot", useCase: "创意、产品图", group: "image" },
+  { icon: Blend, label: "AI 换脸", desc: "双图 i2i 换脸（已 live 验证）", href: "/create/face-swap", color: "from-pink-500 to-rose-500", badge: "Live", useCase: "病毒模板、玩法", group: "image" },
   { icon: Palette, label: "图片编辑", desc: "AI 指令编辑", href: "/create/image-editor", color: "from-violet-500 to-purple-600", useCase: "后期处理", group: "image" },
   { icon: Maximize2, label: "AI 放大", desc: "2x/4x 超分", href: "/create/upscale", color: "from-blue-400 to-indigo-500", useCase: "打印、修复", group: "image" },
   { icon: Scissors, label: "背景移除", desc: "一键抠图透明 PNG", href: "/create/bg-remove", color: "from-emerald-500 to-teal-600", useCase: "电商素材", group: "image" },

@@ -113,7 +113,8 @@ cd frontend && npx playwright test e2e/betty.spec.ts e2e/capability.spec.ts
 | T2 | compose（本地片段） | 合成视频或明确错误 |
 | E1 | upscale/bg/extend/edit | 入队+扣费 |
 | X1 | Extract 上传文件 | prompt 非空；标明 vision/heuristic |
-| X2 | Extract TikTok 页 URL | **400 诚实拒绝** |
+| X2 | Extract YouTube 页 URL | 解析封面 → vision/heuristic | L2 |
+| X2b | Extract TikTok 页 URL | 尽力而为；失败 **400 诚实** | L1 |
 | X3 | Extract 直链 | 允许尝试 |
 | S1 | TTS `/generate/speech` | 入队或校验错误（勿无门控乱烧钱） |
 
@@ -206,10 +207,10 @@ cd frontend && npx playwright test e2e/betty.spec.ts e2e/capability.spec.ts
 ### 诚实缺口（未伪装）
 
 - Stripe / OIDC 未注入 → **非生产收款就绪**
-- Face Swap：`available=false`（无已验证 SKU）
-- 社媒页面 URL Extract：诚实 400
-- Motion ≠ Act-One（仅 Kling Motion Control）
-- Lipsync 本轮未重新烧钱 live（有 fixture 门控）
+- Face Swap：已 live（`google/nano-banana-edit` i2i）；**非** InsightFace 像素级
+- 社媒 Extract：YouTube 封面可解析；TikTok/IG 尽力而为（IP 封锁时诚实失败）
+- Motion ≠ Act-One；新增 Performance Drive = Motion + 可选 Lipsync（诚实声明）
+- Lipsync：**本轮已付费 live**（`fixtures/lipsync/last_run.json`，`kling/ai-avatar-pro`）
 - 浏览器直连 `localhost:8000` 个别 billing 接口偶发 CORS（布局积分徽标）；能力探针已改同域 `/api/v1`
 
 ---

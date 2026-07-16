@@ -58,6 +58,8 @@ FE_ROUTES = [
     "/create/product",
     "/create/headshots",
     "/create/photo-packs",
+    "/create/face-swap",
+    "/create/performance",
     "/auth/login",
     "/auth/register",
     "/developer",
@@ -162,7 +164,23 @@ def check_api_deep() -> tuple[list[dict], dict]:
             meta["features"] = list(feats.keys())
             checks.append(_row("api:cap_omni", "seedance_omni" in feats, "", layer="L1"))
             checks.append(_row("api:cap_motion_native", (feats.get("motion_transfer") or {}).get("mode") == "native", "", layer="L1"))
-            checks.append(_row("api:cap_face_swap_honest", (feats.get("face_swap") or {}).get("available") is False, "", layer="L1"))
+            fs = feats.get("face_swap") or {}
+            checks.append(_row(
+                "api:cap_face_swap_i2i",
+                fs.get("mode") == "i2i_edit" and "nano-banana" in str(fs.get("sku") or ""),
+                str(fs.get("sku")),
+                layer="L1",
+            ))
+            pe_social = (feats.get("prompt_extractor") or {}).get("social_page_urls") or {}
+            checks.append(_row("api:cap_social_youtube", pe_social.get("youtube") is True, str(pe_social), layer="L1"))
+            pd = feats.get("performance_drive") or {}
+            checks.append(_row(
+                "api:cap_performance_drive",
+                pd.get("mode") == "motion_plus_optional_lipsync",
+                str(pd.get("note", ""))[:80],
+                layer="L1",
+            ))
+
 
     # Models
     models = c.get("/api/v1/models")
@@ -191,7 +209,24 @@ def check_api_deep() -> tuple[list[dict], dict]:
         headers=h,
         data={"media_url": "https://www.tiktok.com/@x/video/1", "media_kind": "video"},
     )
-    checks.append(_row("api:extractor_social_reject", social.status_code == 400, social.text[:120], layer="L1"))
+    checks.append(_row(
+        "api:extractor_tiktok_honest",
+        social.status_code in (200, 400),
+        social.text[:120],
+        layer="L1",
+    ))
+    yt = c.post(
+        "/api/v1/generate/extract-prompt",
+        headers=h,
+        data={"media_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "media_kind": "auto"},
+    )
+    ytd = yt.json() if yt.status_code == 200 else {}
+    checks.append(_row(
+        "api:extractor_youtube_resolve",
+        yt.status_code == 200 and (ytd.get("social") or {}).get("platform") == "youtube",
+        f"status={yt.status_code} social={(ytd.get('social') or {}).get('source')}",
+        layer="L2",
+    ))
 
     # Motion samples
     ms = c.get("/api/v1/motion/samples")

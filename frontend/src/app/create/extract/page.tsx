@@ -43,7 +43,7 @@ export default function ExtractPage() {
   const run = async () => {
     const url = mediaUrl.trim();
     if (!file && !url) {
-      toast.error("请上传媒体或粘贴直链", "不支持 TikTok/IG 页面链接（诚实缺口）");
+      toast.error("请上传媒体或粘贴链接", "支持文件/直链；YouTube 页可解析封面，TikTok/IG 尽力而为");
       return;
     }
     setLoading(true);
@@ -131,11 +131,11 @@ export default function ExtractPage() {
                 setMediaUrl(e.target.value);
                 if (e.target.value.trim()) setFile(null);
               }}
-              placeholder="https://…（图片/视频直链，非社媒页面）"
+              placeholder="https://…（直链，或 YouTube 页面链接）"
               className="input-primary w-full"
             />
             <p className="text-[11px] text-text-tertiary mt-1.5">
-              TikTok / Instagram / YouTube 页面链接会被拒绝——URL-to-Viral 尚未实现，不假装可解析。
+              YouTube 页面可解析封面后反推提示词；TikTok/IG 尽力而为（IP 封锁时诚实失败）。非完整视频搬运。
             </p>
           </label>
 

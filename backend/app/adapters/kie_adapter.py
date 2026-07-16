@@ -352,6 +352,40 @@ class KieAdapter(BaseModelAdapter):
             cost=_extract_kie_cost(result, "image"),
             meta={"kie_task_id": result.get("taskId", ""), "op": "edit"})
 
+    async def face_swap(
+        self,
+        *,
+        face_url: str,
+        target_url: str,
+        prompt: str | None = None,
+        image_size: str = "auto",
+        model_id: str = "google/nano-banana-edit",
+    ) -> GenerationResult:
+        """Two-image face compose via verified nano-banana-edit (live createTask ok).
+
+        Honesty: this is i2i instruction edit, NOT InsightFace/Roop pixel identity swap.
+        """
+        instruction = (prompt or "").strip() or (
+            "Face swap: replace the face of the person in image 2 with the face from image 1. "
+            "Keep image-2 pose, body, clothing, lighting and background. "
+            "Photorealistic seamless blend, natural skin tone match."
+        )
+        logger.info("[KIE] face_swap → model=%s", model_id)
+        res = await self.edit_image(
+            image_urls=[face_url, target_url],
+            prompt=instruction,
+            image_size=image_size,
+            model_id=model_id,
+        )
+        res.meta = {
+            **(res.meta or {}),
+            "op": "face_swap",
+            "mode": "i2i_edit",
+            "sku": model_id,
+            "honesty": "i2i edit-based face compose (google/nano-banana-edit); not InsightFace pixel swap",
+        }
+        return res
+
     async def upscale_image(self, *, image_url: str, factor: str = "2",
                             model_id: str = "topaz/image-upscale") -> GenerationResult:
         """AI super-resolution upscale (Topaz)."""

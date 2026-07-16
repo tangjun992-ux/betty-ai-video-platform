@@ -21,7 +21,7 @@
 |----|------|------|
 | **Extractor 社媒** | TikTok/IG/YT 页面 URL → 400 诚实拒绝；FE 直链输入 | pytest |
 | **Explore 密度** | `seed_gallery` v2 → **40** 条带 likes/views | 脚本输出 |
-| **Face Swap** | `capabilities.face_swap.available=false`（无已验证 SKU） | capabilities |
+| **Face Swap** | `mode=i2i_edit` + `google/nano-banana-edit` live 出图；`/create/face-swap` | capabilities / face-swap API |
 | **Lipsync SLO** | 既有 fixture harness；本轮未重复付费跑（避免刷配额） | 契约仍绿 |
 
 ## P2 已落地
