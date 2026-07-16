@@ -54,6 +54,7 @@ def catalog_integrity() -> dict:
 
     active = [m.id for m in MODELS if m.status == "active"]
     beta = [m.id for m in MODELS if m.status == "beta"]
+    lab = [m.id for m in MODELS if m.status == "lab"]
     missing_map = [m.id for m in MODELS if m.id not in KIE_MODEL_IDS]
     active_not_verified = [i for i in active if i not in GATEWAY_VERIFIED_IDS]
     verified_not_active = [i for i in GATEWAY_VERIFIED_IDS if i not in active and any(m.id == i for m in MODELS)]
@@ -61,11 +62,14 @@ def catalog_integrity() -> dict:
         "total": len(MODELS),
         "active_count": len(active),
         "beta_count": len(beta),
+        "lab_count": len(lab),
         "active_ids": active,
+        "lab_ids": lab,
         "missing_kie_map": missing_map,
         "active_outside_verified_set": active_not_verified,
         "verified_not_yet_active": verified_not_active,
         "guess_ids_in_catalog": [i for i in GATEWAY_GUESS_IDS if any(m.id == i for m in MODELS)],
+        "guess_still_beta": [i for i in GATEWAY_GUESS_IDS if any(m.id == i and m.status == "beta" for m in MODELS)],
     }
 
 

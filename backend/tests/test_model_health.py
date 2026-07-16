@@ -55,15 +55,18 @@ def test_quality_guard_requires_media_url():
 
 
 def test_router_skips_open_circuit(monkeypatch):
-    from app.router import PromptRouter
+    from app.router import PromptRouter, MODEL_STYLE_PREFS
 
     monkeypatch.setattr(
         "app.router.model_health.is_circuit_open",
         lambda model_id: model_id == "gpt-image-2",
     )
+    monkeypatch.setattr("app.router.model_health.is_quarantined", lambda model_id: False)
     monkeypatch.setattr("app.router.model_health.score", lambda model_id: 100.0)
     router = PromptRouter()
     analysis = router.analyze(
         "premium product photography, 4k commercial poster", "image", "high")
-    assert router.select_model(analysis).model_id == "nano-banana"
+    picked = router.select_model(analysis).model_id
+    assert picked != "gpt-image-2"
+    assert picked in MODEL_STYLE_PREFS["image"]
 

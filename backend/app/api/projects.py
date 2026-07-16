@@ -56,6 +56,7 @@ def _serialize(p: Project) -> dict:
         "visibility": getattr(p, "visibility", None) or "private",
         "team_id": getattr(p, "team_id", None),
         "owner_user_id": p.user_id,
+        "reviews": list(getattr(p, "reviews", None) or []) if isinstance(getattr(p, "reviews", None), list) else [],
         "created_at": p.created_at.isoformat() if p.created_at else "",
         "updated_at": p.updated_at.isoformat() if p.updated_at else "",
     }
@@ -211,3 +212,50 @@ async def delete_project(
     await db.delete(p)
     await db.commit()
     return {"deleted": project_id}
+
+
+class ProjectReview(BaseModel):
+    body: str = Field(..., min_length=1, max_length=2000)
+    item_id: Optional[str] = None
+
+
+@router.get("/{project_id}/reviews", summary="项目审片评论")
+async def list_reviews(
+    project_id: str,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    p = await _get(db, project_id)
+    if not await _can_view(db, p, user_id):
+        raise HTTPException(status_code=403, detail="无权查看此项目")
+    return {"project_id": project_id, "reviews": list(getattr(p, "reviews", None) or [])}
+
+
+@router.post("/{project_id}/reviews", summary="添加审片评论")
+async def add_review(
+    project_id: str,
+    req: ProjectReview,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    p = await _get(db, project_id)
+    if not await _can_view(db, p, user_id):
+        raise HTTPException(status_code=403, detail="无权评论此项目")
+    from datetime import datetime, timezone
+    import uuid as _uuid
+    reviews = list(getattr(p, "reviews", None) or [])
+    if not isinstance(reviews, list):
+        reviews = []
+    entry = {
+        "id": str(_uuid.uuid4()),
+        "user_id": user_id,
+        "body": req.body.strip(),
+        "item_id": req.item_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    reviews.append(entry)
+    p.reviews = reviews[-200:]
+    flag_modified(p, "reviews")
+    await db.commit()
+    await db.refresh(p)
+    return {"project_id": project_id, "review": entry, "total": len(p.reviews or [])}

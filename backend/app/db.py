@@ -114,5 +114,7 @@ def _migrate_library_project_acl_columns(connection):
                 connection.execute(text("ALTER TABLE projects ADD COLUMN visibility VARCHAR(20) DEFAULT 'private'"))
             if "team_id" not in cols:
                 connection.execute(text("ALTER TABLE projects ADD COLUMN team_id VARCHAR(36)"))
+            if "reviews" not in cols:
+                connection.execute(text("ALTER TABLE projects ADD COLUMN reviews JSON"))
     except Exception:
         pass

@@ -132,7 +132,7 @@ class ModelScore:
     is_fallback: bool = False
 
 
-# Model preference order per style
+# Model preference order per style — covers all GATEWAY_VERIFIED active SKUs.
 MODEL_STYLE_PREFS = {
     "video": {
         "seedance-2.0": {
@@ -143,6 +143,22 @@ MODEL_STYLE_PREFS = {
             "cost_credits_per_5s": 4,
             "avg_latency_s": 90,
         },
+        "kling-2.1-master": {
+            "priority": 1,
+            "boost_styles": ["cinematic", "dramatic", "portrait", "character", "storytelling"],
+            "max_duration": 10,
+            "strengths": ["人物一致性", "电影叙事", "Kling Master"],
+            "cost_credits_per_5s": 5,
+            "avg_latency_s": 100,
+        },
+        "kling-2.5-turbo": {
+            "priority": 2,
+            "boost_styles": ["energetic", "commercial", "product", "social-media", "realistic"],
+            "max_duration": 10,
+            "strengths": ["快速出片", "动态感强", "Kling Turbo"],
+            "cost_credits_per_5s": 3,
+            "avg_latency_s": 45,
+        },
         "seedance-2.0-fast": {
             "priority": 2,
             "boost_styles": ["realistic", "landscape", "portrait", "product", "anime", "fantasy", "sci-fi", "food", "cute/kawaii"],
@@ -150,6 +166,14 @@ MODEL_STYLE_PREFS = {
             "strengths": ["快速生成", "图像转视频", "流畅自然", "性价比高"],
             "cost_credits_per_5s": 3,
             "avg_latency_s": 30,
+        },
+        "kling-2.1-pro": {
+            "priority": 3,
+            "boost_styles": ["cinematic", "portrait", "commercial", "realistic"],
+            "max_duration": 10,
+            "strengths": ["画质稳定", "专业成片"],
+            "cost_credits_per_5s": 4,
+            "avg_latency_s": 80,
         },
     },
     "image": {
@@ -160,8 +184,22 @@ MODEL_STYLE_PREFS = {
             "cost_credits": 5,
             "avg_latency_s": 15,
         },
-        "nano-banana": {
+        "imagen-4": {
+            "priority": 1,
+            "boost_styles": ["photorealistic", "landscape", "portrait", "cinematic", "product"],
+            "strengths": ["Google Imagen 画质", "光影自然"],
+            "cost_credits": 4,
+            "avg_latency_s": 18,
+        },
+        "nano-banana-pro": {
             "priority": 2,
+            "boost_styles": ["photorealistic", "cinematic", "portrait", "product"],
+            "strengths": ["高保真", "一致性好"],
+            "cost_credits": 4,
+            "avg_latency_s": 12,
+        },
+        "nano-banana": {
+            "priority": 3,
             "boost_styles": ["anime", "fantasy", "sci-fi", "landscape", "cute/kawaii", "realistic", "portrait"],
             "strengths": ["写实风格优秀", "人物生成强", "速度快"],
             "cost_credits": 2,

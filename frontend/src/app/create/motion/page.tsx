@@ -153,7 +153,7 @@ export default function MotionControlPage() {
               id: data.task_id,
               type: "video",
               url: taskData.result_url,
-              prompt: prompt || "运动控制生成",
+              prompt: prompt || "运动迁移生成",
               model: "motion-control",
               taskId: data.task_id,
             } as any);
@@ -194,9 +194,13 @@ export default function MotionControlPage() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-2xl font-bold mb-1 text-text-accent-cyan">运动控制</h1>
+        <h1 className="text-2xl font-bold mb-1 text-text-accent-cyan">运动迁移</h1>
+        <p className="text-sm text-text-secondary mb-3">
+          将参考视频动作迁移到目标人物。当前为 best-effort 通道（非 Kling Motion Control / Runway Act-One 级原生 SKU）。
+        </p>
+        <CapabilityNotice feature="motion" className="mb-4" />
         <p className="text-text-secondary text-sm mb-4">
-          上传人物图片和参考动作视频，AI 将动作精准迁移到目标人物
+          上传人物图片和参考动作视频，AI 将动作迁移到目标人物。当前为 best-effort（非 Kling Motion / Runway Act-One 级原生 SKU）
         </p>
         <CapabilityNotice feature="motion" className="mb-6" onDemoChange={setDemoMode} />
       </motion.div>
@@ -425,7 +429,7 @@ export default function MotionControlPage() {
             >
               <video src={result.result_url} controls className="w-full" poster={imagePreview || undefined} />
               <div className="p-3 flex items-center justify-between bg-cosmic-subtle">
-                <span className="text-xs text-text-secondary">运动控制结果</span>
+                <span className="text-xs text-text-secondary">运动迁移结果</span>
                 <button onClick={() => router.push("/explore")} className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
                   前往探索 <ArrowRight className="w-3 h-3" />
                 </button>

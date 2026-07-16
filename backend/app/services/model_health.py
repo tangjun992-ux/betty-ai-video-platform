@@ -19,6 +19,15 @@ PREFIX = "model-health"
 CIRCUIT_FAILURES = 3
 CIRCUIT_TTL_SECONDS = 300
 QUARANTINE_TTL_SECONDS = 24 * 3600
+# Soft failures (queue busy / upstream 5xx) should recover faster than hard map failures.
+QUARANTINE_SOFT_TTL_SECONDS = 3600
+
+
+def quarantine_ttl_for_reason(reason: str) -> int:
+    r = (reason or "").lower()
+    if any(k in r for k in ("timeout", "queue", "busy", "internal error", "try again", "429", "503", "502")):
+        return QUARANTINE_SOFT_TTL_SECONDS
+    return QUARANTINE_TTL_SECONDS
 
 
 @dataclass

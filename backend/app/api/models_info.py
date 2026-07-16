@@ -24,7 +24,7 @@ class ModelInfo(BaseModel):
     description: str
     capabilities: ModelCapability
     cost_tier: str  # low | medium | high
-    status: str     # active | maintenance | deprecated
+    status: str     # active | beta | lab | maintenance | deprecated
 
 
 MODELS = [
@@ -51,19 +51,19 @@ MODELS = [
         id="flux-1.1-pro", provider="KIE.ai → Black Forest", display_name="FLUX 1.1 Pro",
         description="顶级美学与构图，创意视觉标杆",
         capabilities=ModelCapability(media_types=["image"], max_resolution="4K", max_duration_s=0, avg_latency_s=10, styles=["artistic", "cinematic", "fantasy", "concept"], cost_per_image_credits=4, cost_per_5s_video_credits=0),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="lab",
     ),
     ModelInfo(
         id="flux-1-dev", provider="KIE.ai → Black Forest", display_name="FLUX.1 Dev",
         description="开源旗舰，可控性强",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=8, styles=["realistic", "artistic", "anime"], cost_per_image_credits=3, cost_per_5s_video_credits=0),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="lab",
     ),
     ModelInfo(
         id="flux-kontext", provider="KIE.ai → Black Forest", display_name="FLUX Kontext",
         description="指令式图像编辑，局部精修",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=9, styles=["edit", "inpaint", "style-transfer"], cost_per_image_credits=3, cost_per_5s_video_credits=0),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="lab",
     ),
     ModelInfo(
         id="imagen-4", provider="KIE.ai → Google", display_name="Imagen 4",
@@ -75,49 +75,49 @@ MODELS = [
         id="ideogram-v3", provider="KIE.ai → Ideogram", display_name="Ideogram V3",
         description="最强文字排版与 Logo 设计",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=10, styles=["typography", "logo", "poster", "design"], cost_per_image_credits=3, cost_per_5s_video_credits=0),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="lab",
     ),
     ModelInfo(
         id="recraft-v3", provider="KIE.ai → Recraft", display_name="Recraft V3",
         description="矢量/品牌设计与图标系统",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=9, styles=["vector", "icon", "brand", "illustration"], cost_per_image_credits=3, cost_per_5s_video_credits=0),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="lab",
     ),
     ModelInfo(
         id="seedream-3", provider="KIE.ai → ByteDance", display_name="Seedream 3.0",
         description="中文语义理解强，国风/电商",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=8, styles=["chinese", "ecommerce", "portrait", "anime"], cost_per_image_credits=2, cost_per_5s_video_credits=0),
-        cost_tier="low", status="beta",
+        cost_tier="low", status="lab",
     ),
     ModelInfo(
         id="qwen-image", provider="KIE.ai → Alibaba", display_name="Qwen-Image",
         description="中英文字渲染与复杂场景",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=9, styles=["chinese", "poster", "scene"], cost_per_image_credits=2, cost_per_5s_video_credits=0),
-        cost_tier="low", status="beta",
+        cost_tier="low", status="lab",
     ),
     ModelInfo(
         id="hidream-i1", provider="KIE.ai → HiDream", display_name="HiDream I1",
         description="高细节写实与质感",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=10, styles=["realistic", "detail", "portrait"], cost_per_image_credits=3, cost_per_5s_video_credits=0),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="lab",
     ),
     ModelInfo(
         id="sdxl", provider="KIE.ai → Stability", display_name="Stable Diffusion XL",
         description="经典开源，生态丰富",
         capabilities=ModelCapability(media_types=["image"], max_resolution="1080p", max_duration_s=0, avg_latency_s=6, styles=["realistic", "anime", "artistic"], cost_per_image_credits=1, cost_per_5s_video_credits=0),
-        cost_tier="low", status="beta",
+        cost_tier="low", status="lab",
     ),
     ModelInfo(
         id="midjourney-v7", provider="KIE.ai → Midjourney", display_name="Midjourney V7",
         description="艺术美学天花板",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=30, styles=["artistic", "cinematic", "fantasy"], cost_per_image_credits=5, cost_per_5s_video_credits=0),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="lab",
     ),
     ModelInfo(
         id="grok-image", provider="KIE.ai → xAI", display_name="Grok Image",
         description="实时风格与梗图生成",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=10, styles=["meme", "realistic", "creative"], cost_per_image_credits=3, cost_per_5s_video_credits=0),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="lab",
     ),
 
     # ─── Video models (22) via KIE.ai ───
@@ -155,13 +155,13 @@ MODELS = [
         id="sora-2", provider="KIE.ai → OpenAI", display_name="Sora 2",
         description="物理一致性与长镜头叙事",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=60, avg_latency_s=160, styles=["cinematic", "narrative", "realistic"], cost_per_image_credits=0, cost_per_5s_video_credits=12),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="lab",
     ),
     ModelInfo(
         id="sora-2-pro", provider="KIE.ai → OpenAI", display_name="Sora 2 Pro",
         description="Sora 专业档，最高保真",
         capabilities=ModelCapability(media_types=["video"], max_resolution="4K", max_duration_s=60, avg_latency_s=200, styles=["cinematic", "narrative"], cost_per_image_credits=0, cost_per_5s_video_credits=16),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="lab",
     ),
     ModelInfo(
         id="kling-2.5-turbo", provider="KIE.ai → Kuaishou", display_name="Kling 2.5 Turbo",
@@ -215,43 +215,43 @@ MODELS = [
         id="grok-video", provider="KIE.ai → xAI", display_name="Grok Video",
         description="实时创意短视频",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=60, styles=["creative", "meme", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=6),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="lab",
     ),
     ModelInfo(
         id="runway-gen4", provider="KIE.ai → Runway", display_name="Runway Gen-4",
         description="好莱坞级一致性与控制",
         capabilities=ModelCapability(media_types=["video"], max_resolution="4K", max_duration_s=10, avg_latency_s=90, styles=["cinematic", "vfx", "narrative"], cost_per_image_credits=0, cost_per_5s_video_credits=10),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="lab",
     ),
     ModelInfo(
         id="runway-gen3", provider="KIE.ai → Runway", display_name="Runway Gen-3 Alpha",
         description="成熟创作工作流",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=70, styles=["cinematic", "vfx"], cost_per_image_credits=0, cost_per_5s_video_credits=8),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="lab",
     ),
     ModelInfo(
         id="luma-ray-2", provider="KIE.ai → Luma", display_name="Luma Ray 2",
         description="自然运动与物理",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=80, styles=["realistic", "nature", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=8),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="lab",
     ),
     ModelInfo(
         id="pika-2.2", provider="KIE.ai → Pika", display_name="Pika 2.2",
         description="创意特效与转场",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=55, styles=["creative", "vfx", "anime"], cost_per_image_credits=0, cost_per_5s_video_credits=6),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="lab",
     ),
     ModelInfo(
         id="hunyuan-video", provider="KIE.ai → Tencent", display_name="Hunyuan Video",
         description="腾讯开源，中文场景强",
         capabilities=ModelCapability(media_types=["video"], max_resolution="720p", max_duration_s=8, avg_latency_s=65, styles=["chinese", "realistic", "cinematic"], cost_per_image_credits=0, cost_per_5s_video_credits=5),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="lab",
     ),
     ModelInfo(
         id="ltx-video", provider="KIE.ai → Lightricks", display_name="LTX Video",
         description="极速生成，本地友好",
         capabilities=ModelCapability(media_types=["video"], max_resolution="720p", max_duration_s=10, avg_latency_s=25, styles=["realistic", "fast", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=3),
-        cost_tier="low", status="beta",
+        cost_tier="low", status="lab",
     ),
 ]
 
@@ -292,13 +292,18 @@ def _serialize(m: ModelInfo) -> dict:
 
 
 @router.get("/", summary="获取可用模型列表")
-async def list_models(status: str | None = None, include_beta: bool = False):
+async def list_models(
+    status: str | None = None,
+    include_beta: bool = False,
+    include_lab: bool = False,
+):
     """List models with production-safe defaults.
 
     - `status=active` → verified/production-ready only
-    - `status=beta` → lab/unverified only
-    - no `status`: returns verified only unless `include_beta=true` (and beta is
-      never bundled into the primary `models` array in production).
+    - `status=beta` → mapped-but-unverified labs
+    - `status=lab` → gateway guess SKUs (likely 422) — opt-in only
+    - default: verified only; `include_beta` may add beta (never in production primary);
+      `include_lab` required to surface guess SKUs at all.
     """
     from app.services.model_health import model_health
 
@@ -310,26 +315,37 @@ async def list_models(status: str | None = None, include_beta: bool = False):
         m.id for m in MODELS
         if m.status == "active" and not model_health.is_routable(m.id)
     ]
-    beta = [_serialize(m) for m in MODELS if m.status != "active"]
+    beta = [_serialize(m) for m in MODELS if m.status == "beta"]
+    lab = [_serialize(m) for m in MODELS if m.status == "lab"]
+    # Legacy: treat unknown non-active as beta for back-compat counts
+    other = [_serialize(m) for m in MODELS if m.status not in ("active", "beta", "lab")]
 
     if status == "active":
-        return {"models": active, "active": active, "beta": [],
-                "active_count": len(active), "beta_count": 0}
+        return {"models": active, "active": active, "beta": [], "lab": [],
+                "active_count": len(active), "beta_count": 0, "lab_count": 0}
     if status == "beta":
-        return {"models": beta, "active": [], "beta": beta,
-                "active_count": 0, "beta_count": len(beta)}
+        return {"models": beta, "active": [], "beta": beta, "lab": [],
+                "active_count": 0, "beta_count": len(beta), "lab_count": 0}
+    if status == "lab":
+        return {"models": lab, "active": [], "beta": [], "lab": lab,
+                "active_count": 0, "beta_count": 0, "lab_count": len(lab)}
 
-    # Default listing is verified-only; beta is opt-in via include_beta and even
-    # then kept out of the primary array in production to avoid accidental use.
     from app.config import settings
-    primary = active + beta if (include_beta and not settings.is_production) else active
+    primary = list(active)
+    if include_beta and not settings.is_production:
+        primary.extend(beta)
+        primary.extend(other)
+    if include_lab and not settings.is_production:
+        primary.extend(lab)
     return {
         "models": primary,
         "active": active,
-        "beta": beta,
+        "beta": beta + other,
+        "lab": lab,
         "quarantined": quarantined_ids,
         "active_count": len(active),
-        "beta_count": len(beta),
+        "beta_count": len(beta) + len(other),
+        "lab_count": len(lab),
     }
 
 
@@ -384,13 +400,13 @@ from app.models.billing import UserBalance, Transaction, TransactionType
 
 PLANS_DATA = [
     {"id":"starter","name":"入门版","monthly_price":9.99,"yearly_price":7.99,"credits":1000,
-     "features":[{"name":"Seedance 2.0 全模态视频","included":False},{"name":"已验证图片模型","included":True},{"name":"已验证视频模型","included":False},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":False},{"name":"已验证图片模型","included":True},{"name":"已验证视频模型","included":False},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"运动迁移（best-effort）","included":False},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
     {"id":"personal","name":"个人版","monthly_price":24.99,"yearly_price":19.99,"credits":3000,
-     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"已验证图片模型","included":True},{"name":"已验证视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"已验证图片模型","included":True},{"name":"已验证视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"运动迁移（best-effort）","included":True},{"name":"商用授权许可","included":False},{"name":"团队协作","included":False},{"name":"优先支持","included":False}]},
     {"id":"creator","name":"创作者版","monthly_price":49.99,"yearly_price":39.99,"credits":7000,"highlighted":True,"badge":"最受欢迎",
-     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"已验证图片模型","included":True},{"name":"已验证视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"已验证图片模型","included":True},{"name":"已验证视频模型","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"运动迁移（best-effort）","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
     {"id":"pro","name":"专业版","monthly_price":99.99,"yearly_price":79.99,"credits":15000,
-     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"全部可用模型","included":True},{"name":"按用量计费","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"高级运动控制","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
+     "features":[{"name":"Seedance 2.0 全模态视频","included":True},{"name":"全部可用模型","included":True},{"name":"按用量计费","included":True},{"name":"高级唇形同步","included":True},{"name":"高级图片编辑器","included":True},{"name":"视频 & 图片放大","included":True},{"name":"运动迁移（best-effort）","included":True},{"name":"商用授权许可","included":True},{"name":"团队协作","included":True},{"name":"优先支持","included":True}]},
 ]
 
 @router.get("/pricing/plans", summary="获取定价方案")

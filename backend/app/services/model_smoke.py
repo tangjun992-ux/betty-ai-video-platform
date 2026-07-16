@@ -159,9 +159,14 @@ def run_active_smoke(*, mode: str | None = None) -> dict:
             model_health.record_failure(m.id, probe["error"] or "smoke failed", retryable=True)
             results["failed"].append(m.id)
             if quarantine:
-                model_health.set_quarantine(m.id, reason=probe["error"] or "smoke failed")
+                from app.services.model_health import quarantine_ttl_for_reason
+                ttl = quarantine_ttl_for_reason(probe["error"] or "")
+                model_health.set_quarantine(m.id, reason=probe["error"] or "smoke failed", ttl=ttl)
                 results["quarantined"].append(m.id)
-                logger.error("MODEL_HEALTH_ALERT model=%s quarantined reason=%s", m.id, probe["error"])
+                logger.error(
+                    "MODEL_HEALTH_ALERT model=%s quarantined ttl=%ss reason=%s",
+                    m.id, ttl, probe["error"],
+                )
             else:
                 logger.warning("model smoke soft-fail: %s — %s", m.id, probe["error"])
 
