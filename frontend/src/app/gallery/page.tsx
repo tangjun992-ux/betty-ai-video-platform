@@ -368,6 +368,13 @@ export default function GalleryPage() {
                           <span className="inline-flex items-center gap-1">👁 {item.views}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
+                          <a
+                            href={`/explore/${item.task_id}`}
+                            title="分享页"
+                            className="w-7 h-7 rounded-lg bg-white/15 hover:bg-white/25 backdrop-blur-md flex items-center justify-center text-white transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342A3 3 0 0010 12c0-1.657-1.343-3-3-3S4 10.343 4 12s1.343 3 3 3a3 3 0 002.316-1.342m6.368 0A3 3 0 0017 12c0-1.657-1.343-3-3-3s-3 1.343-3 3 1.343 3 3 3a3 3 0 002.316-1.342M8.684 13.342l6.368 0" /></svg>
+                          </a>
                           <button
                             onClick={() => navigator.clipboard.writeText(item.prompt)}
                             title="复制 Prompt"
@@ -480,6 +487,16 @@ export default function GalleryPage() {
                       : `/create/image?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}`}
                     className="btn-primary w-full"
                   >✨ 做同款</a>
+                  <div className="flex gap-2">
+                    <a href={`/explore/${lightbox.task_id}`} className="btn-secondary flex-1 text-sm text-center">分享页</a>
+                    <button
+                      onClick={() => {
+                        const url = `${window.location.origin}/explore/${lightbox.task_id}`;
+                        navigator.clipboard.writeText(url);
+                      }}
+                      className="btn-secondary flex-1 text-sm"
+                    >复制链接</button>
+                  </div>
                   <div className="flex gap-2">
                     <button onClick={() => navigator.clipboard.writeText(lightbox.prompt)} className="btn-secondary flex-1 text-sm">复制提示词</button>
                     <a href={lightbox.url} download className="btn-secondary flex-1 text-sm text-center">下载</a>

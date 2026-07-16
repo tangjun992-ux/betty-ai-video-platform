@@ -21,6 +21,23 @@ async def capabilities():
         "verified_model_count": catalog["active_count"],
         "catalog_total": catalog["total"],
         "label": "真实生成可用" if (configured and not _dry_run_default()) else "预览模式（未配置模型 Key）",
+        # Honest motion disclosure: dedicated path exists but provider may treat
+        # videoUrl as best-effort (not Kling Motion Control / Runway Act-One grade).
+        "features": {
+            "motion_transfer": {
+                "available": configured and not demo,
+                "mode": "best_effort",
+                "note": "专用 motion 通道已启用（imageUrl+videoUrl）；上游可能降级为图生视频+动作提示，非原生 Motion Control SKU。",
+            },
+            "task_webhooks": {
+                "available": True,
+                "note": "任务完成/失败时 POST webhook_url，HMAC 签名头 X-Betty-Signature。",
+            },
+            "share_permalink": {
+                "available": True,
+                "path": "/explore/{task_id}",
+            },
+        },
     }
 
 

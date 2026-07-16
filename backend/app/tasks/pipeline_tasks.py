@@ -13,6 +13,8 @@ from app.services.media_store import persist_results
 
 logger = logging.getLogger(__name__)
 
+from app.tasks.task_db import update_task as _update_task
+
 
 def _get_db_url():
     db_url = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
@@ -23,28 +25,6 @@ def _get_db_url():
     return db_url
 
 
-def _update_task(db_task_id: str, **kwargs):
-    from sqlalchemy import create_engine, text
-    from sqlalchemy.orm import Session
-
-    db_url = _get_db_url()
-    engine = create_engine(db_url)
-    with Session(engine) as session:
-        stmt = text("SELECT id FROM tasks WHERE task_id = :tid")
-        row = session.execute(stmt, {"tid": db_task_id}).first()
-        if not row:
-            return None
-        task_pk = row[0]
-        for field, value in kwargs.items():
-            if value is not None:
-                if isinstance(value, (dict, list)):
-                    value = json.dumps(value)
-                session.execute(
-                    text(f"UPDATE tasks SET {field} = :val WHERE id = :id"),
-                    {"val": value, "id": task_pk},
-                )
-        session.commit()
-        return task_pk
 
 
 @app.task(

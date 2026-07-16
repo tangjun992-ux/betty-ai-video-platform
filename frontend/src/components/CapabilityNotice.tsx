@@ -29,7 +29,8 @@ const DEMO_TEXT: Record<Feature, string> = {
 
 const REAL_TEXT: Record<Feature, string> = {
   lipsync: "真实唇形同步可用（已配置模型凭证）。",
-  motion: "运动迁移可用（已配置模型凭证）。",
+  motion:
+    "运动迁移通道可用（imageUrl+videoUrl）。上游可能降级为图生视频+动作提示，效果对标 Kling Motion / Runway Act-One 仍属 best-effort。",
   audio: "真实 TTS 配音可用（已配置模型凭证）。",
   video: "真实视频生成可用（已配置模型凭证）。",
   image: "真实图片生成可用（已配置模型凭证）。",

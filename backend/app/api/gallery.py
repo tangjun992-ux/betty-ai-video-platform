@@ -280,6 +280,78 @@ async def explore_gallery(
     return {"items": paged, "total": total, "limit": limit, "offset": offset, "styles": STYLE_OPTIONS}
 
 
+@router.get("/share/{task_id}", summary="公开分享作品（稳定 permalink）")
+async def share_item(task_id: str, db: AsyncSession = Depends(get_db)):
+    """Public share payload by task_id — no auth required.
+
+    Hidden / moderated / unsafe prompts are not exposed. Increments view count.
+    """
+    if not task_id or len(task_id) < 8:
+        raise HTTPException(status_code=400, detail="无效的分享 ID")
+    q = (
+        select(Task, User)
+        .outerjoin(User, Task.user_id == User.id)
+        .where(Task.task_id == task_id, Task.status == "completed")
+    )
+    row = (await db.execute(q)).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="作品不存在或未公开")
+    task, user = row
+    results = _safe_list(task.results)
+    if not results:
+        raise HTTPException(status_code=404, detail="作品无媒体")
+    r0 = results[0] if isinstance(results[0], dict) else {}
+    url = r0.get("url") or r0.get("media_url") or ""
+    if not url:
+        raise HTTPException(status_code=404, detail="作品无媒体")
+    from app.services.moderation import is_safe as _mod_safe
+    if not (_is_safe(task.prompt or "") and _mod_safe(task.prompt or "")):
+        raise HTTPException(status_code=404, detail="作品不可用")
+    item_key = f"{task_id}_0"
+    hidden = await _hidden_keys(db)
+    if item_key in hidden or f"{task_id}_share" in hidden:
+        raise HTTPException(status_code=404, detail="作品已下架")
+    # Increment views (best-effort)
+    try:
+        await _ensure_views_table(db)
+        await db.execute(
+            text(
+                "INSERT INTO gallery_views (item_key, views) VALUES (:k, 1) "
+                "ON CONFLICT(item_key) DO UPDATE SET views = views + 1"
+            ),
+            {"k": item_key},
+        )
+        await db.commit()
+    except Exception:
+        pass
+    likes_map = await _stored_likes(db)
+    views_map = await _stored_views(db)
+    author = _author_fields(user)
+    params = _safe_dict(task.parameters)
+    media_type = r0.get("type") or task.media_type or "image"
+    model = r0.get("model") or task.selected_model or "unknown"
+    return {
+        "id": task_id,
+        "task_id": task_id,
+        "share_path": f"/explore/{task_id}",
+        "prompt": task.prompt or "",
+        "media_type": media_type,
+        "model_used": model.split("/")[-1] if "/" in str(model) else model,
+        "url": url,
+        "thumbnail": r0.get("thumbnail") or url,
+        "resolution": params.get("resolution", ""),
+        "duration": params.get("duration"),
+        "created_at": (task.completed_at or task.created_at).isoformat()
+        if (task.completed_at or task.created_at) else "",
+        "username": author["username"],
+        "display_name": author["display_name"],
+        "avatar": author["avatar"],
+        "likes": likes_map.get(item_key, 0),
+        "views": views_map.get(item_key, 0),
+        "create_path": f"/create/{'video' if media_type == 'video' else 'image'}",
+    }
+
+
 @router.post("/{item_key}/like", summary="点赞作品")
 async def like_item(item_key: str, undo: bool = Query(default=False), db: AsyncSession = Depends(get_db)):
     """Increment (or undo) a community like for a gallery item. Persisted in

@@ -43,7 +43,8 @@ export default function DeveloperPage() {
   const copy = (s: string) => { navigator.clipboard.writeText(s); setCopied(true); setTimeout(() => setCopied(false), 1500); };
 
   const origin = API_BASE.replace(/\/api\/v1$/, "");
-  const curl = `curl -X POST ${origin}/api/v1/public/generate \\\n  -H "X-API-Key: sk_betty_..." \\\n  -H "Content-Type: application/json" \\\n  -d '{"prompt":"a serene mountain lake at dawn, cinematic"}'`;
+  const curl = `curl -X POST ${origin}/api/v1/public/generate \\\n  -H "X-API-Key: sk_betty_..." \\\n  -H "Content-Type: application/json" \\\n  -d '{"prompt":"a serene mountain lake at dawn, cinematic","webhook_url":"https://example.com/hooks/betty"}'`;
+  const webhookNote = `任务结束时 betty 会 POST 到 webhook_url，请求体含 task_id/status/results。\n签名头：X-Betty-Timestamp + X-Betty-Signature (sha256=HMAC(secret, "{ts}." + body))\n密钥：WEBHOOK_SIGNING_SECRET（或回退 JWT_SECRET）`;
 
   if (!token) {
     return (
@@ -113,9 +114,13 @@ export default function DeveloperPage() {
         <div className="px-4 py-2 border-b border-cosmic-border text-xs text-text-tertiary">POST /api/v1/public/generate</div>
         <pre className="p-4 text-xs font-mono text-text-secondary overflow-x-auto whitespace-pre">{curl}</pre>
       </div>
+      <div className="mt-3 rounded-2xl border border-cosmic-border bg-cosmic-deep overflow-hidden">
+        <div className="px-4 py-2 border-b border-cosmic-border text-xs text-text-tertiary">Webhook 回调（对标 Runway / Kling）</div>
+        <pre className="p-4 text-xs font-mono text-text-secondary overflow-x-auto whitespace-pre-wrap">{webhookNote}</pre>
+      </div>
       <p className="text-xs text-text-tertiary mt-3">
         鉴权：请求头 <code className="text-text-secondary">X-API-Key: sk_betty_...</code>（或 <code className="text-text-secondary">Authorization: Bearer sk_betty_...</code>）。
-        返回 <code className="text-text-secondary">task_id</code>，可轮询 <code className="text-text-secondary">GET /api/v1/tasks/&#123;task_id&#125;</code> 获取结果。生成按你的账户积分计费，并受频率限制。
+        返回 <code className="text-text-secondary">task_id</code>，可轮询 <code className="text-text-secondary">GET /api/v1/tasks/&#123;task_id&#125;</code> 或使用 <code className="text-text-secondary">webhook_url</code>。生成按你的账户积分计费，并受频率限制。
       </p>
     </div>
   );

@@ -27,25 +27,7 @@ def _get_db_url_sync():
     return db_url
 
 
-def _update_task(db_task_id: str, **kwargs):
-    db_url = _get_db_url_sync()
-    engine = create_engine(db_url)
-    with Session(engine) as session:
-        stmt = text("SELECT id FROM tasks WHERE task_id = :tid")
-        row = session.execute(stmt, {"tid": db_task_id}).first()
-        if not row:
-            return None
-        task_pk = row[0]
-        for field, value in kwargs.items():
-            if value is not None:
-                if isinstance(value, (dict, list)):
-                    value = json.dumps(value)
-                session.execute(
-                    text(f"UPDATE tasks SET {field} = :val WHERE id = :id"),
-                    {"val": value, "id": task_pk},
-                )
-        session.commit()
-        return task_pk
+from app.tasks.task_db import update_task as _update_task
 
 
 def _load_adapters():

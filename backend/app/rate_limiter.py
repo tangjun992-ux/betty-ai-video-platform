@@ -57,10 +57,23 @@ class RateLimiter:
     @property
     def client(self) -> redis.Redis:
         if self._client is None:
-            self._client = redis.Redis(
-                host="localhost", port=6379, db=3,
-                decode_responses=True, socket_timeout=2,
-            )
+            # Prefer REDIS_URL (same as WS / Celery) so multi-replica deploys share limits.
+            url = (settings.REDIS_URL or "redis://localhost:6379/0").strip()
+            # Use db=3 for rate-limit keys unless URL already specifies a non-default path.
+            try:
+                self._client = redis.Redis.from_url(
+                    url,
+                    db=3,
+                    decode_responses=True,
+                    socket_timeout=2,
+                )
+            except TypeError:
+                # redis-py versions that reject db override when URL has path
+                self._client = redis.Redis.from_url(
+                    url,
+                    decode_responses=True,
+                    socket_timeout=2,
+                )
         return self._client
 
     def is_rate_limited(

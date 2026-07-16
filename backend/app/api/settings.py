@@ -282,3 +282,55 @@ async def delete_api_key(
     current_user.metadata_json = json.dumps(meta, ensure_ascii=False)
 
     return {"message": "API 密钥已删除"}
+
+
+@router.post("/notifications/test", summary="发送测试通知（验证邮件配置）")
+async def test_notification(
+    current_user: User = Depends(get_current_user),
+):
+    """Dry-run / best-effort SMTP test using the same path as task-complete emails."""
+    notif = _get_user_notifications(current_user)
+    if not notif.email_task_complete:
+        return {
+            "sent": False,
+            "reason": "email_task_complete_disabled",
+            "hint": "请先开启「任务完成邮件」通知偏好",
+        }
+    email = (current_user.email or "").strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="账户未设置邮箱")
+    import os
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info("notification_test: user=%s email=%s", current_user.id, email)
+    smtp_host = os.getenv("SMTP_HOST", "").strip()
+    smtp_from = os.getenv("SMTP_FROM", "").strip()
+    if not smtp_host or not smtp_from:
+        return {
+            "sent": False,
+            "reason": "smtp_missing",
+            "logged": True,
+            "to": email,
+            "hint": "配置 SMTP_HOST / SMTP_FROM 后即可投递",
+        }
+    try:
+        import smtplib
+        from email.message import EmailMessage
+        msg = EmailMessage()
+        msg["Subject"] = "betty 通知测试"
+        msg["From"] = smtp_from
+        msg["To"] = email
+        msg.set_content("这是一封 betty 任务完成通知的测试邮件。若收到说明 SMTP 配置正常。")
+        port = int(os.getenv("SMTP_PORT", "587"))
+        user = os.getenv("SMTP_USER", "")
+        password = os.getenv("SMTP_PASSWORD", "")
+        use_tls = os.getenv("SMTP_TLS", "true").lower() == "true"
+        with smtplib.SMTP(smtp_host, port, timeout=10) as smtp:
+            if use_tls:
+                smtp.starttls()
+            if user:
+                smtp.login(user, password)
+            smtp.send_message(msg)
+        return {"sent": True, "to": email}
+    except Exception as e:
+        return {"sent": False, "reason": str(e), "to": email}
