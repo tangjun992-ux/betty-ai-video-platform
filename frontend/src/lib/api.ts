@@ -313,6 +313,38 @@ export async function getCreditPacks(): Promise<{ packs: any[] }> {
   if (!res.ok) throw new Error(`加载积分包失败: ${res.status}`);
   return res.json();
 }
+
+/** Current user's balance + active subscription plan (for prorated changes) */
+export type PricingUser = {
+  user_id: number; credits: number; role: string;
+  current_plan_id: string | null; plan_cycle: string | null;
+  plan_days_remaining: number | null;
+};
+export async function getPricingUser(): Promise<PricingUser> {
+  const res = await fetch(`${API_BASE}/pricing/user`);
+  if (!res.ok) throw new Error(`加载用户方案失败: ${res.status}`);
+  return res.json();
+}
+
+/** Prorated preview when switching plans mid-cycle (升/降级) */
+export type ProrationPreview = {
+  current_plan: string | null; new_plan: string; cycle: string;
+  days_remaining: number; proration_factor: number;
+  unused_credit_usd: number; new_plan_prorated_usd: number;
+  net_charge_usd: number; is_refund: boolean; prorated_credits: number;
+};
+export async function getProrationPreview(params: {
+  newPlanId: string; currentPlanId?: string | null;
+  daysRemaining?: number; cycle?: "monthly" | "yearly";
+}): Promise<ProrationPreview> {
+  const q = new URLSearchParams({ new_plan_id: params.newPlanId });
+  if (params.currentPlanId) q.set("current_plan_id", params.currentPlanId);
+  if (params.daysRemaining != null) q.set("days_remaining", String(params.daysRemaining));
+  if (params.cycle) q.set("cycle", params.cycle);
+  const res = await fetch(`${API_BASE}/pricing/proration-preview?${q.toString()}`);
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `预览失败: ${res.status}`); }
+  return res.json();
+}
 export async function getTransactions(limit = 50): Promise<{ transactions: any[] }> {
   const res = await fetch(`${API_BASE}/billing/transactions?limit=${limit}`);
   if (!res.ok) throw new Error(`加载流水失败: ${res.status}`);
@@ -333,10 +365,11 @@ export async function getReceipt(orderNo: string): Promise<any> {
   if (!res.ok) throw new Error(`加载收据失败: ${res.status}`);
   return res.json();
 }
-export async function checkout(kind: "plan" | "pack", id: string, cycle: "monthly" | "yearly" = "monthly"): Promise<any> {
+export type ProrationInput = { current_plan_id?: string | null; days_remaining?: number | null };
+export async function checkout(kind: "plan" | "pack", id: string, cycle: "monthly" | "yearly" = "monthly", proration?: ProrationInput): Promise<any> {
   const res = await fetch(`${API_BASE}/billing/checkout`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind, id, cycle }),
+    body: JSON.stringify({ kind, id, cycle, ...(proration || {}) }),
   });
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
@@ -357,10 +390,10 @@ export async function getPayMethods(): Promise<{ methods: Record<string, { live:
   if (!res.ok) throw new Error(`加载支付方式失败: ${res.status}`);
   return res.json();
 }
-export async function createPayOrder(kind: "plan" | "pack", id: string, method: "wechat" | "alipay", cycle: "monthly" | "yearly" = "monthly"): Promise<any> {
+export async function createPayOrder(kind: "plan" | "pack", id: string, method: "wechat" | "alipay", cycle: "monthly" | "yearly" = "monthly", proration?: ProrationInput): Promise<any> {
   const res = await fetch(`${API_BASE}/billing/pay/create`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind, id, method, cycle }),
+    body: JSON.stringify({ kind, id, method, cycle, ...(proration || {}) }),
   });
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || `下单失败: ${res.status}`); }
   return res.json();
@@ -422,7 +455,8 @@ export async function listLibrary(params: { media_type?: string; source?: string
 }
 
 /** Compose an ordered list of clips into one film (timeline editor) */
-export async function composeTimeline(clips: { url: string }[], opts: { narration_url?: string; with_audio?: boolean } = {}): Promise<{ url: string; thumbnail: string; clip_count: number }> {
+export type TimelineClip = { url: string; start?: number | null; end?: number | null; transition?: string };
+export async function composeTimeline(clips: TimelineClip[], opts: { narration_url?: string; with_audio?: boolean } = {}): Promise<{ url: string; thumbnail: string; clip_count: number }> {
   const res = await fetch(`${API_BASE}/timeline/compose`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

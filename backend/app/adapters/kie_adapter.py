@@ -363,19 +363,38 @@ class KieAdapter(BaseModelAdapter):
         kie_id = _resolve_kie_model_id(model_id)
         logger.info("[KIE] video → model=%s prompt=%r dur=%ds", kie_id, prompt, duration)
 
+        # Kling text-to-video builds a product SKU from model+resolution+duration
+        # and 500s ("Operation not found") when a `resolution` is sent that has no
+        # matching SKU. These models take only {prompt, duration, aspect_ratio}
+        # (resolution is implicit), so omit resolution for them entirely.
+        kling_t2v = kie_id.startswith("kling/") and "text-to-video" in kie_id
+
         payload = {
             "model": kie_id,
             "prompt": prompt,
-            "duration": duration,
+            "duration": str(duration),
         }
 
         # Resolution mapping
         kie_res = _size_to_resolution(resolution)
-        payload["resolution"] = kie_res
+        if not kling_t2v:
+            payload["resolution"] = kie_res
 
         # Image-to-video
         if image_url:
             payload["imageUrl"] = image_url
+
+        if kling_t2v:
+            # No resolution ladder — a single valid SKU shape.
+            result = await self._submit_and_poll(payload, media_type="video", timeout=600)
+            url = _extract_url(result, "videoUrl")
+            cover = _extract_url(result, "coverUrl") or url
+            cost = _extract_kie_cost(result, "video", duration)
+            return GenerationResult(
+                media_url=url, thumbnail_url=cover, media_type="video", model=kie_id,
+                cost=cost, duration=float(duration),
+                meta={"kie_task_id": result.get("taskId", ""), "duration": duration},
+            )
 
         # Not every model accepts every resolution token (e.g. seedance-2-fast
         # rejects 1080p). Retry down a safe ladder on "invalid resolution" (422)

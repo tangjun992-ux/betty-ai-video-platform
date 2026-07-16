@@ -3,9 +3,13 @@ FROM python:3.12-slim AS base
 WORKDIR /app
 
 # System dependencies
+# ffmpeg is required at runtime by the director/timeline compose steps and the
+# demo provider (subprocess calls to `ffmpeg`); without it those steps crash
+# with FileNotFoundError.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     curl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Python dependencies

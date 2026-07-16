@@ -36,7 +36,9 @@ import {
   Scissors,
   Expand,
   AudioLines,
-  ScanLine,
+  Package,
+  UserSquare,
+  Images,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -60,12 +62,14 @@ const toolNav = [
   { href: "/create/motion", icon: Music, labelKey: "nav.motion" },
   { href: "/create/lipsync", icon: Mic, labelKey: "nav.lipsync" },
   { href: "/create/avatar", icon: User, labelKey: "nav.avatar" },
+  { href: "/create/product-shots", icon: Package, labelKey: "nav.productShots" },
+  { href: "/create/headshots", icon: UserSquare, labelKey: "nav.headshots" },
+  { href: "/create/photo-packs", icon: Images, labelKey: "nav.photoPacks" },
   { href: "/create/timeline", icon: Clock, labelKey: "nav.timeline" },
   { href: "/create/upscale", icon: Maximize2, labelKey: "nav.upscale" },
   { href: "/create/bg-remove", icon: Scissors, labelKey: "nav.removeBg" },
   { href: "/create/extend", icon: Expand, labelKey: "nav.extend" },
   { href: "/create/audio", icon: AudioLines, labelKey: "nav.audio" },
-  { href: "/create/extract", icon: ScanLine, labelKey: "nav.extract" },
 ];
 
 // ─── HELPER: Nav Item ───────────────────────────────────

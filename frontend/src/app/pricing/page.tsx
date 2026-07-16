@@ -4,33 +4,35 @@ import { motion } from "framer-motion";
 import { Check, ChevronDown, Info, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "@/components/Toast";
 import { PayModal, type PayTarget } from "@/components/PayModal";
+import { getPricingUser, getProrationPreview, type PricingUser, type ProrationPreview } from "@/lib/api";
 
 // 前 3 档固定，对齐 yapper: Starter 1k / Personal 3k / Creator 7k(Most Popular)
+// origMonthly 为划线原价（对齐 yapper 首页划线优惠展示）
 const PLANS = [
   {
-    id: "starter", name: "Starter", priceMonthly: 9.99, priceYearly: 7.99, credits: 1000, popular: false,
+    id: "starter", name: "Starter", priceMonthly: 9.99, priceYearly: 7.99, origMonthly: 15, credits: 1000, popular: false,
     color: "from-slate-500 to-slate-400",
-    features: ["1,000 Credits / 月", "16+ 专业图片模型", "1080p 分辨率", "标准生成速度", "高级唇形同步", "个人使用许可"],
+    features: ["1,000 Credits / 月", "17+ 专业图片模型", "1080p 分辨率", "标准生成速度", "高级唇形同步", "个人使用许可"],
   },
   {
-    id: "personal", name: "Personal", priceMonthly: 24.99, priceYearly: 19.99, credits: 3000, popular: false,
+    id: "personal", name: "Personal", priceMonthly: 24.99, priceYearly: 19.99, origMonthly: 35, credits: 3000, popular: false,
     color: "from-violet-500 to-purple-500",
-    features: ["3,000 Credits / 月", "23+ 专业视频模型", "Seedance 2.0 全模态", "4K 分辨率", "高级运动控制", "图片 & 视频放大"],
+    features: ["3,000 Credits / 月", "24+ 专业视频模型", "Seedance 2.0 全模态", "4K 分辨率", "高级运动控制", "图片 & 视频放大"],
   },
   {
-    id: "creator", name: "Creator", priceMonthly: 49.99, priceYearly: 39.99, credits: 7000, popular: true,
+    id: "creator", name: "Creator", priceMonthly: 49.99, priceYearly: 39.99, origMonthly: 70, credits: 7000, popular: true,
     color: "from-brand to-accent-violet",
     features: ["7,000 Credits / 月", "全部 37 个模型", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
   },
 ];
 
-// 第 4 档 Max：credits 滑块 (对齐 yapper Max 15k→150k)
+// 第 4 档 Max：credits 滑块 (对齐 yapper Max 15k→150k，默认 22.5k = $149.99)
 const MAX_TIERS = [
   { credits: 15000, monthly: 99.99, yearly: 79.99 },
-  { credits: 22500, monthly: 139.99, yearly: 111.99 },
+  { credits: 22500, monthly: 149.99, yearly: 119.99 },
   { credits: 37500, monthly: 219.99, yearly: 175.99 },
   { credits: 75000, monthly: 399.99, yearly: 319.99 },
   { credits: 150000, monthly: 749.99, yearly: 599.99 },
@@ -60,9 +62,40 @@ export default function PricingPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [yearly, setYearly] = useState(false);
   const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
+  // Current subscription + prorated previews for mid-cycle upgrades/downgrades.
+  const [currentUser, setCurrentUser] = useState<PricingUser | null>(null);
+  const [previews, setPreviews] = useState<Record<string, ProrationPreview>>({});
 
-  const subscribe = (planId: string) =>
-    setPayTarget({ kind: "plan", id: planId, cycle: yearly ? "yearly" : "monthly" });
+  const cycle = yearly ? "yearly" : "monthly";
+  const activePlanId = currentUser?.current_plan_id ?? null;
+  const daysRemaining = currentUser?.plan_days_remaining ?? null;
+
+  const loadUser = () => getPricingUser().then(setCurrentUser).catch(() => {});
+  useEffect(() => { loadUser(); }, []);
+
+  // When the user has an active plan, fetch prorated previews for switching to
+  // each other plan on the current cycle — makes "随时按比例调整方案" concrete.
+  useEffect(() => {
+    if (!activePlanId) { setPreviews({}); return; }
+    const others = PLANS.map((p) => p.id).filter((id) => id !== activePlanId);
+    Promise.all(others.map((id) =>
+      getProrationPreview({ newPlanId: id, currentPlanId: activePlanId, daysRemaining: daysRemaining ?? 30, cycle })
+        .then((pv) => [id, pv] as const).catch(() => null)
+    )).then((rows) => {
+      const next: Record<string, ProrationPreview> = {};
+      for (const r of rows) if (r) next[r[0]] = r[1];
+      setPreviews(next);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePlanId, daysRemaining, cycle]);
+
+  const subscribe = (planId: string) => {
+    const isChange = !!activePlanId && activePlanId !== planId;
+    setPayTarget({
+      kind: "plan", id: planId, cycle,
+      ...(isChange ? { current_plan_id: activePlanId, days_remaining: daysRemaining ?? 30 } : {}),
+    });
+  };
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [maxIdx, setMaxIdx] = useState(1); // 默认 22.5k (yapper Best Value)
   const maxTier = MAX_TIERS[maxIdx];
@@ -111,12 +144,34 @@ export default function PricingPage() {
               <div className={`w-2 h-2 rounded-full bg-gradient-to-br ${plan.color}`} />
               <h3 className="text-lg font-bold text-text-accent-cyan">{plan.name}</h3>
             </div>
-            <div className="flex items-baseline gap-1 mb-1">
+            <div className="flex items-baseline gap-1.5 mb-1">
+              {!yearly && plan.origMonthly && (
+                <span className="text-lg text-text-secondary line-through decoration-1">${plan.origMonthly}</span>
+              )}
               <span className="text-3xl font-bold text-text-accent-cyan">{fmt(yearly ? plan.priceYearly : plan.priceMonthly)}</span>
               <span className="text-sm text-text-secondary">/月</span>
             </div>
             {yearly && <p className="text-xs text-brand mb-2">按年计费 ${(plan.priceYearly * 12).toFixed(0)}/年</p>}
             <p className="text-sm text-text-secondary mb-4">{plan.credits.toLocaleString()} Credits / 月</p>
+            {/* Prorated change preview when the user already has an active plan */}
+            {activePlanId === plan.id ? (
+              <div className="mb-4 px-3 py-2 rounded-lg bg-brand/[0.08] border border-brand/25 text-xs text-brand font-medium">
+                当前方案 · 剩余 {daysRemaining ?? 0} 天
+              </div>
+            ) : previews[plan.id] ? (
+              <div className={`mb-4 px-3 py-2 rounded-lg text-xs border ${previews[plan.id].is_refund
+                ? "bg-success/[0.08] border-success/25 text-success"
+                : "bg-cosmic-subtle border-cosmic-border text-text-secondary"}`}>
+                {previews[plan.id].is_refund ? (
+                  <>降级 · 按比例退回 ${Math.abs(previews[plan.id].net_charge_usd).toFixed(2)}</>
+                ) : (
+                  <>升级 · 现补差价 ${previews[plan.id].net_charge_usd.toFixed(2)}</>
+                )}
+                <span className="block text-text-tertiary mt-0.5">
+                  立即到账 +{previews[plan.id].prorated_credits.toLocaleString()} Credits（剩余 {previews[plan.id].days_remaining} 天）
+                </span>
+              </div>
+            ) : null}
             <ul className="space-y-2.5 mb-6 flex-1">
               {plan.features.map((f) => (
                 <li key={f} className="flex items-start gap-2 text-sm">
@@ -124,11 +179,14 @@ export default function PricingPage() {
                 </li>
               ))}
             </ul>
-            <button onClick={() => subscribe(plan.id)} disabled={!!busy}
+            <button onClick={() => subscribe(plan.id)} disabled={!!busy || activePlanId === plan.id}
               className={`w-full py-2.5 rounded-xl text-sm font-semibold text-center transition-all active:scale-[0.98] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 ${
               plan.popular ? "bg-brand text-white hover:bg-brand-strong shadow-button-glow" : "bg-cosmic-subtle border border-cosmic-border text-text-primary hover:bg-cosmic-border"}`}>
               {busy === plan.id && <Loader2 className="w-4 h-4 animate-spin" />}
-              {plan.popular ? "立即开始" : `选择 ${plan.name}`}
+              {activePlanId === plan.id ? "当前方案"
+                : previews[plan.id]?.is_refund ? `降级到 ${plan.name}`
+                : activePlanId ? `升级到 ${plan.name}`
+                : plan.popular ? "立即开始" : `选择 ${plan.name}`}
             </button>
           </motion.div>
         ))}
@@ -231,7 +289,7 @@ export default function PricingPage() {
       <PayModal
         target={payTarget}
         onClose={() => setPayTarget(null)}
-        onPaid={() => { toast.success("订阅成功", "积分已到账"); setTimeout(() => router.push("/billing"), 1200); }}
+        onPaid={() => { toast.success("订阅成功", "积分已到账"); loadUser(); setTimeout(() => router.push("/billing"), 1200); }}
       />
     </div>
   );
