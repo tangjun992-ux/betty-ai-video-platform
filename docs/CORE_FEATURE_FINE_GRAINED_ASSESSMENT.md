@@ -230,19 +230,21 @@ flowchart LR
 4. ~~Lipsync `send_task` 传 `model_name`；studio 提高 resolution~~  
 5. ~~`/generate/edit` 鉴权（`resolve_user_id`）+ 按 operation 扣积分~~  
 
-### P1（本迭代已修 — 详见 `P1_REFUND_SHARE_LIVE_VIDEO.md`）
+### P1（已修 — 见 `P1_REFUND_SHARE_LIVE_VIDEO.md` + `P1_COST_STORYBOARD_STRIPE.md`）
 1. ~~生成/工具失败自动退款（幂等）~~  
 2. ~~Share publish 门闩（`share_public`）~~  
 3. ~~live_video 周检进 Beat（env 门控；不计 `live_skipped` 为成功）~~  
-4. ~~edit 失败退款~~；工具成本与上游 `res.cost` 对齐看板（⏳ 下轮）  
+4. ~~edit 失败退款 + 工具成本 vs upstream 看板~~  
+5. ~~多参考图 / 真 i2i / `POST /director/storyboard`~~  
+6. ~~Stripe Starter–Pro Price 配置面（生产填真实 Price ID）~~  
 
 ### P2（体验与护城河）
-1. 多参考图 / 真正分镜 API  
-2. Motion 质量对照样片库（不对标 Act-One 话术）  
-3. SSO/OIDC 接真实 IdP；CDN 对象存储  
+1. Motion 质量对照样片库（不对标 Act-One 话术）  
+2. SSO/OIDC 接真实 IdP；CDN 对象存储  
+3. Stripe Dashboard 创建并注入真实 Price ID（环境操作）  
 
 ---
 
 ## 6. 一句话结论
 
-P0 阻断项与 P1 退款/隐私/周检已落地并通过自动化验证；综合就绪约 **~70**。Betty 仍是 **Yapper 类多模型网关工作室**——下一刀应做工具成本看板与真分镜，而非重复已完成项。
+P0 + P1（退款/分享/周检/成本看板/真分镜/Stripe 配置面）均已落地并自动化验证；综合就绪约 **~74**。Betty 仍是 **Yapper 类多模型网关工作室**——下轮勿重复已交付项，优先 Motion 样片库与生产密钥注入。

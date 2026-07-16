@@ -293,6 +293,37 @@ async def get_cost_stats(days: int = 30):
         for r in cur.fetchall()
     ]
 
+    # Image tools: charged credits (estimated) vs upstream burn (actual/res.cost)
+    cur.execute("""
+        SELECT COUNT(*) as n,
+               COALESCE(SUM(estimated_cost), 0) as charged,
+               COALESCE(SUM(actual_cost), 0) as upstream
+        FROM tasks
+        WHERE created_at >= ? AND media_type = 'image_tool'
+    """, (cutoff,))
+    tool_row = cur.fetchone()
+    tool_n, tool_charged, tool_upstream = tool_row or (0, 0, 0)
+
+    cur.execute("""
+        SELECT selected_model,
+               COUNT(*) as count,
+               COALESCE(SUM(estimated_cost), 0) as charged,
+               COALESCE(SUM(actual_cost), 0) as upstream
+        FROM tasks
+        WHERE created_at >= ? AND media_type = 'image_tool' AND status = 'completed'
+        GROUP BY selected_model
+        ORDER BY charged DESC
+    """, (cutoff,))
+    tools_by_model = [
+        {
+            "model": r[0], "count": r[1],
+            "charged_credits": round(r[2], 2),
+            "upstream_cost": round(r[3], 2),
+            "margin_credits": round(r[2] - r[3], 2),
+        }
+        for r in cur.fetchall()
+    ]
+
     conn.close()
 
     return {
@@ -306,4 +337,17 @@ async def get_cost_stats(days: int = 30):
         "by_type": by_type,
         "daily": daily,
         "recent": recent,
+        "tools": {
+            "count": int(tool_n or 0),
+            "charged_credits": round(float(tool_charged or 0), 2),
+            "upstream_cost": round(float(tool_upstream or 0), 2),
+            "margin_credits": round(float(tool_charged or 0) - float(tool_upstream or 0), 2),
+            "by_model": tools_by_model,
+            "note": "charged_credits=平台预扣；upstream_cost=适配器 res.cost（KIE 上报）",
+        },
+        "charged_vs_upstream": {
+            "charged_credits": round(float(total_est or 0), 2),
+            "upstream_cost": round(float(total_act or 0), 2),
+            "margin_credits": round(float(total_est or 0) - float(total_act or 0), 2),
+        },
     }

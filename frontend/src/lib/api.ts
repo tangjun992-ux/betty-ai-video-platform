@@ -176,6 +176,8 @@ export interface GenerateRequest {
   style?: string;
   enhance_prompt?: boolean;
   image_url?: string;
+  /** Up to 4 reference image URLs for true i2i / multi-ref edit */
+  reference_images?: string[];
   seed?: number;
 }
 
@@ -229,7 +231,8 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
       count: req.count || 1,
       style: req.style || null,
       enhance_prompt: req.enhance_prompt ?? true,
-      image_url: req.image_url || null,
+      image_url: req.image_url || (req.reference_images?.[0] ?? null),
+      reference_images: req.reference_images?.length ? req.reference_images.slice(0, 4) : null,
       ...(req.seed != null ? { seed: req.seed } : {}),
     }),
   });
@@ -626,6 +629,42 @@ export async function likeGalleryItem(itemId: string, undo = false): Promise<{ l
 export async function reportGalleryItem(itemId: string): Promise<{ reports: number; hidden: boolean; message: string }> {
   const res = await fetch(`${API_BASE}/gallery/${encodeURIComponent(itemId)}/report`, { method: "POST" });
   if (!res.ok) throw new Error(`举报失败: ${res.status}`);
+  return res.json();
+}
+
+/** True multi-shot storyboard via Director (not prompt stitching) */
+export async function runStoryboard(params: {
+  shots: Array<{ prompt: string; duration?: number; label?: string }>;
+  brief?: string;
+  ref_image_url?: string;
+  dry_run?: boolean;
+  with_compose?: boolean;
+  async_mode?: boolean;
+}): Promise<{
+  job_id?: string;
+  plan: any;
+  dry_run: boolean;
+  storyboard?: boolean;
+  shot_count?: number;
+  poll_url?: string;
+  assets?: any[];
+}> {
+  const res = await fetch(`${API_BASE}/director/storyboard`, {
+    method: "POST",
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      shots: params.shots,
+      brief: params.brief || undefined,
+      ref_image_url: params.ref_image_url || undefined,
+      dry_run: params.dry_run,
+      with_compose: params.with_compose ?? true,
+      async_mode: params.async_mode ?? true,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `分镜提交失败: ${res.status}`);
+  }
   return res.json();
 }
 

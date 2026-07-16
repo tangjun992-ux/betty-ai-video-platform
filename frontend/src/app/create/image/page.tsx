@@ -193,12 +193,16 @@ export default function CreateImagePage() {
     addRecentPrompt(prompt);
 
     try {
-      // 1) Upload first reference image when present (i2i)
-      let imageUrl: string | undefined;
+      // 1) Upload all reference images (true multi-ref i2i, max 4)
+      let referenceImages: string[] | undefined;
       if (referenceFiles.length > 0) {
         setProgressStage("上传参考图...");
-        const uploaded = await uploadImage(referenceFiles[0].file);
-        imageUrl = uploaded.url;
+        const urls: string[] = [];
+        for (const ref of referenceFiles.slice(0, 4)) {
+          const uploaded = await uploadImage(ref.file);
+          if (uploaded.url) urls.push(uploaded.url);
+        }
+        referenceImages = urls.length ? urls : undefined;
       }
 
       // 2) Submit generation
@@ -215,7 +219,8 @@ export default function CreateImagePage() {
         count,
         style: style || undefined,
         enhance_prompt: creativity !== "wild",
-        image_url: imageUrl,
+        image_url: referenceImages?.[0],
+        reference_images: referenceImages,
       });
 
       setTaskId(res.task_id);

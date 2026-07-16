@@ -90,6 +90,10 @@ class Settings(BaseSettings):
     STRIPE_SUCCESS_URL: str = os.getenv("STRIPE_SUCCESS_URL", "http://localhost:3000/billing?status=success")
     STRIPE_CANCEL_URL: str = os.getenv("STRIPE_CANCEL_URL", "http://localhost:3000/pricing?status=cancel")
     # Production price IDs (preferred over ad-hoc price_data when set).
+    STRIPE_PRICE_STARTER_MONTHLY: str = os.getenv("STRIPE_PRICE_STARTER_MONTHLY", "")
+    STRIPE_PRICE_STARTER_YEARLY: str = os.getenv("STRIPE_PRICE_STARTER_YEARLY", "")
+    STRIPE_PRICE_PERSONAL_MONTHLY: str = os.getenv("STRIPE_PRICE_PERSONAL_MONTHLY", "")
+    STRIPE_PRICE_PERSONAL_YEARLY: str = os.getenv("STRIPE_PRICE_PERSONAL_YEARLY", "")
     STRIPE_PRICE_CREATOR_MONTHLY: str = os.getenv("STRIPE_PRICE_CREATOR_MONTHLY", "")
     STRIPE_PRICE_CREATOR_YEARLY: str = os.getenv("STRIPE_PRICE_CREATOR_YEARLY", "")
     STRIPE_PRICE_PRO_MONTHLY: str = os.getenv("STRIPE_PRICE_PRO_MONTHLY", "")

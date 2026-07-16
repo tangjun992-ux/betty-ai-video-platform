@@ -119,16 +119,46 @@ def generate_image_task(
     style = params.get("style", "auto")
     count = params.get("count", 1)
     seed = params.get("seed")
+    # True i2i: multi-ref list or legacy single image_url
+    ref_images = [
+        u for u in (params.get("reference_images") or [])
+        if isinstance(u, str) and u.strip()
+    ][:4]
+    if not ref_images and params.get("image_url"):
+        ref_images = [str(params["image_url"]).strip()]
 
     self.update_state(state="PROGRESS", meta={"current_stage": "generating", "progress": 50})
     _update_task(db_task_id, progress=50)
-    _broadcast_progress(db_task_id, 50, "generating", "模型正在创作中，请稍候...")
+    stage_msg = "参考图编辑中..." if ref_images else "模型正在创作中，请稍候..."
+    _broadcast_progress(db_task_id, 50, "generating", stage_msg)
 
     started = time.monotonic()
     try:
-        result = _run_async(
-            adapter.generate_image(prompt=prompt, model_id=model, size=size, style=style, count=count, seed=seed)
-        )
+        if ref_images:
+            edit_fn = getattr(adapter, "edit_image", None)
+            if callable(edit_fn):
+                result = _run_async(
+                    edit_fn(
+                        image_urls=ref_images,
+                        prompt=prompt,
+                        image_size=size if size else "auto",
+                    )
+                )
+            else:
+                result = _run_async(
+                    adapter.generate_image(
+                        prompt=prompt, model_id=model, size=size, style=style,
+                        count=count, seed=seed, image_url=ref_images[0],
+                        image_urls=ref_images,
+                    )
+                )
+        else:
+            result = _run_async(
+                adapter.generate_image(
+                    prompt=prompt, model_id=model, size=size, style=style,
+                    count=count, seed=seed,
+                )
+            )
         # Adapt single GenerationResult to list for uniform processing
         results = [result] if not isinstance(result, list) else result
         quality_ok, quality_error = validate_generation_results(results, "image")

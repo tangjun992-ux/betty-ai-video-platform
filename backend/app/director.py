@@ -1001,4 +1001,86 @@ class DirectorExecutor:
         return {"ok": s_ok, "step": step.to_dict(), "asset": asset, "result": r}
 
 
+def build_storyboard_plan(
+    shots: list[dict],
+    *,
+    brief: str = "",
+    ref_image_url: str | None = None,
+    with_compose: bool = True,
+) -> DirectorPlan:
+    """Build a *true* multi-shot Director plan from explicit shot prompts.
+
+    Unlike Create-Video UI prompt-stitching, each shot becomes a real ``video``
+    step with its own prompt/duration, optional shared ref image, and an
+    optional compose step — executed by DirectorExecutor.
+    """
+    if not shots:
+        raise ValueError("shots required")
+    shots = shots[:8]
+    brief = (brief or "多镜头分镜创作").strip()
+    vid = _pick_model("video", [], "balanced")
+    steps: list[DirectorStep] = []
+    shot_ids: list[str] = []
+    prev: str | None = None
+    for i, raw in enumerate(shots):
+        prompt = (raw.get("prompt") or "").strip()
+        if not prompt:
+            raise ValueError(f"shot {i + 1} missing prompt")
+        duration = int(raw.get("duration") or 5)
+        duration = max(1, min(duration, 15))
+        label = (raw.get("label") or f"分镜 {i + 1}/{len(shots)}").strip()
+        sid = uuid.uuid4().hex[:8]
+        params: dict = {
+            "aspect_ratio": "16:9",
+            "duration": duration,
+            "shot": i + 1,
+            "storyboard": True,
+        }
+        if ref_image_url:
+            params["image_url"] = ref_image_url
+        step = DirectorStep(
+            id=sid,
+            action="video",
+            title=label,
+            model_id=vid["id"],
+            model_name=vid["display_name"],
+            reason=f"显式分镜 {i + 1}：独立 prompt/时长，非提示词拼接",
+            prompt=prompt,
+            depends_on=[prev] if prev else [],
+            est_credits=_credits_of(vid, "video", duration),
+            params=params,
+        )
+        steps.append(step)
+        shot_ids.append(sid)
+        prev = sid
+
+    if with_compose and len(shot_ids) >= 1:
+        s_comp = DirectorStep(
+            id=uuid.uuid4().hex[:8],
+            action="compose",
+            title="剪辑合成成片",
+            model_id="compose-engine",
+            model_name="FFmpeg Compose",
+            reason=f"将 {len(shot_ids)} 个真实分镜合成为成片",
+            prompt=brief,
+            depends_on=list(shot_ids),
+            est_credits=0,
+            params={"storyboard": True},
+        )
+        steps.append(s_comp)
+
+    total = sum(s.est_credits for s in steps)
+    summary = (
+        f"真分镜计划：{len(shot_ids)} 个独立视频步骤"
+        f"{' + 合成' if with_compose else ''}，预计 {total} 积分"
+    )
+    return DirectorPlan(
+        brief=brief,
+        intent="storyboard",
+        summary=summary,
+        steps=steps,
+        total_credits=total,
+    )
+
+
 planner = DirectorPlanner()

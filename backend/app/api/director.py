@@ -15,7 +15,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.director import planner, DirectorExecutor, DirectorPlanner, plan_from_dict, DirectorStep
+from app.director import (
+    planner, DirectorExecutor, DirectorPlanner, plan_from_dict, DirectorStep,
+    build_storyboard_plan,
+)
 from app.db import get_db
 from app.models.director_session import DirectorSession
 from app.auth import resolve_user_id
@@ -108,6 +111,84 @@ async def make_plan(req: PlanRequest):
     plan = planner.plan(req.brief, has_ref_image=req.has_ref_image,
                         duration=req.duration, ref_image_url=req.ref_image_url)
     return plan.to_dict()
+
+
+class StoryboardShot(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=2000)
+    duration: int = Field(default=5, ge=1, le=15)
+    label: Optional[str] = None
+
+
+class StoryboardRequest(BaseModel):
+    shots: list[StoryboardShot] = Field(..., min_length=1, max_length=8)
+    brief: Optional[str] = Field(default=None, description="整片简述（可选）")
+    ref_image_url: Optional[str] = Field(default=None)
+    dry_run: bool | None = Field(default=None)
+    with_compose: bool = Field(default=True, description="是否追加 ffmpeg 合成步骤")
+    async_mode: bool = Field(default=True, description="默认异步执行（真分镜耗时长）")
+
+
+@router.post("/storyboard", summary="真分镜：显式多镜头计划并执行（非提示词拼接）")
+async def run_storyboard(
+    req: StoryboardRequest,
+    request: Request,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Each shot is a real Director video step — not Create-Video prompt stitching."""
+    for sh in req.shots:
+        _moderate_brief(sh.prompt)
+    if req.brief:
+        _moderate_brief(req.brief)
+    try:
+        plan = build_storyboard_plan(
+            [s.model_dump() for s in req.shots],
+            brief=req.brief or "多镜头分镜创作",
+            ref_image_url=req.ref_image_url,
+            with_compose=req.with_compose,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    await _charge_director_plan(db, user_id, plan, team_id=resolve_team_id(request), dry_run=dry)
+
+    if not req.async_mode:
+        executor = DirectorExecutor(dry_run=dry)
+        assets, last = [], None
+        async for ev in executor.run_stream(plan):
+            last = ev
+            if ev.get("type") == "complete":
+                assets = ev.get("assets") or []
+        return {
+            "plan": plan.to_dict(), "dry_run": dry, "storyboard": True,
+            "assets": assets, "complete": last,
+        }
+
+    job_id = uuid.uuid4().hex
+    from app.tasks.director_tasks import run_director, write_progress
+    write_progress(job_id, {
+        "job_id": job_id, "status": "queued", "done": False, "dry_run": dry,
+        "user_id": user_id,
+        "session_uid": None,
+        "plan": plan.to_dict(),
+        "storyboard": True,
+        "steps": [
+            {"id": s.id, "status": "skipped" if s.skip else "pending",
+             "title": s.title, "elapsed_ms": None}
+            for s in plan.steps
+        ],
+        "assets": [], "asset_count": 0, "total_ms": None,
+    })
+    run_director.delay(job_id, plan.to_dict(), dry, None, user_id)
+    return {
+        "job_id": job_id,
+        "plan": plan.to_dict(),
+        "dry_run": dry,
+        "storyboard": True,
+        "shot_count": len(req.shots),
+        "poll_url": f"/api/v1/director/progress/{job_id}",
+    }
 
 
 class RefineRequest(BaseModel):

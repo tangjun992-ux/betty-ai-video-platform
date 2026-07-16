@@ -73,6 +73,10 @@ TEAM_SEAT_SKUS = {
 }
 
 _STRIPE_PLAN_PRICE = {
+    ("starter", "monthly"): "STRIPE_PRICE_STARTER_MONTHLY",
+    ("starter", "yearly"): "STRIPE_PRICE_STARTER_YEARLY",
+    ("personal", "monthly"): "STRIPE_PRICE_PERSONAL_MONTHLY",
+    ("personal", "yearly"): "STRIPE_PRICE_PERSONAL_YEARLY",
     ("creator", "monthly"): "STRIPE_PRICE_CREATOR_MONTHLY",
     ("creator", "yearly"): "STRIPE_PRICE_CREATOR_YEARLY",
     ("pro", "monthly"): "STRIPE_PRICE_PRO_MONTHLY",

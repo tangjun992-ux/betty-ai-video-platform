@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCreationStore } from "@/lib/stores";
-import { submitGeneration, getTaskStatus, uploadImage, type TaskResult, API_BASE } from "@/lib/api";
+import { submitGeneration, getTaskStatus, uploadImage, runStoryboard, type TaskResult, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { ResultGrid } from "@/components/ResultGrid";
@@ -228,12 +228,38 @@ export default function CreateVideoPage() {
         ? `${prompt}\n\n[多镜头序列]\n${shots.map((s, i) => `镜头${i + 1}: ${s.prompt}`).join("\n")}`
         : prompt;
 
-      // Upload first image reference for i2v when present
-      let imageUrl: string | undefined;
-      const imageRef = references.find((r) => r.type === "image" && r.file);
-      if (imageRef?.file) {
-        const uploaded = await uploadImage(imageRef.file);
-        imageUrl = uploaded.url;
+      // Upload image references (multi-ref; first used for i2v / storyboard)
+      const imageRefs = references.filter((r) => r.type === "image" && r.file).slice(0, 4);
+      const referenceImages: string[] = [];
+      for (const ref of imageRefs) {
+        const uploaded = await uploadImage(ref.file!);
+        if (uploaded.url) referenceImages.push(uploaded.url);
+      }
+      const imageUrl = referenceImages[0];
+
+      // True storyboard: each shot → Director video step (not prompt stitch)
+      if (multiShotMode && shots.length > 0) {
+        const filled = shots.filter((s) => s.prompt.trim());
+        if (!filled.length) throw new Error("请至少填写一个分镜提示词");
+        const sb = await runStoryboard({
+          brief: prompt.trim() || "多镜头分镜",
+          shots: filled.map((s, i) => ({
+            prompt: s.prompt.trim(),
+            duration: duration || 5,
+            label: s.label || `分镜 ${i + 1}`,
+          })),
+          ref_image_url: imageUrl,
+          async_mode: true,
+        });
+        if (sb.job_id) setTaskId(sb.job_id);
+        toast.success(
+          "真分镜已提交",
+          `${sb.shot_count || filled.length} 个独立镜头已进入导演队列`,
+        );
+        if (sb.job_id) {
+          router.push(`/agent?job=${encodeURIComponent(sb.job_id)}`);
+        }
+        return;
       }
 
       const body: any = {
@@ -250,6 +276,7 @@ export default function CreateVideoPage() {
         count,
         enhance_prompt: true,
         image_url: imageUrl,
+        reference_images: referenceImages.length ? referenceImages : undefined,
       };
 
       const res = await submitGeneration(body);

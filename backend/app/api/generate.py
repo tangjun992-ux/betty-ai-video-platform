@@ -36,7 +36,12 @@ class GenerateRequest(BaseModel):
     template: Optional[str] = Field(default=None, description="可选模板名称")
     webhook_url: Optional[str] = Field(default=None, description="回调地址")
     enhance_prompt: Optional[bool] = Field(default=True, description="是否自动增强提示词")
-    image_url: Optional[str] = Field(default=None, description="参考图片URL（用于图转视频）")
+    image_url: Optional[str] = Field(default=None, description="首张参考图 URL（兼容字段；等同 reference_images[0]）")
+    reference_images: Optional[list[str]] = Field(
+        default=None,
+        description="多参考图 URL 列表（最多 4 张；用于真 i2i / 多图编辑）",
+        max_length=4,
+    )
     seed: Optional[int] = Field(default=None, ge=0, le=2147483647, description="随机种子（复现同一结果；留空则随机）")
 
 
@@ -133,6 +138,14 @@ async def execute_generation(
         "prompt_was_enhanced": enhanced_prompt != req.prompt,
     }
 
+    # Normalize multi-ref: reference_images wins; image_url kept as first for compat.
+    ref_images: list[str] = []
+    if req.reference_images:
+        ref_images = [u.strip() for u in req.reference_images if u and str(u).strip()][:4]
+    elif req.image_url and str(req.image_url).strip():
+        ref_images = [str(req.image_url).strip()]
+    primary_image = ref_images[0] if ref_images else None
+
     params = {
         "resolution": req.resolution,
         "duration": req.duration,
@@ -142,8 +155,10 @@ async def execute_generation(
         "original_prompt": req.prompt if enhanced_prompt != req.prompt else None,
         "routing_info": json.dumps(routing_info),
     }
-    if req.image_url:
-        params["image_url"] = req.image_url
+    if primary_image:
+        params["image_url"] = primary_image
+    if ref_images:
+        params["reference_images"] = ref_images
 
     # Create Task record
     task = Task(
@@ -191,8 +206,10 @@ async def execute_generation(
         "style": req.style,
         "seed": seed,
     }
-    if req.image_url:
-        celery_params["image_url"] = req.image_url
+    if primary_image:
+        celery_params["image_url"] = primary_image
+    if ref_images:
+        celery_params["reference_images"] = ref_images
 
     # Dispatch appropriate Celery task — refund if broker/dispatch fails after deduct.
     try:
@@ -327,10 +344,28 @@ async def edit_image_tool(
     tool_cost = _EDIT_TOOL_COSTS[op]
     tool_task_id = str(uuid.uuid4())
     team_id = resolve_team_id(request)
+    # Persist a Task so /pricing/costs can align charged credits vs upstream res.cost.
+    tool_task = Task(
+        task_id=tool_task_id,
+        user_id=user_id,
+        prompt=(prompt or f"image-tool:{op}")[:5000],
+        media_type="image_tool",
+        quality="balanced",
+        requested_model=f"image-tool-{op}",
+        selected_model=f"image-tool-{op}",
+        parameters={"operation": op, "charged_credits": tool_cost},
+        estimated_cost=float(tool_cost),
+        status="queued",
+    )
+    db.add(tool_task)
+    await db.flush()
     if not await deduct_credits(
         db, user_id, tool_cost, tool_task_id, f"image-tool-{op}",
         team_id=team_id, description=f"Image tool {op}",
     ):
+        tool_task.status = "failed"
+        tool_task.error_message = f"积分不足，需要 {tool_cost} 积分"
+        await db.commit()
         raise HTTPException(status_code=402, detail=f"积分不足，需要 {tool_cost} 积分")
     await db.commit()
 
@@ -357,8 +392,24 @@ async def edit_image_tool(
         if demo_mode_active():
             from app.adapters.demo_provider import run_demo_image_tool
             url = await _a.to_thread(run_demo_image_tool, op, data, factor, ratio)
+            upstream = 0.0
+            tool_task.status = "completed"
+            tool_task.actual_cost = upstream
+            tool_task.results = [{"type": "image", "url": url, "model": f"demo-{op}", "demo": True}]
+            tool_task.parameters = {
+                **(tool_task.parameters if isinstance(tool_task.parameters, dict) else {}),
+                "operation": op,
+                "charged_credits": tool_cost,
+                "upstream_cost": upstream,
+                "margin_credits": tool_cost - upstream,
+                "demo": True,
+            }
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(tool_task, "parameters")
+            await db.commit()
             return {"url": url, "media_type": "image", "model": f"demo-{op}", "demo": True,
-                    "operation": op, "cost_credits": tool_cost}
+                    "operation": op, "cost_credits": tool_cost, "cost": upstream,
+                    "task_id": tool_task_id, "margin_credits": tool_cost}
 
         from app.adapters.kie_adapter import KieAdapter
         from app.services.media_store import persist_results
@@ -394,12 +445,29 @@ async def edit_image_tool(
             raise RuntimeError(f"{op} 处理失败: {last_err}")
         out = {"type": "image", "url": res.media_url, "media_url": res.media_url, "model": res.model}
         out = (await _a.to_thread(persist_results, [out]))[0]
+        upstream = float(res.cost or 0)
+        tool_task.status = "completed"
+        tool_task.actual_cost = upstream
+        tool_task.selected_model = res.model or f"image-tool-{op}"
+        tool_task.results = [out]
+        tool_task.parameters = {
+            "operation": op,
+            "charged_credits": tool_cost,
+            "upstream_cost": upstream,
+            "margin_credits": round(tool_cost - upstream, 4),
+        }
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(tool_task, "parameters")
+        await db.commit()
         return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
                 "media_type": "image", "model": res.model, "operation": op,
-                "cost": res.cost, "cost_credits": tool_cost}
+                "cost": upstream, "cost_credits": tool_cost,
+                "task_id": tool_task_id, "margin_credits": round(tool_cost - upstream, 4)}
     except HTTPException:
         raise
     except Exception as e:
+        tool_task.status = "failed"
+        tool_task.error_message = str(e)[:500]
         await refund_task_credits(db, tool_task_id, reason="image_tool_failed")
         await db.commit()
         raise HTTPException(status_code=502, detail=str(e))

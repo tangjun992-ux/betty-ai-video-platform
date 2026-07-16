@@ -57,8 +57,12 @@ MODEL_SMOKE_LIVE_VIDEO=1 python scripts/smoke_live_video_sample.py
 |------|------|
 | `STRIPE_API_KEY` | Stripe Secret Key |
 | `STRIPE_WEBHOOK_SECRET` | Webhook 签名密钥 |
-| `STRIPE_PRICE_CREATOR_MONTHLY` | Creator 月付 Price ID |
-| `STRIPE_PRICE_PRO_MONTHLY` | Pro 月付 Price ID |
+| `STRIPE_PRICE_STARTER_MONTHLY` / `_YEARLY` | Starter 套餐 Price ID |
+| `STRIPE_PRICE_PERSONAL_MONTHLY` / `_YEARLY` | Personal 套餐 Price ID |
+| `STRIPE_PRICE_CREATOR_MONTHLY` / `_YEARLY` | Creator 套餐 Price ID |
+| `STRIPE_PRICE_PRO_MONTHLY` / `_YEARLY` | Pro 套餐 Price ID |
 | `STRIPE_PRICE_TEAM_SEAT_MONTHLY` | 团队额外席位 Price ID |
 
-未配置 Price ID 时 checkout 回退到 `price_data` 动态定价（适合开发环境）。
+**订阅就绪：** 配置 API Key + 至少一个 `*_MONTHLY` Price ID → Checkout `mode=subscription`。  
+未配置对应 Price ID 时该套餐回退 `price_data` 一次性支付（开发可用；生产应配齐）。  
+状态探针：`GET /api/v1/billing/stripe-status` / `GET /api/v1/system/readiness`。

@@ -684,9 +684,23 @@ class DemoAdapter(BaseModelAdapter):
             results.append(GenerationResult(
                 media_url=url, thumbnail_url=url, media_type="image",
                 model=self._label, resolution=size, cost=2.0,
-                meta={"demo": True, "style": style},
+                meta={"demo": True, "style": style,
+                      "refs": len(kwargs.get("image_urls") or ([kwargs["image_url"]] if kwargs.get("image_url") else []))},
             ))
         return results
+
+    async def edit_image(
+        self, *, image_urls: list[str], prompt: str,
+        image_size: str = "auto", **kwargs,
+    ) -> GenerationResult:
+        """Demo i2i — renders locally; records that refs were received."""
+        size = image_size if image_size and image_size != "auto" else "1024x1024"
+        url = render_demo_image(prompt or "edit", size, "auto", index=0)
+        return GenerationResult(
+            media_url=url, thumbnail_url=url, media_type="image",
+            model=f"{self._label}-edit", resolution=size, cost=2.0,
+            meta={"demo": True, "i2i": True, "ref_count": len(image_urls or [])},
+        )
 
     async def generate_video(
         self, prompt: str, image_url: Optional[str] = None, duration: int = 5,

@@ -10,10 +10,22 @@ from app.config import settings
 
 
 PLAN_PRICE_ENVS = (
+    "STRIPE_PRICE_STARTER_MONTHLY",
+    "STRIPE_PRICE_STARTER_YEARLY",
+    "STRIPE_PRICE_PERSONAL_MONTHLY",
+    "STRIPE_PRICE_PERSONAL_YEARLY",
     "STRIPE_PRICE_CREATOR_MONTHLY",
     "STRIPE_PRICE_CREATOR_YEARLY",
     "STRIPE_PRICE_PRO_MONTHLY",
     "STRIPE_PRICE_PRO_YEARLY",
+)
+
+# Minimum monthly prices that unlock real subscription Checkout mode.
+_SUBSCRIPTION_MONTHLY_ENVS = (
+    "STRIPE_PRICE_STARTER_MONTHLY",
+    "STRIPE_PRICE_PERSONAL_MONTHLY",
+    "STRIPE_PRICE_CREATOR_MONTHLY",
+    "STRIPE_PRICE_PRO_MONTHLY",
 )
 
 
@@ -49,9 +61,7 @@ def stripe_status() -> StripeStatus:
     plan_ids = {name: bool(_env_price(name)) for name in PLAN_PRICE_ENVS}
     seat = bool(_env_price("STRIPE_PRICE_TEAM_SEAT_MONTHLY"))
     # At least one monthly plan price enables real subscription checkout.
-    sub_ready = api and any(
-        plan_ids[k] for k in ("STRIPE_PRICE_CREATOR_MONTHLY", "STRIPE_PRICE_PRO_MONTHLY")
-    )
+    sub_ready = api and any(plan_ids[k] for k in _SUBSCRIPTION_MONTHLY_ENVS)
     blockers: list[str] = []
     if settings.is_production:
         if not api:
@@ -59,7 +69,10 @@ def stripe_status() -> StripeStatus:
         if not wh:
             blockers.append("STRIPE_WEBHOOK_SECRET missing")
         if not sub_ready:
-            blockers.append("configure STRIPE_PRICE_CREATOR_MONTHLY or STRIPE_PRICE_PRO_MONTHLY for subscriptions")
+            blockers.append(
+                "configure at least one of STRIPE_PRICE_{STARTER,PERSONAL,CREATOR,PRO}_MONTHLY "
+                "for subscription Checkout"
+            )
     return StripeStatus(
         api_key_configured=api,
         webhook_secret_configured=wh,

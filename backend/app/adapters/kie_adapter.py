@@ -256,7 +256,24 @@ class KieAdapter(BaseModelAdapter):
         style: Optional[str] = None,
         **kwargs,
     ) -> GenerationResult:
-        """Generate image via KIE unified API."""
+        """Generate image via KIE unified API.
+
+        When ``image_url`` / ``image_urls`` are provided, routes to true i2i
+        via ``edit_image`` (nano-banana-edit) instead of ignoring references.
+        """
+        refs = kwargs.get("image_urls") or []
+        if isinstance(refs, str):
+            refs = [refs]
+        refs = [u for u in refs if u]
+        if kwargs.get("image_url") and not refs:
+            refs = [kwargs["image_url"]]
+        if refs:
+            return await self.edit_image(
+                image_urls=refs[:4],
+                prompt=prompt,
+                image_size=_size_to_ratio(size) if size else "auto",
+            )
+
         kie_id = _resolve_kie_model_id(model_id)
         logger.info("[KIE] image → model=%s prompt=%r", kie_id, prompt)
 

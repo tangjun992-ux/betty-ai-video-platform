@@ -48,6 +48,21 @@ async def capabilities():
                 "gated_by": "MODEL_SMOKE_LIVE_VIDEO_WEEKLY=1",
                 "note": "周检仅在显式开启时跑付费 live_video；live_skipped 不计 outframe_ok。",
             },
+            "multi_reference_i2i": {
+                "available": True,
+                "max_refs": 4,
+                "note": "GenerateRequest.reference_images → Celery edit_image 真 i2i。",
+            },
+            "storyboard": {
+                "available": True,
+                "path": "/director/storyboard",
+                "note": "显式多镜头计划（每镜独立 video step），非提示词拼接。",
+            },
+            "tool_cost_board": {
+                "available": True,
+                "path": "/pricing/costs",
+                "note": "image_tool 任务记录 charged_credits vs upstream res.cost。",
+            },
         },
     }
 
