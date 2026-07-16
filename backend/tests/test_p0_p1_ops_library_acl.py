@@ -41,15 +41,40 @@ def test_run_active_smoke_persists(monkeypatch):
 
     monkeypatch.setattr(model_smoke, "save_last_smoke", fake_save)
     monkeypatch.setattr(model_smoke, "probe_model", lambda *a, **k: {
-        "ok": True, "latency_ms": 1, "error": "", "mode": "mapping", "evidence": {"path": "x"},
+        "ok": True, "latency_ms": 1, "error": "", "mode": "mapping", "evidence": {"path": "mapping_only"},
     })
-    # Avoid real health redis writes
     with patch("app.services.model_health.model_health.record_success"), \
          patch("app.services.model_health.model_health.clear_quarantine"):
         result = model_smoke.run_active_smoke(mode="mapping")
     assert result["probed"] >= 1
+    assert result["ok"] == result["probed"]
     assert saved.get("mode") == "mapping"
     assert "ts" in saved
+
+
+def test_live_skipped_video_not_counted_as_ok(monkeypatch):
+    from app.services import model_smoke
+
+    def fake_probe(model_id, media, mode=None):
+        if "video" in media or model_id.startswith("kling") or model_id.startswith("seedance"):
+            return {
+                "ok": True, "latency_ms": 1, "error": "", "mode": "live",
+                "evidence": {"path": "live_skipped_video"},
+            }
+        return {
+            "ok": True, "latency_ms": 1, "error": "", "mode": "live",
+            "evidence": {"path": "live_image"},
+        }
+
+    monkeypatch.setattr(model_smoke, "probe_model", fake_probe)
+    monkeypatch.setattr(model_smoke, "save_last_smoke", lambda r: None)
+    with patch("app.services.model_health.model_health.record_success"), \
+         patch("app.services.model_health.model_health.clear_quarantine"):
+        r = model_smoke.run_active_smoke(mode="live")
+    assert r["outframe_skipped"] >= 1
+    assert r["ok"] == r["outframe_ok"]
+    assert len(r["skipped"]) == r["outframe_skipped"]
+    assert r["ok"] + r["outframe_skipped"] + len(r["failed"]) == r["probed"]
 
 
 def test_persist_webhook_status(tmp_path, monkeypatch):

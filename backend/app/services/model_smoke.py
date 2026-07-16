@@ -127,7 +127,11 @@ def run_active_smoke(*, mode: str | None = None) -> dict:
         "ok": 0,
         "failed": [],
         "quarantined": [],
+        "skipped": [],
         "details": [],
+        # Honest KPI: only paid gen paths count as "outframe"
+        "outframe_ok": 0,
+        "outframe_skipped": 0,
     }
 
     for m in active:
@@ -135,10 +139,20 @@ def run_active_smoke(*, mode: str | None = None) -> dict:
         media = list(m.capabilities.media_types or ["image"])
         probe = probe_model(m.id, media, mode=mode)
         results["details"].append({"model_id": m.id, **probe})
+        path = (probe.get("evidence") or {}).get("path") or ""
+        is_skip = path.startswith("live_skipped")
+        is_outframe = path in ("live_image", "live_video")
         if probe["ok"]:
             model_health.record_success(m.id, probe["latency_ms"])
             model_health.clear_quarantine(m.id)
-            results["ok"] += 1
+            if is_skip:
+                # Do NOT count as out-frame success — video was not actually generated.
+                results["skipped"].append(m.id)
+                results["outframe_skipped"] += 1
+            else:
+                results["ok"] += 1
+                if is_outframe:
+                    results["outframe_ok"] += 1
         else:
             # Mapping-only failures with demo active shouldn't quarantine production.
             quarantine = mode in ("live", "live_video") or "missing KIE map" in (probe["error"] or "")
@@ -178,8 +192,11 @@ def save_last_smoke(report: dict) -> None:
         "mode": report.get("mode"),
         "probed": report.get("probed", 0),
         "ok": report.get("ok", 0),
+        "outframe_ok": report.get("outframe_ok", 0),
+        "outframe_skipped": report.get("outframe_skipped", 0),
         "failed": list(report.get("failed") or [])[:50],
         "quarantined": list(report.get("quarantined") or [])[:50],
+        "skipped": list(report.get("skipped") or [])[:50],
         "details": [],
     }
     for d in (report.get("details") or [])[:40]:

@@ -32,7 +32,8 @@ export default function StatusPage() {
   const [circuitsOpen, setCircuitsOpen] = useState(0);
   const [lastSmoke, setLastSmoke] = useState<{
     ts?: string; mode?: string; probed?: number; ok?: number;
-    failed_count?: number; quarantined_count?: number;
+    outframe_ok?: number; outframe_skipped?: number;
+    failed_count?: number; quarantined_count?: number; skipped_count?: number;
   } | null>(null);
 
   const load = useCallback(async () => {
@@ -73,9 +74,13 @@ export default function StatusPage() {
     { name: "模型熔断", ok: circuitsOpen === 0, note: circuitsOpen ? `${circuitsOpen} 个熔断中` : "全部畅通" },
     {
       name: "上次冒烟",
-      ok: lastSmoke ? (lastSmoke.failed_count || 0) === 0 : null,
+      ok: lastSmoke
+        ? (lastSmoke.failed_count || 0) === 0 && (lastSmoke.outframe_skipped || 0) === 0
+        : null,
       note: lastSmoke
-        ? `${lastSmoke.mode || "?"} · ${lastSmoke.ok ?? 0}/${lastSmoke.probed ?? 0} 通过` +
+        ? `${lastSmoke.mode || "?"} · 通过 ${lastSmoke.ok ?? 0}/${lastSmoke.probed ?? 0}` +
+          (typeof lastSmoke.outframe_ok === "number" ? ` · 真出片 ${lastSmoke.outframe_ok}` : "") +
+          ((lastSmoke.outframe_skipped || 0) > 0 ? ` · 跳过视频 ${lastSmoke.outframe_skipped}` : "") +
           ((lastSmoke.failed_count || 0) > 0 ? ` · 失败 ${lastSmoke.failed_count}` : "") +
           (lastSmoke.ts ? ` · ${String(lastSmoke.ts).replace("T", " ").replace("Z", " UTC")}` : "")
         : "尚未运行",

@@ -85,9 +85,13 @@ def _public_last_smoke() -> dict | None:
         "mode": report.get("mode"),
         "probed": report.get("probed", 0),
         "ok": report.get("ok", 0),
+        "outframe_ok": report.get("outframe_ok", 0),
+        "outframe_skipped": report.get("outframe_skipped", 0),
         "failed_count": len(report.get("failed") or []),
         "quarantined_count": len(report.get("quarantined") or []),
+        "skipped_count": len(report.get("skipped") or []),
         "failed": list(report.get("failed") or [])[:12],
+        "skipped": list(report.get("skipped") or [])[:12],
     }
 
 
