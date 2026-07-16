@@ -137,6 +137,12 @@ class StoryboardRequest(BaseModel):
     shots: list[StoryboardShot] = Field(..., min_length=1, max_length=8)
     brief: Optional[str] = Field(default=None, description="整片简述（可选）")
     ref_image_url: Optional[str] = Field(default=None)
+    # Omni 一体：多模态参考可随真分镜共享到每个 video step
+    reference_images: Optional[list[str]] = Field(default=None, max_length=9)
+    reference_videos: Optional[list[str]] = Field(default=None, max_length=3)
+    reference_audios: Optional[list[str]] = Field(default=None, max_length=3)
+    omni: bool = Field(default=False, description="Seedance Omni 多模态模式")
+    generate_audio: bool = Field(default=False, description="Seedance 生成音轨（非 Kling 口型）")
     dry_run: bool | None = Field(default=None)
     with_compose: bool = Field(default=True, description="是否追加 ffmpeg 合成步骤")
     async_mode: bool = Field(default=True, description="默认异步执行（真分镜耗时长）")
@@ -159,6 +165,11 @@ async def run_storyboard(
             [s.model_dump() for s in req.shots],
             brief=req.brief or "多镜头分镜创作",
             ref_image_url=req.ref_image_url,
+            reference_images=req.reference_images,
+            reference_videos=req.reference_videos,
+            reference_audios=req.reference_audios,
+            omni=req.omni,
+            generate_audio=req.generate_audio,
             with_compose=req.with_compose,
         )
     except ValueError as e:

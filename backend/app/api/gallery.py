@@ -28,6 +28,16 @@ def _is_share_public(params: dict) -> bool:
     val = params.get("share_public")
     return val is True or val == 1 or str(val).lower() in ("true", "1", "yes")
 
+
+_SEED_MARKERS = frozenset({"demo_seed_v1", "demo_seed_v2"})
+
+
+def _is_seed_item(params: dict) -> bool:
+    """Curated Explore seeds (v1 legacy + v2 current)."""
+    if not isinstance(params, dict):
+        return False
+    return params.get("seed_marker") in _SEED_MARKERS
+
 _LIKES_DDL = (
     "CREATE TABLE IF NOT EXISTS gallery_likes "
     "(item_key TEXT PRIMARY KEY, likes INTEGER NOT NULL DEFAULT 0)"
@@ -216,7 +226,7 @@ async def explore_gallery(
         params = _safe_dict(t.parameters)
         author = _author_fields(user)
 
-        for r in results:
+        for ri, r in enumerate(results):
             try:
                 if not isinstance(r, dict):
                     continue
@@ -248,7 +258,7 @@ async def explore_gallery(
                     filtered_count += 1
                     continue
 
-                is_seed_item = params.get("seed_marker") == "demo_seed_v1"
+                is_seed_item = _is_seed_item(params)
                 if is_seed_item and not show_seed:
                     continue
                 # Privacy gate: completed ≠ public. Owner must publish.
@@ -256,7 +266,8 @@ async def explore_gallery(
                     continue
 
                 ts = t.completed_at or t.created_at
-                item_key = f"{t.task_id}_{len(items)}"
+                # Stable key: task_id + result index (matches seed likes/views)
+                item_key = f"{t.task_id}_{ri}"
                 if item_key in hidden:
                     continue
                 likes = likes_map.get(item_key, 0)
@@ -374,7 +385,7 @@ async def share_item(task_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="作品不存在或未公开")
     task, user = row
     params = _safe_dict(task.parameters)
-    is_seed = params.get("seed_marker") == "demo_seed_v1"
+    is_seed = _is_seed_item(params)
     if not is_seed and not _is_share_public(params):
         raise HTTPException(status_code=404, detail="作品不存在或未公开")
     results = _safe_list(task.results)

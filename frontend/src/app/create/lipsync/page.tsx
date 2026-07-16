@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Mic, Music, Upload, Info, Loader2, RefreshCw, Play, Sparkles } from "lucide-react";
@@ -24,6 +24,7 @@ export default function LipsyncPage() {
   const toast = useToast();
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>("");
+  const [remoteImageUrl, setRemoteImageUrl] = useState<string>("");
   const [text, setText] = useState("");
   const [voiceId, setVoiceId] = useState("zh-CN-XiaoxiaoNeural");
   const [submitting, setSubmitting] = useState(false);
@@ -33,6 +34,16 @@ export default function LipsyncPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioName, setAudioName] = useState("");
   const [tier, setTier] = useState<"demo" | "studio">("demo");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    const u = q.get("image_url") || q.get("ref") || "";
+    if (u && (u.startsWith("http") || u.startsWith("/"))) {
+      setRemoteImageUrl(u);
+      setImagePreview(u);
+    }
+  }, []);
 
   const handleAudioUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -50,7 +61,7 @@ export default function LipsyncPage() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!imageFile && !imagePreview) { setError("请上传一张图片"); return; }
+    if (!imageFile && !remoteImageUrl) { setError("请上传一张图片"); return; }
     if (inputMode === "text" && !text.trim()) { setError("请输入要说的文字"); return; }
     if (inputMode === "audio" && !audioFile) { setError("请上传音频文件"); return; }
 
@@ -60,6 +71,7 @@ export default function LipsyncPage() {
     try {
       const formData = new FormData();
       if (imageFile) formData.append("image_file", imageFile);
+      else if (remoteImageUrl) formData.append("image_url", remoteImageUrl);
       if (inputMode === "text") {
         formData.append("text", text);
       } else if (audioFile) {

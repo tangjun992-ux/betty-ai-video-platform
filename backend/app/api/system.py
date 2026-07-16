@@ -57,13 +57,20 @@ async def capabilities():
                 "available": configured and not demo,
                 "path": "/create/video",
                 "models": ["seedance-2.0", "seedance-2.0-fast"],
-                "inputs": ["reference_images", "reference_videos", "reference_audios", "generate_audio"],
-                "note": "Seedance Omni 多模态参考：多图/视频/音频 → KIE reference_*_urls；auto 路由到 seedance-2.0。",
+                "inputs": [
+                    "reference_images", "reference_videos", "reference_audios",
+                    "generate_audio", "storyboard_omni",
+                ],
+                "note": (
+                    "Seedance Omni 一体：多图/视频/音频参考 + generate_audio；"
+                    "真分镜 storyboard 可共享 Omni refs；"
+                    "口型仍走 /lipsync（kling avatar），非 Act-One。"
+                ),
             },
             "storyboard": {
                 "available": True,
                 "path": "/director/storyboard",
-                "note": "显式多镜头计划（每镜独立 video step），非提示词拼接。",
+                "note": "显式多镜头计划（每镜独立 video step）；可携带 Omni reference_* / generate_audio。",
             },
             "face_swap": {
                 "available": configured and not demo,

@@ -264,8 +264,8 @@ export async function getTaskStatus(taskId: string, timeoutMs = 15000): Promise<
   return res.json();
 }
 
-/** Upload an image and return the URL */
-export async function uploadImage(file: File): Promise<{ url: string }> {
+/** Upload media (image / video / audio) and return the URL */
+export async function uploadMedia(file: File): Promise<{ url: string; kind?: string; type?: string }> {
   const form = new FormData();
   form.append("file", file);
   const res = await fetch(`${API_BASE}/upload`, {
@@ -273,9 +273,15 @@ export async function uploadImage(file: File): Promise<{ url: string }> {
     body: form,
   });
   if (!res.ok) {
-    throw new Error(`上传失败: ${res.status}`);
+    const err = await res.json().catch(() => ({}));
+    throw new Error(typeof err.detail === "string" ? err.detail : `上传失败: ${res.status}`);
   }
   return res.json();
+}
+
+/** @deprecated alias — prefers uploadMedia for Omni video/audio refs */
+export async function uploadImage(file: File): Promise<{ url: string }> {
+  return uploadMedia(file);
 }
 
 /** Enhance a prompt into a richer professional version */
@@ -648,6 +654,11 @@ export async function runStoryboard(params: {
   shots: Array<{ prompt: string; duration?: number; label?: string }>;
   brief?: string;
   ref_image_url?: string;
+  reference_images?: string[];
+  reference_videos?: string[];
+  reference_audios?: string[];
+  omni?: boolean;
+  generate_audio?: boolean;
   dry_run?: boolean;
   with_compose?: boolean;
   async_mode?: boolean;
@@ -667,6 +678,11 @@ export async function runStoryboard(params: {
       shots: params.shots,
       brief: params.brief || undefined,
       ref_image_url: params.ref_image_url || undefined,
+      reference_images: params.reference_images?.length ? params.reference_images : undefined,
+      reference_videos: params.reference_videos?.length ? params.reference_videos : undefined,
+      reference_audios: params.reference_audios?.length ? params.reference_audios : undefined,
+      omni: params.omni || undefined,
+      generate_audio: params.generate_audio || undefined,
       dry_run: params.dry_run,
       with_compose: params.with_compose ?? true,
       async_mode: params.async_mode ?? true,

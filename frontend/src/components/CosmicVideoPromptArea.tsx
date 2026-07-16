@@ -60,6 +60,12 @@ interface CosmicVideoPromptAreaProps {
   styleTags?: Array<{ label: string; icon?: React.ReactNode }>;
   onStyleClick?: (tag: string) => void;
 
+  // Omni 一体控件
+  generateAudio?: boolean;
+  onGenerateAudioChange?: (v: boolean) => void;
+  postLipsync?: boolean;
+  onPostLipsyncChange?: (v: boolean) => void;
+
   className?: string;
 }
 
@@ -83,6 +89,10 @@ export function CosmicVideoPromptArea({
   onSuggestionClick,
   styleTags = [],
   onStyleClick,
+  generateAudio = false,
+  onGenerateAudioChange,
+  postLipsync = false,
+  onPostLipsyncChange,
   className,
 }: CosmicVideoPromptAreaProps) {
   const [isFocused, setIsFocused] = useState(false);
@@ -391,17 +401,70 @@ export function CosmicVideoPromptArea({
               </button>
             )}
 
-            {/* Bind Elements */}
+            {/* Bind Elements — insert @ImageN/@VideoN/@AudioN for Seedance Omni */}
             <button
+              type="button"
+              onClick={() => {
+                const imgs = references.filter((r) => r.type === "image");
+                const vids = references.filter((r) => r.type === "video");
+                const auds = references.filter((r) => r.type === "audio");
+                const tags = [
+                  ...imgs.map((_, i) => `@Image${i + 1}`),
+                  ...vids.map((_, i) => `@Video${i + 1}`),
+                  ...auds.map((_, i) => `@Audio${i + 1}`),
+                ];
+                if (!tags.length) return;
+                const prefix = tags.join(" ");
+                onPromptChange(prompt.trim() ? `${prompt.trim()}\n${prefix}` : prefix);
+              }}
+              disabled={references.length === 0}
               className={cn(
                 "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-caption transition-all duration-200",
                 "bg-cosmic-subtle border border-cosmic-border",
-                "text-text-tertiary hover:text-text-secondary hover:bg-cosmic-subtle"
+                "text-text-tertiary hover:text-text-secondary hover:bg-cosmic-subtle",
+                "disabled:opacity-30 disabled:cursor-not-allowed"
               )}
+              title="将参考素材绑定为 @ImageN / @VideoN / @AudioN"
             >
               <Link2 className="w-3 h-3" />
               <span>绑定元素</span>
             </button>
+
+            {/* Seedance generate_audio (not Kling lipsync) */}
+            {onGenerateAudioChange && (
+              <button
+                type="button"
+                onClick={() => onGenerateAudioChange(!generateAudio)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-caption transition-all duration-200",
+                  generateAudio
+                    ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-600"
+                    : "bg-cosmic-subtle border border-cosmic-border text-text-tertiary hover:text-text-secondary"
+                )}
+                title="Seedance Omni 生成音轨（非口型同步）"
+              >
+                <Music className="w-3 h-3" />
+                <span>生成音轨</span>
+              </button>
+            )}
+
+            {/* Post → Studio Lip-Sync (separate SKU) */}
+            {onPostLipsyncChange && (
+              <button
+                type="button"
+                onClick={() => onPostLipsyncChange(!postLipsync)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-caption transition-all duration-200",
+                  postLipsync
+                    ? "bg-purple-500/10 border border-purple-500/30 text-purple-500"
+                    : "bg-cosmic-subtle border border-cosmic-border text-text-tertiary hover:text-text-secondary"
+                )}
+                title="成片后跳转唇形同步（Kling avatar，≠ Act-One）"
+              >
+                <Camera className="w-3 h-3" />
+                <span>完成后唇形</span>
+              </button>
+            )}
 
             {/* Multi-Shot Mode */}
             <button
@@ -416,6 +479,14 @@ export function CosmicVideoPromptArea({
               <Film className="w-3 h-3" />
               <span>Multi-Shot</span>
             </button>
+
+            {/* Omni chip when multi-ref */}
+            {(references.filter((r) => r.type === "image").length > 1
+              || references.some((r) => r.type === "video" || r.type === "audio")) && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300">
+                Omni · 图≤9 视≤3 音≤3
+              </span>
+            )}
 
             {/* Reference upload */}
             <label

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCreationStore } from "@/lib/stores";
-import { submitGeneration, getTaskStatus, uploadImage, runStoryboard, type TaskResult, API_BASE } from "@/lib/api";
+import { submitGeneration, getTaskStatus, uploadMedia, runStoryboard, type TaskResult, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { ResultGrid } from "@/components/ResultGrid";
@@ -22,8 +22,9 @@ import { CosmicVideoParamPanel } from "@/components/CosmicVideoParamPanel";
 
 const VIDEO_MODELS_FALLBACK = [
   { id: "auto", name: "Auto", desc: "智能选择最佳模型", icon: "🤖" },
-  { id: "bytedance/seedance-2-fast", name: "Seedance 2.0 Fast", desc: "已验证 · 快速生成", icon: "⚡", badge: "Fast" },
-  { id: "seedance-2-fast", name: "Seedance Fast", desc: "已验证视频模型", icon: "🎬", badge: "Active" },
+  { id: "seedance-2.0", name: "Seedance 2.0", desc: "已验证 · Omni 多模态", icon: "🎬", badge: "Omni" },
+  { id: "seedance-2.0-fast", name: "Seedance 2.0 Fast", desc: "已验证 · 快速生成", icon: "⚡", badge: "Fast" },
+  { id: "kling-2.5-turbo", name: "Kling 2.5 Turbo", desc: "已验证视频模型", icon: "🔥", badge: "Active" },
 ];
 
 const SUGGESTIONS = [
@@ -118,6 +119,8 @@ export default function CreateVideoPage() {
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [videoModels, setVideoModels] = useState(VIDEO_MODELS_FALLBACK);
+  const [generateAudio, setGenerateAudio] = useState(false);
+  const [postLipsync, setPostLipsync] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/models/?status=active`)
@@ -247,7 +250,7 @@ export default function CreateVideoPage() {
       const referenceAudios: string[] = [];
       const pushUpload = async (ref: ReferenceMedia, into: string[]) => {
         if (ref.file) {
-          const uploaded = await uploadImage(ref.file);
+          const uploaded = await uploadMedia(ref.file);
           if (uploaded.url) into.push(uploaded.url);
         } else if (ref.preview && (ref.preview.startsWith("http") || ref.preview.startsWith("/"))) {
           into.push(ref.preview);
@@ -264,8 +267,9 @@ export default function CreateVideoPage() {
       }
       const imageUrl = referenceImages[0];
       const omni = referenceVideos.length > 0 || referenceAudios.length > 0 || referenceImages.length > 1;
+      const wantAudio = generateAudio || referenceAudios.length > 0;
 
-      // True storyboard: each shot → Director video step (not prompt stitch)
+      // True storyboard: each shot → Director video step (Omni refs shared)
       if (multiShotMode && shots.length > 0) {
         const filled = shots.filter((s) => s.prompt.trim());
         if (!filled.length) throw new Error("请至少填写一个分镜提示词");
@@ -277,11 +281,16 @@ export default function CreateVideoPage() {
             label: s.label || `分镜 ${i + 1}`,
           })),
           ref_image_url: imageUrl,
+          reference_images: referenceImages.length ? referenceImages : undefined,
+          reference_videos: referenceVideos.length ? referenceVideos : undefined,
+          reference_audios: referenceAudios.length ? referenceAudios : undefined,
+          omni: omni || undefined,
+          generate_audio: wantAudio || undefined,
           async_mode: true,
         });
         if (sb.job_id) setTaskId(sb.job_id);
         toast.success(
-          "真分镜已提交",
+          omni ? "Omni 真分镜已提交" : "真分镜已提交",
           `${sb.shot_count || filled.length} 个独立镜头已进入导演队列`,
         );
         if (sb.job_id) {
@@ -313,7 +322,7 @@ export default function CreateVideoPage() {
         reference_videos: referenceVideos.length ? referenceVideos : undefined,
         reference_audios: referenceAudios.length ? referenceAudios : undefined,
         omni: omni || undefined,
-        generate_audio: referenceAudios.length > 0 || undefined,
+        generate_audio: wantAudio || undefined,
       };
 
       const res = await submitGeneration(body);
@@ -328,6 +337,12 @@ export default function CreateVideoPage() {
         }
         toast.success("视频生成完成", `已生成 ${result.results.length} 个视频`);
         setShowPreview(true);
+        // Optional: continue to Studio Lip-Sync (Kling avatar) — not Seedance generate_audio
+        if (postLipsync && imageUrl) {
+          const q = new URLSearchParams({ image_url: imageUrl });
+          toast.info("继续唇形同步", "已带入参考图；口型走 Kling avatar，非 Act-One");
+          router.push(`/create/lipsync?${q.toString()}`);
+        }
       }
     } catch (err: any) {
       const msg = err.message || "视频生成失败，请重试";
@@ -337,7 +352,7 @@ export default function CreateVideoPage() {
       setSubmitting(false);
       setTaskId(null);
     }
-  }, [prompt, multiShotMode, shots, references, submitting, selectedModel, quality, resolution, aspectRatio, duration, count, addRecentPrompt, addResult, toast]);
+  }, [prompt, multiShotMode, shots, references, submitting, selectedModel, quality, resolution, aspectRatio, duration, count, generateAudio, postLipsync, addRecentPrompt, addResult, toast, router]);
 
   // ── Left tool actions ──
   const handleToolClick = useCallback((tool: LeftTool) => {
@@ -446,6 +461,10 @@ export default function CreateVideoPage() {
               enhancingPrompt={enhancingPrompt}
               suggestions={SUGGESTIONS}
               onSuggestionClick={setPrompt}
+              generateAudio={generateAudio}
+              onGenerateAudioChange={setGenerateAudio}
+              postLipsync={postLipsync}
+              onPostLipsyncChange={setPostLipsync}
             />
 
             {/* ── Error ── */}

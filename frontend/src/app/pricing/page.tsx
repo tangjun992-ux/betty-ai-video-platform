@@ -23,7 +23,7 @@ const PLANS = [
   {
     id: "creator", name: "Creator", priceMonthly: 49.99, priceYearly: 39.99, credits: 7000, popular: true,
     color: "from-brand to-accent-violet",
-    features: ["7,000 Credits / 月", "全部可用模型", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
+    features: ["7,000 Credits / 月", "全部已验证模型", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
   },
 ];
 
@@ -36,13 +36,14 @@ const MAX_TIERS = [
   { credits: 150000, monthly: 749.99, yearly: 599.99 },
 ];
 
+// Credits table = active shelf only（lab 品牌不标价，避免虚标货架）
 const CREDIT_USAGE = [
-  { model: "GPT Image 2 / Nano Banana", type: "图片", quality: "标准", credits: 2 },
-  { model: "FLUX 1.1 Pro / Imagen 4", type: "图片", quality: "高清 4K", credits: 5 },
+  { model: "Nano Banana 2", type: "图片", quality: "标准", credits: 2 },
+  { model: "GPT Image 2 / Nano Banana Pro", type: "图片", quality: "高清", credits: 5 },
+  { model: "Imagen 4", type: "图片", quality: "摄影级", credits: 4 },
   { model: "Seedance 2.0 Fast", type: "视频", quality: "5s 1080p", credits: 3 },
   { model: "Seedance 2.0 / Kling 2.5", type: "视频", quality: "5s 1080p", credits: 7 },
-  { model: "Veo 3.1 / Sora 2", type: "视频", quality: "5s 旗舰", credits: 12 },
-  { model: "Runway Gen-4", type: "视频", quality: "5s 4K", credits: 10 },
+  { model: "Kling 2.1 Master / Pro", type: "视频", quality: "5s 高质", credits: 8 },
 ];
 
 const FAQS = [
@@ -156,7 +157,7 @@ export default function PricingPage() {
             {MAX_TIERS.map((t) => <span key={t.credits}>{t.credits >= 1000 ? `${t.credits / 1000}k` : t.credits}</span>)}
           </div>
           <ul className="space-y-2.5 mb-6 flex-1">
-            {["全部可用模型 + 抢先体验", "最高并发 · 8K 分辨率", "无限团队座位", "API + Webhook", "专属客户经理 · SLA"].map((f) => (
+            {["全部已验证模型 + 实验室抢先体验", "最高并发 · 高分辨率", "无限团队座位", "API + Webhook", "专属客户经理 · SLA"].map((f) => (
               <li key={f} className="flex items-start gap-2 text-sm">
                 <Check className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" /><span className="text-text-secondary">{f}</span>
               </li>

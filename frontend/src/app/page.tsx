@@ -176,12 +176,12 @@ const MODELS = [
   { name: "Recraft", mono: "R", type: "抠图", provider: "Recraft" },
 ];
 
-// 真实产品事实（非虚构增长数据）— 诚实且经得起推敲
-const STATS = [
-  { value: "9+", label: "已验证 AI 模型", icon: TrendingUp },
-  { value: "4K", label: "超高清输出", icon: Award },
-  { value: "秒级", label: "图片生成 · 分钟级出片", icon: Timer },
-  { value: "一句话", label: "Agent 自动成片", icon: Bot },
+// 真实产品事实 — 模型数由 /models active_count 动态填充，禁止虚标 17+/26+
+const STATS_BASE = [
+  { key: "models", value: "9", label: "已验证 AI 模型", icon: TrendingUp },
+  { key: "res", value: "4K", label: "超高清输出", icon: Award },
+  { key: "speed", value: "秒级", label: "图片生成 · 分钟级出片", icon: Timer },
+  { key: "agent", value: "一句话", label: "Agent 自动成片", icon: Bot },
 ];
 
 const FEATURES = [
@@ -290,7 +290,7 @@ function FeatureHighlights() {
             为什么选择我们
           </h2>
           <p className="text-text-secondary max-w-xl mx-auto text-lg">
-            一个平台，聚合全球最先进的 AI 能力
+            一个平台，对接已验证可用的 AI 创作能力
           </p>
         </motion.div>
 
@@ -332,6 +332,19 @@ function FeatureHighlights() {
 // ─── Stats Section ─────────────────────────────────────
 
 function StatsSection() {
+  const [modelCount, setModelCount] = useState<string>("9");
+  useEffect(() => {
+    fetch(`${API_BASE}/models`)
+      .then((r) => r.json())
+      .then((d) => {
+        const n = Number(d?.active_count);
+        if (Number.isFinite(n) && n > 0) setModelCount(String(n));
+      })
+      .catch(() => {});
+  }, []);
+  const stats = STATS_BASE.map((s) =>
+    s.key === "models" ? { ...s, value: modelCount } : s,
+  );
   return (
     <section className="px-4 pb-20">
       <motion.div
@@ -341,7 +354,7 @@ function StatsSection() {
         viewport={{ once: true }}
         className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4"
       >
-        {STATS.map((stat, i) => (
+        {stats.map((stat) => (
           <motion.div
             key={stat.label}
             variants={fadeScaleItem}
@@ -377,7 +390,7 @@ function ToolGrid() {
             探索所有工具
           </h2>
           <p className="text-body text-text-secondary max-w-2xl mx-auto">
-            使用最先进的 AI 模型，在一个平台完成所有创作
+            使用已验证 AI 模型，在一个平台完成图文视频创作
           </p>
         </motion.div>
 

@@ -293,13 +293,35 @@ export default function GalleryPage() {
             className="columns-2 md:columns-3 xl:columns-4 2xl:columns-5 gap-3 space-y-3"
           >
             {filtered.map((item) => {
-              const remixHref = (() => {
+              const remixFallbackHref = (() => {
                 const p = encodeURIComponent(item.prompt || "");
                 const m = encodeURIComponent(item.model_used || "");
                 const u = encodeURIComponent(item.url || "");
                 const base = item.media_type === "video" ? "/create/video" : "/create/image";
                 return `${base}?prompt=${p}&model=${m}&image_url=${u}`;
               })();
+              const goRemix = async (e: React.MouseEvent) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                  const r = await fetch(`${API_BASE}/gallery/${encodeURIComponent(item.id)}/remix`, {
+                    method: "POST",
+                  });
+                  if (r.ok) {
+                    const data = await r.json();
+                    const params = new URLSearchParams();
+                    if (data.prompt) params.set("prompt", data.prompt);
+                    if (data.model) params.set("model", data.model);
+                    if (data.media_url) {
+                      params.set("image_url", data.media_url);
+                      params.set("ref", data.media_url);
+                    }
+                    window.location.href = `${data.create_path || (item.media_type === "video" ? "/create/video" : "/create/image")}?${params}`;
+                    return;
+                  }
+                } catch { /* fall through */ }
+                window.location.href = remixFallbackHref;
+              };
               return (
                 <div
                   key={item.id}
@@ -383,7 +405,8 @@ export default function GalleryPage() {
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                           </button>
                           <a
-                            href={remixHref}
+                            href={remixFallbackHref}
+                            onClick={goRemix}
                             className="inline-flex items-center gap-1 px-2.5 h-7 rounded-lg bg-white text-black text-[11px] font-semibold hover:bg-white/90 transition-colors"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
@@ -483,8 +506,28 @@ export default function GalleryPage() {
                 <div className="mt-auto flex flex-col gap-2">
                   <a
                     href={lightbox.media_type === "video"
-                      ? `/create/video?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}`
-                      : `/create/image?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}`}
+                      ? `/create/video?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}&image_url=${encodeURIComponent(lightbox.url)}`
+                      : `/create/image?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}&image_url=${encodeURIComponent(lightbox.url)}`}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      try {
+                        const r = await fetch(`${API_BASE}/gallery/${encodeURIComponent(lightbox.id)}/remix`, { method: "POST" });
+                        if (r.ok) {
+                          const data = await r.json();
+                          const params = new URLSearchParams();
+                          if (data.prompt) params.set("prompt", data.prompt);
+                          if (data.model) params.set("model", data.model);
+                          if (data.media_url) {
+                            params.set("image_url", data.media_url);
+                            params.set("ref", data.media_url);
+                          }
+                          window.location.href = `${data.create_path || "/create/image"}?${params}`;
+                          return;
+                        }
+                      } catch { /* fall through */ }
+                      const base = lightbox.media_type === "video" ? "/create/video" : "/create/image";
+                      window.location.href = `${base}?prompt=${encodeURIComponent(lightbox.prompt)}&model=${encodeURIComponent(lightbox.model_used)}&image_url=${encodeURIComponent(lightbox.url)}`;
+                    }}
                     className="btn-primary w-full"
                   >✨ 做同款</a>
                   <div className="flex gap-2">

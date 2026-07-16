@@ -850,10 +850,19 @@ class DirectorExecutor:
                 if adapter is None:
                     raise RuntimeError(f"no adapter for {model_id}")
                 if media_type == "video":
+                    sp = step.params or {}
                     return await adapter.generate_video(
-                        prompt=step.prompt, model_id=model_id, duration=duration,
+                        prompt=step.prompt,
+                        model_id=model_id,
+                        duration=duration,
                         image_url=base_image_url,
-                        resolution=_size_from_params(step.params, "1080p"))
+                        resolution=_size_from_params(step.params, "1080p"),
+                        reference_images=sp.get("reference_images") or None,
+                        reference_videos=sp.get("reference_videos") or None,
+                        reference_audios=sp.get("reference_audios") or None,
+                        omni=bool(sp.get("omni")),
+                        generate_audio=bool(sp.get("generate_audio")),
+                    )
                 generated = await adapter.generate_image(
                     prompt=step.prompt, model_id=model_id,
                     size=_size_from_params(step.params, "1024x1024"), seed=seed)
@@ -1035,19 +1044,38 @@ def build_storyboard_plan(
     *,
     brief: str = "",
     ref_image_url: str | None = None,
+    reference_images: list[str] | None = None,
+    reference_videos: list[str] | None = None,
+    reference_audios: list[str] | None = None,
+    omni: bool = False,
+    generate_audio: bool = False,
     with_compose: bool = True,
 ) -> DirectorPlan:
     """Build a *true* multi-shot Director plan from explicit shot prompts.
 
     Unlike Create-Video UI prompt-stitching, each shot becomes a real ``video``
-    step with its own prompt/duration, optional shared ref image, and an
+    step with its own prompt/duration, optional shared Omni refs, and an
     optional compose step — executed by DirectorExecutor.
     """
     if not shots:
         raise ValueError("shots required")
     shots = shots[:8]
     brief = (brief or "多镜头分镜创作").strip()
-    vid = _pick_model("video", [], "balanced")
+    ref_images = [u for u in (reference_images or []) if u][:9]
+    if ref_image_url and ref_image_url not in ref_images:
+        ref_images = [ref_image_url] + ref_images
+    ref_videos = [u for u in (reference_videos or []) if u][:3]
+    ref_audios = [u for u in (reference_audios or []) if u][:3]
+    use_omni = bool(omni) or bool(ref_videos or ref_audios or len(ref_images) > 1)
+    # Omni → prefer Seedance; otherwise balanced video pick
+    if use_omni:
+        catalog = _catalog()
+        vid = next((m for m in catalog if m["id"] == "seedance-2.0"), None)
+        if not vid:
+            vid = _pick_model("video", [], "balanced")
+            vid = {**vid, "id": "seedance-2.0", "display_name": "Seedance 2.0"}
+    else:
+        vid = _pick_model("video", [], "balanced")
     steps: list[DirectorStep] = []
     shot_ids: list[str] = []
     prev: str | None = None
@@ -1065,15 +1093,30 @@ def build_storyboard_plan(
             "shot": i + 1,
             "storyboard": True,
         }
-        if ref_image_url:
-            params["image_url"] = ref_image_url
+        primary = ref_images[0] if ref_images else ref_image_url
+        if primary:
+            params["image_url"] = primary
+        if ref_images:
+            params["reference_images"] = list(ref_images)
+        if ref_videos:
+            params["reference_videos"] = list(ref_videos)
+        if ref_audios:
+            params["reference_audios"] = list(ref_audios)
+        if use_omni:
+            params["omni"] = True
+        if generate_audio or ref_audios:
+            params["generate_audio"] = True
         step = DirectorStep(
             id=sid,
             action="video",
             title=label,
             model_id=vid["id"],
             model_name=vid["display_name"],
-            reason=f"显式分镜 {i + 1}：独立 prompt/时长，非提示词拼接",
+            reason=(
+                f"显式分镜 {i + 1}：独立 prompt/时长"
+                + (" · Omni 多模态参考" if use_omni else "")
+                + "，非提示词拼接"
+            ),
             prompt=prompt,
             depends_on=[prev] if prev else [],
             est_credits=_credits_of(vid, "video", duration),

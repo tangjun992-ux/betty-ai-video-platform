@@ -106,10 +106,38 @@ export default function FaceSwapPage() {
         ))}
       </div>
 
+      {/* Viral prompt packs — style guidance only; still needs two user photos */}
+      <div className="mb-4">
+        <p className="text-xs text-text-secondary mb-2">风格模板（写入提示词，非 InsightFace 模板库）</p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: "poster", label: "电影海报", text: "cinematic movie poster lighting, dramatic contrast, keep face identity from source, match target scene" },
+            { id: "linkedin", label: "职场证件", text: "professional headshot lighting, clean background blend, natural skin tone, keep source face identity" },
+            { id: "cyber", label: "赛博朋克", text: "cyberpunk neon rim light, futuristic atmosphere, keep source face identity on target body" },
+            { id: "comic", label: "漫画风", text: "stylized comic illustration blend, bold ink edges, keep recognizable source face on target" },
+            { id: "vintage", label: "复古胶片", text: "vintage film grain, warm color grade, soft vignette, preserve source facial features" },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setPrompt(t.text)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs border transition-colors",
+                prompt === t.text
+                  ? "border-brand bg-brand/10 text-brand"
+                  : "border-cosmic-border text-text-secondary hover:border-brand/40",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <textarea
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
-        placeholder="可选：补充融合要求（光影、妆造…）"
+        placeholder="可选：补充融合要求（光影、妆造…）或点选上方模板"
         rows={3}
         className="w-full rounded-xl bg-cosmic-subtle border border-cosmic-border px-4 py-3 text-sm mb-4 resize-none"
       />

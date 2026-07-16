@@ -44,13 +44,21 @@ overall_vs_yapper                     → ≈81
 betty_internal_readiness              → ≈90
 ```
 
+## 本轮继续交付（Omni / Explore / 诚实话术）
+
+见 `docs/OMNI_EXPLORE_HONESTY_SHIP.md`：
+
+1. Omni 一体：upload 视/音 + storyboard 共享 refs + generate_audio + 完成后唇形跳转  
+2. 货架诚实：首页 active_count、Pricing/Dashboard 去虚标  
+3. Explore：seed v2 识别 + 稳定 item_key + remix API  
+4. Face Swap：5 风格 prompt pack（薄）
+
 ## 仍待（下一刀）
 
 1. Stripe/OIDC **密钥注入**（代码已就绪）  
-2. Omni **一体 UX**（多镜 + 可选内建唇形）  
-3. 更多 KIE 模型 ID 校正后才能诚实扩 active  
-4. Face Swap **模板库** / URL-to-Viral 结构深化  
-5. Explore 飞轮密度与 Remix 漏斗  
-6. Lipsync **周检 Beat**  
+2. 更多 KIE 模型 ID 校正后才能诚实扩 active  
+3. URL-to-Viral 结构深化（TikTok/IG 合规）  
+4. Explore 内容密度继续拉升  
+5. Lipsync **周检 Beat**  
 
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 18+ 全开而无周检。

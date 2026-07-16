@@ -10,7 +10,7 @@ from app.config import settings
 from app.models.task import Task
 
 logger = logging.getLogger(__name__)
-SEED_MARKER = "demo_seed_v1"
+SEED_MARKER = "demo_seed_v2"  # keep in sync with scripts/seed_gallery.py
 
 
 async def maybe_seed_gallery_dev(db: AsyncSession) -> int:

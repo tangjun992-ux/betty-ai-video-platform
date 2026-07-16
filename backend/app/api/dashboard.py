@@ -54,16 +54,17 @@ class DashboardResponse(BaseModel):
 
 # ─── Model registry (matches frontend MODELS array) ──────
 
+# Dashboard shelf = active catalog only (no lab/beta brand inflation).
 AVAILABLE_MODELS = [
-    {"name": "Seedance 2.0", "type": "video", "provider": "ByteDance", "badge": "Pro"},
+    {"name": "Seedance 2.0", "type": "video", "provider": "ByteDance", "badge": "Omni"},
+    {"name": "Seedance 2.0 Fast", "type": "video", "provider": "ByteDance", "badge": "Fast"},
     {"name": "GPT Image 2", "type": "image", "provider": "OpenAI", "badge": "New"},
-    {"name": "Kling 3.0", "type": "video", "provider": "Kuaishou", "badge": "Hot"},
-    {"name": "Runway Gen-3", "type": "video", "provider": "Runway", "badge": None},
-    {"name": "Flux 1.1 Pro", "type": "image", "provider": "Black Forest", "badge": None},
-    {"name": "Veo 3.1", "type": "video", "provider": "Google", "badge": None},
-    {"name": "Sora 2", "type": "video", "provider": "OpenAI", "badge": None},
-    {"name": "WAN 2.1", "type": "video", "provider": "Alibaba", "badge": None},
-    {"name": "LTX-2", "type": "video", "provider": "Lightricks", "badge": "Local"},
+    {"name": "Nano Banana 2", "type": "image", "provider": "Google", "badge": None},
+    {"name": "Nano Banana 2 Pro", "type": "image", "provider": "Google", "badge": None},
+    {"name": "Imagen 4", "type": "image", "provider": "Google", "badge": None},
+    {"name": "Kling 2.5 Turbo", "type": "video", "provider": "Kuaishou", "badge": "Hot"},
+    {"name": "Kling 2.1 Master", "type": "video", "provider": "Kuaishou", "badge": None},
+    {"name": "Kling 2.1 Pro", "type": "video", "provider": "Kuaishou", "badge": None},
 ]
 
 

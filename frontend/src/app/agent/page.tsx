@@ -823,7 +823,7 @@ export default function AgentPage() {
                       <Wand2 className="w-4 h-4 text-brand ml-1.5 flex-shrink-0" />
                       <input value={refineText} onChange={(e) => setRefineText(e.target.value)}
                         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); refine(); } }}
-                        placeholder="告诉导演如何调整：把第2镜改暖 / 加个镜头 / 换成 Veo 3.1 / 竖屏…"
+                        placeholder="告诉导演如何调整：把第2镜改暖 / 加个镜头 / 换成 Seedance Fast / 竖屏…"
                         className="flex-1 bg-transparent text-sm placeholder:text-text-secondary/50 focus:outline-none" />
                       <button onClick={() => refine()} disabled={!refineText.trim() || refining}
                         className={cn("flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0",
