@@ -181,12 +181,51 @@ def check_media_url(url: str, *, caption: str = "") -> ModerationResult:
         local = check_prompt(text)
         if not local.allowed:
             return local
-        openai_hit = _openai_moderation(text)
+        openai_hit = _check_openai_moderation(text)
         if openai_hit is not None and not openai_hit.allowed:
             return openai_hit
     if not (url or "").strip():
         return ModerationResult(allowed=False, category="illegal", reason="缺少媒体地址", risk_score=0.5)
+    # Optional vision / omni-moderation when OpenAI key is present.
+    vision = _openai_vision_moderation(url)
+    if vision is not None and not vision.allowed:
+        return vision
     return ModerationResult(allowed=True)
+
+
+def _openai_vision_moderation(image_url: str) -> Optional[ModerationResult]:
+    """Best-effort image moderation via OpenAI omni-moderation (when available)."""
+    import os
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key or not image_url.startswith("http"):
+        return None
+    try:
+        import httpx
+        resp = httpx.post(
+            "https://api.openai.com/v1/moderations",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "omni-moderation-latest",
+                "input": [{"type": "image_url", "image_url": {"url": image_url}}],
+            },
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            return None
+        data = resp.json()
+        result = (data.get("results") or [{}])[0]
+        if result.get("flagged"):
+            cats = [k for k, v in (result.get("categories") or {}).items() if v]
+            return ModerationResult(
+                allowed=False,
+                category=cats[0] if cats else "policy",
+                reason="内容不合规：图像安全模型检测到潜在违规内容。",
+                risk_score=0.9,
+                categories=cats,
+            )
+    except Exception:
+        return None
+    return None
 
 
 def is_safe(text: str) -> bool:

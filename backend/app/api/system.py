@@ -61,3 +61,25 @@ async def slo_snapshot():
 async def catalog_report():
     from app.services.model_catalog import catalog_integrity
     return catalog_integrity()
+
+
+@router.get("/readiness", summary="生产就绪检查（Stripe/CDN/SSO）")
+async def readiness():
+    from app.services.stripe_ready import stripe_status
+    from app.services.storage_ready import storage_status
+    from app.api.oidc import oidc_status
+    from app.config import settings
+
+    stripe = stripe_status().public_dict()
+    storage = storage_status().public_dict()
+    sso = oidc_status()
+    ok = True
+    if settings.is_production:
+        ok = stripe["production_ok"] and storage["production_ok"]
+    return {
+        "ok": ok,
+        "env": settings.ENV,
+        "stripe": stripe,
+        "storage": storage,
+        "sso": sso,
+    }

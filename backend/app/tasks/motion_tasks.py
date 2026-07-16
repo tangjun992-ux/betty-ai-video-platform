@@ -126,7 +126,50 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
     if style and style != "realistic":
         motion_prompt = f"{motion_prompt}, {style} style"
 
-    # Try seedance adapter, then KIE unified adapter as fallback.
+    # Prefer dedicated motion API on KIE, then generic generate_video fallbacks.
+    last_error = "未知错误"
+    try:
+        from app.adapters.kie_adapter import KieAdapter
+        kie = KieAdapter()
+        if kie.is_available() and hasattr(kie, "generate_motion"):
+            _broadcast_progress(db_task_id, 45, "generating", "KIE motion 专用通道生成中...")
+            _update_task(db_task_id, progress=45, current_stage="generating")
+            result = _run_async(kie.generate_motion(
+                image_url=image_url,
+                video_url=video_url,
+                prompt=motion_prompt,
+                model_id="seedance-2.0-fast",
+                duration=int(params.get("duration", 5) or 5),
+                resolution=params.get("resolution", "720p"),
+            ))
+            rd = result.to_dict() if hasattr(result, "to_dict") else result
+            media_url = rd.get("media_url") or rd.get("url") or ""
+            if media_url:
+                output = [{
+                    "type": "video",
+                    "url": media_url,
+                    "thumbnail": rd.get("thumbnail_url", "") or image_url,
+                    "model": rd.get("model", "kie/motion"),
+                    "resolution": rd.get("resolution", "720p"),
+                    "duration": rd.get("duration", 5),
+                    "cost": rd.get("cost", 6),
+                    "op": "motion",
+                }]
+                output = persist_results(output)
+                _update_task(
+                    db_task_id, status="completed", progress=100, current_stage="completed",
+                    completed_at=datetime.now(timezone.utc),
+                    results=json.dumps(output),
+                    result_url=output[0].get("url", "") if output else "",
+                    actual_cost=rd.get("cost", 6),
+                )
+                _broadcast_progress(db_task_id, 100, "completed", "运动控制生成完成！")
+                return {"status": "completed", "results": output}
+            last_error = "KIE motion 未返回视频 URL"
+    except Exception as e:
+        last_error = str(e)
+        logger.warning("KIE generate_motion failed, falling back: %s", e)
+
     adapters_to_try = []
     try:
         from app.adapters.registry import get_adapter, _load_all_adapters
@@ -149,7 +192,6 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
     if not adapters_to_try:
         return _fail_task(db_task_id, "未找到可用的运动控制模型适配器，请检查 KIE_API_KEY 配置。")
 
-    last_error = "未知错误"
     for model_id, adapter in adapters_to_try:
         try:
             _broadcast_progress(db_task_id, 50, "generating", f"{model_id} 视频生成中...")

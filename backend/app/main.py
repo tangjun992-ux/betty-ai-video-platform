@@ -36,6 +36,12 @@ async def lifespan(app: FastAPI):
     init_sentry()
     if settings.is_production and settings.JWT_SECRET == "dev-secret-change-in-production-please!":
         raise RuntimeError("JWT_SECRET must be set to a strong value in production")
+    # Production payment + storage gates (fail fast rather than silent misconfig).
+    if settings.is_production:
+        from app.services.stripe_ready import assert_stripe_production_ready
+        from app.services.storage_ready import assert_storage_production_ready
+        assert_stripe_production_ready()
+        assert_storage_production_ready()
     print(f"[LIFESPAN] Starting AI Video Platform v{settings.APP_VERSION}")
     print(f"[LIFESPAN] Environment: {settings.ENV}")
 

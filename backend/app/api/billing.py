@@ -166,6 +166,12 @@ async def credit_packs():
     return {"packs": CREDIT_PACKS, "team_seat_skus": TEAM_SEAT_SKUS}
 
 
+@router.get("/stripe-status", summary="Stripe 生产配置状态")
+async def billing_stripe_status():
+    from app.services.stripe_ready import stripe_status
+    return stripe_status().public_dict()
+
+
 @router.get("/summary", summary="账户余额与消费概览")
 async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Depends(resolve_user_id)):
     bal = await _get_balance(db, user_id)

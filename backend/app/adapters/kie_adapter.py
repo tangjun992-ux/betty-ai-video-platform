@@ -419,6 +419,58 @@ class KieAdapter(BaseModelAdapter):
             },
         )
 
+    async def generate_motion(
+        self,
+        *,
+        image_url: str,
+        video_url: str,
+        prompt: str = "",
+        model_id: str = "seedance-2.0-fast",
+        duration: int = 5,
+        resolution: str = "720p",
+    ) -> GenerationResult:
+        """Dedicated motion-transfer path: drive a still with a reference video.
+
+        Sends both imageUrl and videoUrl to KIE. Providers that ignore videoUrl
+        still receive a strong motion prompt; callers must treat empty URLs as failure.
+        """
+        if not image_url or not video_url:
+            raise ValueError("generate_motion requires image_url and video_url")
+        kie_id = _resolve_kie_model_id(model_id)
+        motion_prompt = (prompt or "").strip() or (
+            "motion transfer: the subject performs the same body motion and timing "
+            "as the reference video, keep identity and clothing consistent"
+        )
+        logger.info("[KIE] motion → model=%s image=%s… video=%s…", kie_id, image_url[:40], video_url[:40])
+        payload = {
+            "model": kie_id,
+            "prompt": motion_prompt,
+            "duration": duration,
+            "resolution": _size_to_resolution(resolution),
+            "imageUrl": image_url,
+            "videoUrl": video_url,
+            "image_url": image_url,
+            "video_url": video_url,
+            "motion_reference": video_url,
+        }
+        result = await self._submit_and_poll(payload, media_type="video", timeout=600)
+        url = _extract_url(result, "videoUrl")
+        if not url:
+            raise RuntimeError("KIE motion returned empty video URL")
+        return GenerationResult(
+            media_url=url,
+            thumbnail_url=_extract_url(result, "coverUrl") or image_url,
+            media_type="video",
+            model=kie_id,
+            cost=_extract_kie_cost(result, "video", duration),
+            duration=float(duration),
+            meta={
+                "kie_task_id": result.get("taskId", ""),
+                "op": "motion",
+                "duration": duration,
+            },
+        )
+
     # ── file upload: local bytes → public KIE URL (3-day TTL) ─
     async def upload_public_url(self, data: bytes, *, filename: str = "upload.png",
                                 content_type: str = "image/png",
