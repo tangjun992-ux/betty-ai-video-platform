@@ -63,6 +63,18 @@ async def capabilities():
                 "path": "/pricing/costs",
                 "note": "image_tool 任务记录 charged_credits vs upstream res.cost。",
             },
+            "prompt_extractor": {
+                "available": True,
+                "path": "/generate/extract-prompt",
+                "modes": ["vision", "heuristic"],
+                "note": "对标 Yapper Prompt Extractor；有 LLM Key 走 vision，否则诚实 heuristic。",
+            },
+            "talking_avatar": {
+                "available": True,
+                "path": "/create/avatar",
+                "backend": "/lipsync",
+                "note": "Talking Avatar UI 走唇形同步链路（图+音频/文本）。",
+            },
         },
     }
 

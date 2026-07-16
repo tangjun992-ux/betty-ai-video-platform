@@ -533,6 +533,104 @@ async def analyze_prompt(req: GenerateRequest):
     )
 
 
+@router.post(
+    "/extract-prompt",
+    summary="Prompt Extractor（从图片/视频反推提示词）",
+    description="对标 Yapper Prompt Extractor：上传或提供媒体 URL，提取可复用生成提示词。",
+    dependencies=[Depends(rate_limit("extract", rpm=20, rph=120))],
+)
+async def extract_prompt(
+    request: Request,
+    media_file: Optional[UploadFile] = File(None),
+    media_url: Optional[str] = Form(None),
+    media_kind: Optional[str] = Form(None, description="image | video | auto"),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    """Yapper-parity Prompt Extractor.
+
+    Vision LLM when keyed; otherwise honest local heuristic (never pretends vision succeeded).
+    Charges 1 credit only when vision mode succeeds.
+    """
+    from app.services.prompt_extract import extract_prompt_from_media, guess_media_kind
+    from app.services.media_store import store_upload
+
+    if not media_file and not (media_url and media_url.strip()):
+        raise HTTPException(status_code=400, detail="请提供 media_file 或 media_url")
+
+    filename = ""
+    content_type = ""
+    resolved_url = (media_url or "").strip()
+    if media_file is not None:
+        raw = await media_file.read()
+        if not raw:
+            raise HTTPException(status_code=400, detail="空文件")
+        if len(raw) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="文件过大（≤25MB）")
+        filename = media_file.filename or "media.bin"
+        content_type = media_file.content_type or ""
+        try:
+            asset = await store_upload(db, filename, raw, content_type, user_id=user_id)
+            resolved_url = asset.url
+        except Exception as e:
+            # Schema drift / library insert failure — still extract from a local write.
+            logger.warning("extract-prompt store_upload fallback: %s", e)
+            await db.rollback()
+            import os
+            from pathlib import Path
+            from app.config import settings
+            ext = os.path.splitext(filename)[1] or ".bin"
+            dest_dir = Path(settings.STORAGE_LOCAL_PATH or "media") / "uploads"
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / f"extract-{uuid.uuid4().hex[:12]}{ext}"
+            dest.write_bytes(raw)
+            resolved_url = f"/api/v1/media/uploads/{dest.name}"
+
+    kind = (media_kind or "").strip().lower()
+    if kind in ("", "auto"):
+        kind = guess_media_kind(resolved_url, content_type, filename)
+    if kind not in ("image", "video"):
+        raise HTTPException(status_code=400, detail="media_kind 须为 image | video | auto")
+
+    result = await extract_prompt_from_media(
+        resolved_url,
+        media_kind=kind,
+        filename=filename,
+        content_type=content_type,
+        prefer_vision=True,
+    )
+    charged = 0
+    if result.get("mode") == "vision":
+        extract_id = f"extract-{uuid.uuid4()}"
+        try:
+            ok = await deduct_credits(
+                db,
+                user_id,
+                1,
+                extract_id,
+                "prompt-extract",
+                team_id=resolve_team_id(request),
+                description="prompt_extract_vision",
+            )
+            if ok:
+                charged = 1
+                await db.commit()
+            else:
+                await db.rollback()
+        except Exception as e:
+            # Extraction still returns; metering soft-fails in low-credit edge cases
+            logger.warning("extract-prompt credit charge skipped: %s", e)
+            await db.rollback()
+
+    result["charged_credits"] = charged
+    result["create_links"] = {
+        "image": "/create/image",
+        "video": "/create/video",
+        "agent": "/agent",
+    }
+    return result
+
+
 def _check_content_safety(prompt: str) -> str | None:
     """Fast keyword-based content safety check. Returns error message or None."""
     prompt_lower = prompt.lower()

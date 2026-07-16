@@ -116,6 +116,7 @@ export default function CreateVideoPage() {
   const [enhancingPrompt, setEnhancingPrompt] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [videoModels, setVideoModels] = useState(VIDEO_MODELS_FALLBACK);
 
   useEffect(() => {
@@ -325,14 +326,21 @@ export default function CreateVideoPage() {
   return (
     <div className="flex h-[calc(100vh-4rem)]">
       {/* ═══ LEFT: Tools Panel ═══ */}
-      <div className="hidden lg:flex flex-col w-14 xl:w-48 border-r border-cosmic-border bg-cosmic-surface overflow-y-auto flex-shrink-0">
+      <div
+        className={cn(
+          "hidden lg:flex flex-col border-r border-cosmic-border bg-cosmic-surface overflow-y-auto flex-shrink-0 transition-all",
+          leftCollapsed ? "w-14" : "w-14 xl:w-48"
+        )}
+      >
         {/* Collapse toggle */}
         <button
-          onClick={() => {}} // TODO: implement collapse
+          type="button"
+          onClick={() => setLeftCollapsed((v) => !v)}
           className="hidden xl:flex items-center gap-2 px-4 py-3 text-caption text-text-tertiary/60 hover:text-text-tertiary transition-colors"
+          aria-label={leftCollapsed ? "展开工具栏" : "收起工具栏"}
         >
-          <ChevronLeft className="w-3 h-3" />
-          <span>收起</span>
+          <ChevronLeft className={cn("w-3 h-3 transition-transform", leftCollapsed && "rotate-180")} />
+          {!leftCollapsed && <span>收起</span>}
         </button>
 
         {/* Tools */}

@@ -247,4 +247,4 @@ flowchart LR
 
 ## 6. 一句话结论
 
-P0 + P1 + P2（样片库/OIDC 加固/Stripe bootstrap）均已落地并自动化验证；综合就绪约 **~76**。Betty 仍是 **Yapper 类多模型网关工作室**——下轮勿重复已交付项，优先 **真实密钥注入**（Stripe/OIDC/CDN）与 live_video 周检。
+P0 + P1 + P2 + **Yapper 核心全测**（Extractor/Avatar/Tools 真路由）已落地；综合就绪约 **~78**。详见 `docs/YAPPER_CORE_PARITY.md`。Betty 仍是 **Yapper 类多模型网关工作室**——下轮勿重复已交付项，优先 **live_video 周检** 与 **真实密钥注入**。
