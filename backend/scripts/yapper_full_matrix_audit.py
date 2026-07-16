@@ -56,13 +56,13 @@ YAPPER_MATRIX = [
     {"id": "tools_hub", "yapper": "All Tools hub", "fe": "frontend/src/app/tools/page.tsx", "apis": ["/api/v1/system/capabilities"]},
     {"id": "library", "yapper": "My Library / Assets", "fe": "frontend/src/app/library/page.tsx", "apis": ["/api/v1/library/"]},
     # Yapper differentiators often missing or thin on Betty
-    {"id": "product_shots", "yapper": "Stunning Product Shots (dedicated)", "fe": "frontend/src/app/create/image/page.tsx", "apis": [], "gap_hint": "no dedicated product-shot workflow app"},
-    {"id": "headshots", "yapper": "Professional Headshots (dedicated)", "fe": "frontend/src/app/create/image/page.tsx", "apis": [], "gap_hint": "no dedicated headshot pack app"},
-    {"id": "photo_packs", "yapper": "AI Photo Packs", "fe": None, "apis": [], "gap_hint": "missing dedicated photo-pack surface"},
-    {"id": "face_swap", "yapper": "AI Face Swapping / viral templates", "fe": None, "apis": [], "gap_hint": "no face-swap SKU/route"},
-    {"id": "url_viral", "yapper": "URL-to-Viral (TikTok/IG reel → prompt)", "fe": "frontend/src/app/create/extract/page.tsx", "apis": ["/api/v1/generate/extract-prompt"], "gap_hint": "extractor accepts URL form but not social-page scrape"},
-    {"id": "motion_voice", "yapper": "Motion + Voice Changer", "fe": "frontend/src/app/create/motion/page.tsx", "apis": [], "gap_hint": "no voice-changer on motion path"},
-    {"id": "seedance_omni", "yapper": "Seedance 2.0 Omni multi-modal / multi-shot", "fe": "frontend/src/app/create/video/page.tsx", "apis": [], "gap_hint": "Seedance active but Omni productization thin"},
+    {"id": "product_shots", "yapper": "Stunning Product Shots (dedicated)", "fe": "frontend/src/app/create/product/page.tsx", "apis": []},
+    {"id": "headshots", "yapper": "Professional Headshots (dedicated)", "fe": "frontend/src/app/create/headshots/page.tsx", "apis": []},
+    {"id": "photo_packs", "yapper": "AI Photo Packs", "fe": "frontend/src/app/create/photo-packs/page.tsx", "apis": []},
+    {"id": "face_swap", "yapper": "AI Face Swapping / viral templates", "fe": None, "apis": [], "gap_hint": "no verified upstream SKU — capabilities.face_swap=unavailable"},
+    {"id": "url_viral", "yapper": "URL-to-Viral (TikTok/IG reel → prompt)", "fe": "frontend/src/app/create/extract/page.tsx", "apis": ["/api/v1/generate/extract-prompt"], "gap_hint": "social page URLs honestly rejected; direct media URL ok"},
+    {"id": "motion_voice", "yapper": "Motion + Voice Changer", "fe": "frontend/src/app/create/motion/page.tsx", "apis": ["/api/v1/motion"], "gap_hint": "voice_text TTS旁白有；非实时变声引擎"},
+    {"id": "seedance_omni", "yapper": "Seedance 2.0 Omni multi-modal / multi-shot", "fe": "frontend/src/app/create/video/page.tsx", "apis": ["/api/v1/generate/"]},
 ]
 
 
@@ -225,13 +225,12 @@ def run_contract(client, headers: dict) -> list[dict]:
     # Pricing — Yapper Max vs Betty pro id mismatch
     plans = client.get("/api/v1/pricing/plans")
     pids = {p["id"] for p in (plans.json() or {}).get("plans", [])} if plans.status_code == 200 else set()
-    checks.append(_row("api:pricing_four_tiers", {"starter", "personal", "creator", "pro"} <= pids, str(sorted(pids))))
+    checks.append(_row("api:pricing_four_tiers", {"starter", "personal", "creator", "max"} <= pids, str(sorted(pids))))
     fe_pricing = (REPO / "frontend/src/app/pricing/page.tsx").read_text(encoding="utf-8") if _fe_exists("frontend/src/app/pricing/page.tsx") else ""
     checks.append(_row(
-        "pricing:fe_max_vs_api_pro",
-        "Max" in fe_pricing and "pro" in pids,
-        "FE markets Max; API plan id remains 'pro' — naming drift vs Yapper Max",
-        gap=True,
+        "pricing:fe_max_aligned",
+        "Max" in fe_pricing and "max" in pids and 'subscribe("max")' in fe_pricing,
+        "FE Max ↔ API id=max aligned (pro kept as alias)",
     ))
 
     # Library / sessions / developer / readiness
@@ -390,7 +389,7 @@ def score_gaps(checks: list[dict], live: list[dict], meta: dict) -> dict:
     # simpler: all checks that are meant to pass
     must = [c for c in checks if c["name"] not in ("models:shelf_vs_yapper",) and not c.get("expected_missing")]
     # gap-flagged ops may fail
-    soft_fail_ok = {"ops:stripe_configured", "ops:oidc_configured", "pricing:fe_max_vs_api_pro", "api:extractor_social_url_honest", "fe:tools_motion_copy"}
+    soft_fail_ok = {"ops:stripe_configured", "ops:oidc_configured", "api:extractor_social_url_honest"}
     hard = [c for c in must if c["name"] not in soft_fail_ok]
     hard_ok = sum(1 for c in hard if c["ok"])
     live_hard = [c for c in live if not c.get("skipped") and c["name"] != "live:skipped"]
@@ -583,12 +582,6 @@ def main() -> int:
 
     hard = [c for c in checks if c["name"] not in (
         "models:shelf_vs_yapper", "ops:stripe_configured", "ops:oidc_configured",
-        "pricing:fe_max_vs_api_pro", "fe:tools_motion_copy",
-    ) and not c.get("expected_missing")]
-    # fe:tools_motion_copy is a real fixable bug — include in hard
-    hard = [c for c in checks if c["name"] not in (
-        "models:shelf_vs_yapper", "ops:stripe_configured", "ops:oidc_configured",
-        "pricing:fe_max_vs_api_pro",
     ) and not c.get("expected_missing")]
     contract_pass = all(c["ok"] for c in hard)
     live_hard = [x for x in live if not x.get("skipped") and x["name"] != "live:skipped"]

@@ -81,14 +81,27 @@ def generate_video_task(
     _broadcast_progress(db_task_id, 5, "routing", "正在分析视频提示词...")
 
     image_url = params.get("image_url")
-    if image_url:
+    ref_images = [u for u in (params.get("reference_images") or []) if u]
+    if image_url and image_url not in ref_images:
+        ref_images = [image_url] + ref_images
+    ref_videos = [u for u in (params.get("reference_videos") or []) if u][:3]
+    ref_audios = [u for u in (params.get("reference_audios") or []) if u][:3]
+    omni = bool(params.get("omni")) or bool(ref_videos or ref_audios or len(ref_images) > 1)
+    if image_url or ref_images or ref_videos or ref_audios:
         self.update_state(state="PROGRESS", meta={"current_stage": "loading_reference", "progress": 15})
         _update_task(db_task_id, progress=15, current_stage="loading_reference")
-        _broadcast_progress(db_task_id, 15, "loading_reference", "正在加载参考图片...")
+        msg = "正在加载 Omni 多模态参考..." if omni else "正在加载参考图片..."
+        _broadcast_progress(db_task_id, 15, "loading_reference", msg)
+
+    # Omni productization: prefer Seedance when multimodal refs present
+    if omni and "seedance" not in (model or "").lower():
+        logger.info("Omni refs present — routing %s → seedance-2.0", model)
+        model = "seedance-2.0"
+        _update_task(db_task_id, selected_model=model, current_stage="omni_route")
 
     self.update_state(state="PROGRESS", meta={"current_stage": "generating", "progress": 30})
     _update_task(db_task_id, progress=30, current_stage="generating")
-    _broadcast_progress(db_task_id, 30, "generating", "视频模型已启动，开始生成...")
+    _broadcast_progress(db_task_id, 30, "generating", "Seedance Omni 生成中..." if omni else "视频模型已启动，开始生成...")
 
     # Demo mode: render locally when no provider key is configured.
     from app.adapters.demo_provider import demo_mode_active, DemoAdapter
@@ -119,8 +132,16 @@ def generate_video_task(
     try:
         result = _run_async(
             adapter.generate_video(
-                prompt=prompt, model_id=model, image_url=image_url,
-                duration=duration, resolution=resolution,
+                prompt=prompt,
+                model_id=model,
+                image_url=image_url or (ref_images[0] if ref_images else None),
+                duration=duration,
+                resolution=resolution,
+                reference_images=ref_images,
+                reference_videos=ref_videos,
+                reference_audios=ref_audios,
+                omni=omni,
+                generate_audio=bool(params.get("generate_audio")),
             )
         )
         quality_ok, quality_error = validate_generation_results(result, "video")

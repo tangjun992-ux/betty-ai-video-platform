@@ -18,6 +18,8 @@ PLAN_PRICE_ENVS = (
     "STRIPE_PRICE_CREATOR_YEARLY",
     "STRIPE_PRICE_PRO_MONTHLY",
     "STRIPE_PRICE_PRO_YEARLY",
+    "STRIPE_PRICE_MAX_MONTHLY",
+    "STRIPE_PRICE_MAX_YEARLY",
 )
 
 # Minimum monthly prices that unlock real subscription Checkout mode.
@@ -25,7 +27,8 @@ _SUBSCRIPTION_MONTHLY_ENVS = (
     "STRIPE_PRICE_STARTER_MONTHLY",
     "STRIPE_PRICE_PERSONAL_MONTHLY",
     "STRIPE_PRICE_CREATOR_MONTHLY",
-    "STRIPE_PRICE_PRO_MONTHLY",
+    "STRIPE_PRICE_MAX_MONTHLY",
+    "STRIPE_PRICE_PRO_MONTHLY",  # legacy alias of Max
 )
 
 
@@ -70,7 +73,7 @@ def stripe_status() -> StripeStatus:
             blockers.append("STRIPE_WEBHOOK_SECRET missing")
         if not sub_ready:
             blockers.append(
-                "configure at least one of STRIPE_PRICE_{STARTER,PERSONAL,CREATOR,PRO}_MONTHLY "
+                "configure at least one of STRIPE_PRICE_{STARTER,PERSONAL,CREATOR,MAX|PRO}_MONTHLY "
                 "for subscription Checkout"
             )
     return StripeStatus(

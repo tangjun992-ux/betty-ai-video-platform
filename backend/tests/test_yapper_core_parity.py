@@ -174,7 +174,7 @@ def test_pricing_plans_four_tiers(client: TestClient):
     assert r.status_code == 200
     plans = r.json()["plans"]
     ids = {p["id"] for p in plans}
-    for need in ("starter", "personal", "creator", "pro"):
+    for need in ("starter", "personal", "creator", "max"):
         assert need in ids
 
 

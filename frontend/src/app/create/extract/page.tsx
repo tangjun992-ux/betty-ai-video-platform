@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 export default function ExtractPage() {
   const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
+  const [mediaUrl, setMediaUrl] = useState("");
   const [preview, setPreview] = useState("");
   const [previewKind, setPreviewKind] = useState<"image" | "video">("image");
   const [loading, setLoading] = useState(false);
@@ -40,15 +41,20 @@ export default function ExtractPage() {
   }, []);
 
   const run = async () => {
-    if (!file) {
-      toast.error("请上传媒体", "支持图片或短视频");
+    const url = mediaUrl.trim();
+    if (!file && !url) {
+      toast.error("请上传媒体或粘贴直链", "不支持 TikTok/IG 页面链接（诚实缺口）");
       return;
     }
     setLoading(true);
     setResult(null);
     try {
       const fd = new FormData();
-      fd.append("media_file", file);
+      if (file) {
+        fd.append("media_file", file);
+      } else {
+        fd.append("media_url", url);
+      }
       fd.append("media_kind", "auto");
       const res = await fetch(`${API_BASE}/generate/extract-prompt`, {
         method: "POST",
@@ -56,7 +62,8 @@ export default function ExtractPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "提取失败");
+        const detail = typeof err.detail === "string" ? err.detail : err.detail?.msg || "提取失败";
+        throw new Error(detail);
       }
       const data = await res.json();
       setResult(data);
@@ -115,13 +122,30 @@ export default function ExtractPage() {
             </div>
           </label>
 
+          <label className="block">
+            <span className="text-sm font-medium mb-2 block">或粘贴直链 URL</span>
+            <input
+              type="url"
+              value={mediaUrl}
+              onChange={(e) => {
+                setMediaUrl(e.target.value);
+                if (e.target.value.trim()) setFile(null);
+              }}
+              placeholder="https://…（图片/视频直链，非社媒页面）"
+              className="input-primary w-full"
+            />
+            <p className="text-[11px] text-text-tertiary mt-1.5">
+              TikTok / Instagram / YouTube 页面链接会被拒绝——URL-to-Viral 尚未实现，不假装可解析。
+            </p>
+          </label>
+
           <button
             type="button"
             onClick={run}
-            disabled={loading || !file}
+            disabled={loading || (!file && !mediaUrl.trim())}
             className={cn(
               "w-full h-11 rounded-xl font-semibold inline-flex items-center justify-center gap-2 transition-colors",
-              loading || !file
+              loading || (!file && !mediaUrl.trim())
                 ? "bg-white/10 text-text-secondary cursor-not-allowed"
                 : "bg-white text-black hover:bg-white/90"
             )}

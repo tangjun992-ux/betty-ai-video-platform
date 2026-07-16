@@ -27,7 +27,7 @@ from app.models.team_balance import TeamBalance
 logger = logging.getLogger(__name__)
 
 # Creator/Pro subscriptions auto-fund the owner's primary team pool.
-TEAM_SUBSCRIPTION_PLANS = frozenset({"creator", "pro"})
+TEAM_SUBSCRIPTION_PLANS = frozenset({"creator", "pro", "max"})
 
 
 def resolve_team_id(request: Request | None) -> Optional[str]:

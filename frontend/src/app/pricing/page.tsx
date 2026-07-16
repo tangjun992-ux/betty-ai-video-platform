@@ -162,9 +162,9 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <button onClick={() => subscribe("pro")} disabled={!!busy}
+          <button onClick={() => subscribe("max")} disabled={!!busy}
             className="w-full py-2.5 rounded-xl text-sm font-semibold text-center bg-amber-500/[0.06] border border-amber-500/30 text-amber-600 hover:bg-amber-500/[0.12] transition-all active:scale-[0.98] inline-flex items-center justify-center gap-1.5 disabled:opacity-60">
-            {busy === "pro" && <Loader2 className="w-4 h-4 animate-spin" />}
+            {busy === "max" && <Loader2 className="w-4 h-4 animate-spin" />}
             选择 Max
           </button>
         </motion.div>

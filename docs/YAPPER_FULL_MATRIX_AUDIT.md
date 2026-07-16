@@ -14,10 +14,10 @@ Betty **工作室工具面契约已对齐 Yapper 主路径**（硬契约 **62/62
 
 | 分数（诚实） | 值 | 含义 |
 |--------------|----|------|
-| 工具面契约 | **100%** | FE/API/OpenAPI 主路径可测项 |
-| Live 探针（本轮） | **4/4** | 图2 + 视2 + Motion native |
-| Betty 内部就绪（约） | **~92** | 契约+live+有限货架 |
-| **对 Yapper 产品对标（约）** | **~73** | 货架/收款/社区拖累 |
+| 工具面契约 | **100%**（64 hard） | FE/API/OpenAPI + Omni/Max/Packs |
+| Live 探针 | **图/视/Motion/Omni** | 含 Omni live 出片 |
+| Betty 内部就绪（约） | **~93** | Omni+定价+Explore 密度↑ |
+| **对 Yapper 产品对标（约）** | **~76** | 货架/收款/FaceSwap 仍拖累 |
 
 机器可读报告：`backend/fixtures/audit/yapper_full_matrix_latest.json`  
 复现：
@@ -138,6 +138,8 @@ components:
 6. **Face Swap / Photo Packs** 选一个病毒入口做深，避免再铺空壳页。
 
 ---
+
+完整迭代细节见 `docs/P0_P1_P2_YAPPER_ITERATION.md`。
 
 ## 6. 与旧文档关系
 

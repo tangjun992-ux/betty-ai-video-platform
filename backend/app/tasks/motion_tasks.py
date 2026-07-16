@@ -146,6 +146,28 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
                     "cost": rd.get("cost", 6),
                     "op": "motion",
                 }]
+                # Optional TTS narration (Motion + Voice light parity — not a voice changer).
+                voice_text = (params.get("voice_text") or "").strip()
+                if voice_text:
+                    try:
+                        _broadcast_progress(db_task_id, 90, "voice", "正在生成旁白音频...")
+                        tts = _run_async(kie.generate_speech(
+                            voice_text,
+                            voice=params.get("voice") or "Rachel",
+                        ))
+                        tts_d = tts.to_dict() if hasattr(tts, "to_dict") else tts
+                        audio_url = tts_d.get("media_url") or tts_d.get("url") or ""
+                        if audio_url:
+                            output.append({
+                                "type": "audio",
+                                "url": audio_url,
+                                "model": tts_d.get("model", "tts"),
+                                "cost": tts_d.get("cost", 0),
+                                "op": "motion_voice",
+                                "note": "旁白 TTS；非实时变声引擎",
+                            })
+                    except Exception as ve:
+                        logger.warning("motion voice TTS failed (non-fatal): %s", ve)
                 output = persist_results(output)
                 _update_task(
                     db_task_id, status="completed", progress=100, current_stage="completed",

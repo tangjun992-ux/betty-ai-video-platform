@@ -176,8 +176,15 @@ export interface GenerateRequest {
   style?: string;
   enhance_prompt?: boolean;
   image_url?: string;
-  /** Up to 4 reference image URLs for true i2i / multi-ref edit */
+  /** Up to 9 reference image URLs (i2i≤4; Seedance Omni≤9) */
   reference_images?: string[];
+  /** Seedance Omni reference videos (≤3) */
+  reference_videos?: string[];
+  /** Seedance Omni reference audios (≤3) */
+  reference_audios?: string[];
+  /** Force Seedance Omni multimodal mode */
+  omni?: boolean;
+  generate_audio?: boolean;
   seed?: number;
 }
 
@@ -232,7 +239,11 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
       style: req.style || null,
       enhance_prompt: req.enhance_prompt ?? true,
       image_url: req.image_url || (req.reference_images?.[0] ?? null),
-      reference_images: req.reference_images?.length ? req.reference_images.slice(0, 4) : null,
+      reference_images: req.reference_images?.length ? req.reference_images.slice(0, 9) : null,
+      reference_videos: req.reference_videos?.length ? req.reference_videos.slice(0, 3) : null,
+      reference_audios: req.reference_audios?.length ? req.reference_audios.slice(0, 3) : null,
+      omni: req.omni ?? null,
+      generate_audio: req.generate_audio ?? false,
       ...(req.seed != null ? { seed: req.seed } : {}),
     }),
   });

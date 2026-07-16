@@ -15,7 +15,8 @@ PLAN_ROLE_MAP: dict[str, str] = {
     "starter": "free",
     "personal": "personal",
     "creator": "creator",
-    "pro": "pro",
+    "pro": "pro",  # legacy plan id
+    "max": "pro",  # Yapper Max → same entitlements as former Pro
 }
 
 ROLE_RANK: dict[str, int] = {

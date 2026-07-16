@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     STRIPE_PRICE_CREATOR_YEARLY: str = os.getenv("STRIPE_PRICE_CREATOR_YEARLY", "")
     STRIPE_PRICE_PRO_MONTHLY: str = os.getenv("STRIPE_PRICE_PRO_MONTHLY", "")
     STRIPE_PRICE_PRO_YEARLY: str = os.getenv("STRIPE_PRICE_PRO_YEARLY", "")
+    # Yapper-aligned Max tier (falls back to PRO envs when empty).
+    STRIPE_PRICE_MAX_MONTHLY: str = os.getenv("STRIPE_PRICE_MAX_MONTHLY", "") or os.getenv("STRIPE_PRICE_PRO_MONTHLY", "")
+    STRIPE_PRICE_MAX_YEARLY: str = os.getenv("STRIPE_PRICE_MAX_YEARLY", "") or os.getenv("STRIPE_PRICE_PRO_YEARLY", "")
     STRIPE_PRICE_TEAM_SEAT_MONTHLY: str = os.getenv("STRIPE_PRICE_TEAM_SEAT_MONTHLY", "")
 
     # Observability

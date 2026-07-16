@@ -197,7 +197,7 @@ def test_stripe_plan_price_map_covers_all_plans():
     from app.api.billing import _STRIPE_PLAN_PRICE, _stripe_line_item, CheckoutRequest
     from app.config import settings
 
-    for plan in ("starter", "personal", "creator", "pro"):
+    for plan in ("starter", "personal", "creator", "max"):
         for cycle in ("monthly", "yearly"):
             assert (plan, cycle) in _STRIPE_PLAN_PRICE
 

@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "url": "https://tempfile.aiquickdraw.com/seedance/1784208510293-m8zfwo29lmb.mp4",
+  "meta": {
+    "kie_task_id": "1c0b2d15411239534a3ec3a27dd1d11c",
+    "resolution": "720p",
+    "duration": 5,
+    "omni": true,
+    "reference_image_count": 1,
+    "reference_video_count": 0,
+    "reference_audio_count": 0
+  },
+  "model": "bytedance/seedance-2-fast"
+}

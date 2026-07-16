@@ -109,7 +109,7 @@ def main() -> int:
     checks.append(_check("gallery_list", gal.status_code == 200 and "items" in (gal.json() or {})))
     plans = c.get("/api/v1/pricing/plans")
     pids = {p["id"] for p in (plans.json() or {}).get("plans", [])} if plans.status_code == 200 else set()
-    checks.append(_check("pricing_four_tiers", {"starter", "personal", "creator", "pro"} <= pids, str(sorted(pids))))
+    checks.append(_check("pricing_four_tiers", {"starter", "personal", "creator", "max"} <= pids, str(sorted(pids))))
     lib = c.get("/api/v1/library/", headers=h)
     checks.append(_check("library_list", lib.status_code == 200, str(lib.status_code)))
     ready = c.get("/api/v1/system/readiness")

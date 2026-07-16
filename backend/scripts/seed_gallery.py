@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.demo_provider import render_demo_image, render_demo_video
 
-SEED_MARKER = "demo_seed_v1"
+SEED_MARKER = "demo_seed_v2"
 
 # (prompt, media_type, style, model, resolution, duration, likes, views)
 SPECS = [
@@ -59,6 +59,15 @@ SPECS = [
     ("极简主义的产品海报，几何构图，柔和渐变背景，高端排版", "image", "product", "nano-banana-2", "1080x1920", 0, 189, 2870),
     ("动漫风格的校园场景，夏日午后，蓝天白云，青春氛围", "image", "anime", "nano-banana-2", "1920x1080", 0, 767, 11900),
     ("搞笑的猫咪弹钢琴，拟人化插画，鲜艳色彩，幽默风格", "image", "funny", "nano-banana-2", "1024x1024", 0, 445, 6980),
+    # v2 density boost — Explore flywheel (Yapper P1)
+    ("Omni 多参考时尚大片：模特走秀，电影感侧光，慢动作", "video", "fashion", "seedance-2.0", "1920x1080", 6, 620, 9400),
+    ("Talking Avatar 风格口播封面：清晰人脸特写，柔光", "image", "portrait", "gpt-image-2", "1080x1920", 0, 410, 6200),
+    ("Motion Control 舞蹈定格：全身姿势清晰，舞台灯光", "image", "energetic", "nano-banana-2", "1080x1920", 0, 390, 5800),
+    ("产品开箱短视频感静帧：手持包装，暖色桌面", "image", "product", "gpt-image-2", "1920x1080", 0, 280, 4300),
+    ("雨夜街头霓虹倒影，手持跟拍感，短视频钩子开场", "video", "cyberpunk", "kling-2.5-turbo", "1080x1920", 5, 710, 11200),
+    ("美食 ASMR 感特写：拉丝芝士披萨，蒸汽与油光", "image", "food", "imagen-4", "1024x1024", 0, 520, 7900),
+    ("宠物治愈短片：金毛犬草地奔跑，阳光丁达尔", "video", "cute/kawaii", "seedance-2.0-fast", "1920x1080", 5, 880, 14100),
+    ("职场头像棚拍三连概念：白衬衣、柔灰背景、眼神自信", "image", "portrait", "gpt-image-2", "1024x1024", 0, 360, 5400),
 ]
 
 

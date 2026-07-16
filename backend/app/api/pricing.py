@@ -20,7 +20,7 @@ class PlanFeature(BaseModel):
 
 
 class PricingPlan(BaseModel):
-    id: str  # starter | personal | creator | pro
+    id: str  # starter | personal | creator | max  (pro kept as alias of max)
     name: str
     monthly_price: float
     yearly_price: float
@@ -28,6 +28,16 @@ class PricingPlan(BaseModel):
     features: list[PlanFeature]
     highlighted: bool = False
     badge: Optional[str] = None
+    # Optional credit tiers for Max slider (Yapper parity)
+    credit_tiers: Optional[list[int]] = None
+
+
+def normalize_plan_id(plan_id: str) -> str:
+    """Map legacy `pro` → `max` (Yapper naming)."""
+    pid = (plan_id or "").strip().lower()
+    if pid == "pro":
+        return "max"
+    return pid
 
 
 PLANS: list[PricingPlan] = [
@@ -91,13 +101,15 @@ PLANS: list[PricingPlan] = [
         ],
     ),
     PricingPlan(
-        id="pro",
-        name="专业版",
-        monthly_price=99.99,
-        yearly_price=79.99,
-        credits_per_month=15000,
+        id="max",
+        name="Max",
+        monthly_price=149.99,
+        yearly_price=119.99,
+        credits_per_month=22500,
+        badge="Best Value",
+        credit_tiers=[15000, 22500, 37000, 75000, 150000],
         features=[
-            PlanFeature(name="Seedance 2.0 全模态视频", included=True),
+            PlanFeature(name="Seedance 2.0 Omni 全模态视频", included=True),
             PlanFeature(name="已验证图片模型（含 Imagen / GPT Image）", included=True),
             PlanFeature(name="已验证视频模型（Seedance / Kling）", included=True),
             PlanFeature(name="高级唇形同步", included=True),
@@ -106,10 +118,15 @@ PLANS: list[PricingPlan] = [
             PlanFeature(name="高级运动控制", included=True),
             PlanFeature(name="商用授权许可", included=True),
             PlanFeature(name="团队协作", included=True),
-            PlanFeature(name="优先支持", included=True),
+            PlanFeature(name="优先支持 / Express Support", included=True),
         ],
     ),
 ]
+
+
+def get_plan(plan_id: str) -> Optional[PricingPlan]:
+    pid = normalize_plan_id(plan_id)
+    return next((p for p in PLANS if p.id == pid), None)
 
 
 @router.get("/plans", summary="获取所有定价方案")
@@ -118,16 +135,23 @@ async def get_pricing_plans(cycle: str = "monthly"):
     result = []
     for plan in PLANS:
         price = plan.yearly_price if cycle == "yearly" else plan.monthly_price
-        result.append({
+        row = {
             "id": plan.id,
             "name": plan.name,
             "price": price,
+            "monthly_price": plan.monthly_price,
+            "yearly_price": plan.yearly_price,
             "credits_per_month": plan.credits_per_month,
             "cycle": cycle,
             "features": [f.model_dump() for f in plan.features],
             "highlighted": plan.highlighted,
             "badge": plan.badge,
-        })
+        }
+        if plan.credit_tiers:
+            row["credit_tiers"] = plan.credit_tiers
+        if plan.id == "max":
+            row["aliases"] = ["pro"]  # backward compat
+        result.append(row)
     return {"plans": result, "cycle": cycle}
 
 
@@ -174,7 +198,7 @@ async def subscribe(plan_id: str, user_id: int = Depends(resolve_user_id), db: A
     from app.config import settings
     if settings.is_production:
         raise HTTPException(status_code=404, detail="Not found")
-    plan = next((p for p in PLANS if p.id == plan_id), None)
+    plan = get_plan(plan_id)
     if not plan:
         return {"error": f"Plan '{plan_id}' not found"}, 404
 

@@ -40,6 +40,12 @@ class MotionRequest(BaseModel):
     prompt: Optional[str] = Field(default=None, max_length=2000, description="可选提示词，描述期望效果")
     style: Optional[str] = Field(default=None, description="风格偏好: realistic | anime | cartoon")
     tier: str = Field(default="demo", description="demo | studio — Studio 需 Personal+ 套餐")
+    voice_text: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="可选：生成后附加 TTS 旁白（Yapper Motion + Voice 轻量对标，非变声引擎）",
+    )
+    voice: Optional[str] = Field(default="Rachel", description="TTS 音色")
 
 
 class MotionResponse(BaseModel):
@@ -114,7 +120,11 @@ async def submit_motion(
         "image_url": req.image_url,
         "video_url": req.video_url,
         "style": req.style,
+        "tier": tier,
     }
+    if req.voice_text and req.voice_text.strip():
+        params["voice_text"] = req.voice_text.strip()
+        params["voice"] = (req.voice or "Rachel").strip() or "Rachel"
 
     # Create Task record
     task = Task(

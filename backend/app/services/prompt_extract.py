@@ -169,6 +169,23 @@ def guess_media_kind(url: str, content_type: str = "", filename: str = "") -> st
     return "image"
 
 
+def is_unsupported_social_page_url(url: str) -> bool:
+    """True for social *page* URLs we refuse to pretend we can scrape."""
+    from urllib.parse import urlparse
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except Exception:
+        return False
+    if not host:
+        return False
+    if host.endswith("douyin.com") or host.endswith("xiaohongshu.com") or host.endswith("xhslink.com"):
+        return True
+    return any(host == h or host.endswith("." + h) for h in (
+        "tiktok.com", "instagram.com", "x.com", "twitter.com",
+        "youtube.com", "youtu.be", "facebook.com", "fb.watch",
+    ))
+
+
 async def extract_prompt_from_media(
     media_url: str,
     *,

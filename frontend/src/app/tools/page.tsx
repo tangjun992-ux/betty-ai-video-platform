@@ -39,7 +39,9 @@ const ALL_TOOLS: Tool[] = [
   { icon: Maximize2, label: "AI 放大", desc: "2x/4x 超分", href: "/create/upscale", color: "from-blue-400 to-indigo-500", useCase: "打印、修复", group: "image" },
   { icon: Scissors, label: "背景移除", desc: "一键抠图透明 PNG", href: "/create/bg-remove", color: "from-emerald-500 to-teal-600", useCase: "电商素材", group: "image" },
   { icon: Layers, label: "扩图", desc: "智能外扩构图", href: "/create/extend", color: "from-amber-500 to-orange-600", useCase: "改构图", group: "image" },
-  { icon: Camera, label: "产品摄影", desc: "电商产品图工作流（进图片生成）", href: "/create/image", color: "from-cyan-400 to-cyan-500", useCase: "电商", group: "image" },
+  { icon: Camera, label: "产品摄影", desc: "电商产品图专用工作流", href: "/create/product", color: "from-cyan-400 to-cyan-500", useCase: "电商", group: "image" },
+  { icon: User, label: "职业头像", desc: "Professional Headshots 提示词包", href: "/create/headshots", color: "from-indigo-400 to-violet-500", useCase: "名片/LinkedIn", group: "image" },
+  { icon: Grid3X3, label: "Photo Packs", desc: "成套提示词包一键开拍", href: "/create/photo-packs", color: "from-teal-400 to-cyan-500", badge: "New", useCase: "批量素材", group: "image" },
   // Audio / Utility
   { icon: Music, label: "语音合成", desc: "Generate Audio — TTS 配音", href: "/create/audio", color: "from-orange-500 to-yellow-600", useCase: "配音、口播", group: "audio" },
   { icon: FileSearch, label: "Prompt Extractor", desc: "从图片/视频反推提示词", href: "/create/extract", color: "from-teal-400 to-emerald-500", badge: "New", useCase: "复用爆款构图", group: "utility" },

@@ -53,10 +53,22 @@ async def capabilities():
                 "max_refs": 4,
                 "note": "GenerateRequest.reference_images → Celery edit_image 真 i2i。",
             },
+            "seedance_omni": {
+                "available": configured and not demo,
+                "path": "/create/video",
+                "models": ["seedance-2.0", "seedance-2.0-fast"],
+                "inputs": ["reference_images", "reference_videos", "reference_audios", "generate_audio"],
+                "note": "Seedance Omni 多模态参考：多图/视频/音频 → KIE reference_*_urls；auto 路由到 seedance-2.0。",
+            },
             "storyboard": {
                 "available": True,
                 "path": "/director/storyboard",
                 "note": "显式多镜头计划（每镜独立 video step），非提示词拼接。",
+            },
+            "face_swap": {
+                "available": False,
+                "mode": "unavailable",
+                "note": "Yapper Face Swap / 病毒模板：本环境无已验证上游 SKU，不提供假入口。",
             },
             "tool_cost_board": {
                 "available": True,
@@ -67,7 +79,8 @@ async def capabilities():
                 "available": True,
                 "path": "/generate/extract-prompt",
                 "modes": ["vision", "heuristic"],
-                "note": "对标 Yapper Prompt Extractor；有 LLM Key 走 vision，否则诚实 heuristic。",
+                "note": "对标 Yapper Prompt Extractor；有 LLM Key 走 vision，否则诚实 heuristic。社媒页面 URL 明确拒绝（无 URL-to-Viral）。",
+                "social_page_urls": False,
             },
             "talking_avatar": {
                 "available": True,

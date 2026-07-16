@@ -20,7 +20,7 @@ from app.db import get_db
 from app.models.billing import UserBalance, Transaction, TransactionType
 from app.models.payment_order import PaymentOrder
 from app.models.user import User
-from app.api.pricing import PLANS
+from app.api.pricing import PLANS, get_plan, normalize_plan_id
 from app.services.entitlements import plan_subscription_role, pick_higher_role, user_role
 from app.services.credits import grant_subscription_to_team_pool, apply_plan_credit_rollover, available_personal_credits
 from app.rate_limiter import rate_limit
@@ -79,8 +79,10 @@ _STRIPE_PLAN_PRICE = {
     ("personal", "yearly"): "STRIPE_PRICE_PERSONAL_YEARLY",
     ("creator", "monthly"): "STRIPE_PRICE_CREATOR_MONTHLY",
     ("creator", "yearly"): "STRIPE_PRICE_CREATOR_YEARLY",
-    ("pro", "monthly"): "STRIPE_PRICE_PRO_MONTHLY",
+    ("pro", "monthly"): "STRIPE_PRICE_PRO_MONTHLY",  # legacy alias
     ("pro", "yearly"): "STRIPE_PRICE_PRO_YEARLY",
+    ("max", "monthly"): "STRIPE_PRICE_MAX_MONTHLY",
+    ("max", "yearly"): "STRIPE_PRICE_MAX_YEARLY",
 }
 
 
@@ -119,7 +121,7 @@ def _resolve_purchase(req: CheckoutRequest):
         label = f"{sku['name']} ×{req.quantity}"
         return 0, price, label, {"team_id": req.team_id, "seats": seats, "sku_id": req.id}
     if req.kind == "plan":
-        plan = next((p for p in PLANS if p.id == req.id), None)
+        plan = get_plan(req.id)
         if not plan:
             raise HTTPException(status_code=404, detail=f"套餐不存在: {req.id}")
         price = plan.yearly_price if req.cycle == "yearly" else plan.monthly_price
@@ -128,7 +130,7 @@ def _resolve_purchase(req: CheckoutRequest):
             plan.credits_per_month * months,
             round(price * months, 2),
             f"{plan.name}·{'年' if req.cycle=='yearly' else '月'}付",
-            {},
+            {"plan_id": plan.id},
         )
     if req.kind == "pack":
         pack = next((p for p in CREDIT_PACKS if p["id"] == req.id), None)
@@ -142,9 +144,14 @@ def _stripe_line_item(req: CheckoutRequest, credits: int, price_usd: float, labe
     """Prefer configured Stripe Price IDs in production; fall back to price_data."""
     price_id = ""
     if req.kind == "plan":
-        env_key = _STRIPE_PLAN_PRICE.get((req.id, req.cycle))
+        pid = normalize_plan_id(req.id)
+        env_key = _STRIPE_PLAN_PRICE.get((pid, req.cycle)) or _STRIPE_PLAN_PRICE.get((req.id, req.cycle))
         if env_key:
             price_id = getattr(settings, env_key, "") or os.getenv(env_key, "")
+        # Max may fall back to legacy PRO price envs until bootstrap renames.
+        if not price_id and pid == "max":
+            legacy = "STRIPE_PRICE_PRO_MONTHLY" if req.cycle == "monthly" else "STRIPE_PRICE_PRO_YEARLY"
+            price_id = getattr(settings, legacy, "") or os.getenv(legacy, "")
     elif req.kind == "team_seats":
         sku = TEAM_SEAT_SKUS.get(req.id) or {}
         env_key = sku.get("stripe_price_env", "")
@@ -401,7 +408,7 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
     bal = await _get_balance(db, user_id)
     before = await available_personal_credits(bal)
     if req.kind == "plan":
-        plan = next((p for p in PLANS if p.id == req.id), None)
+        plan = get_plan(req.id)
         monthly = int(plan.credits_per_month) if plan else credits
         # Yearly one-shot grant: apply monthly rollover once per month equivalent
         # for the first month, then add remaining months as plan_credits (capped).
@@ -531,7 +538,7 @@ async def _grant_order(db: AsyncSession, order: PaymentOrder, *, email: Optional
     bal = await _get_balance(db, uid)
     before = await available_personal_credits(bal)
     if order.kind == "plan":
-        plan = next((p for p in PLANS if p.id == order.item_id), None)
+        plan = get_plan(order.item_id)
         monthly = int(plan.credits_per_month) if plan else int(order.credits or 0)
         apply_plan_credit_rollover(bal, monthly)
         # One-time yearly checkout still prepaid: apply remaining months with cap.
@@ -735,7 +742,7 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
         user_id_raw = meta.get("user_id")
         if not plan_id or not user_id_raw:
             return {"received": True, "ignored": "invoice.paid missing metadata"}
-        plan = next((p for p in PLANS if p.id == plan_id), None)
+        plan = get_plan(plan_id)
         if not plan:
             return {"received": True, "error": f"unknown plan {plan_id}"}
         uid = int(user_id_raw)

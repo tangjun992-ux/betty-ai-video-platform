@@ -39,8 +39,26 @@ class GenerateRequest(BaseModel):
     image_url: Optional[str] = Field(default=None, description="首张参考图 URL（兼容字段；等同 reference_images[0]）")
     reference_images: Optional[list[str]] = Field(
         default=None,
-        description="多参考图 URL 列表（最多 4 张；用于真 i2i / 多图编辑）",
-        max_length=4,
+        description="多参考图 URL 列表（最多 9 张；图片 i2i≤4，Seedance Omni≤9）",
+        max_length=9,
+    )
+    reference_videos: Optional[list[str]] = Field(
+        default=None,
+        description="Omni 参考视频 URL（最多 3；Seedance multimodal）",
+        max_length=3,
+    )
+    reference_audios: Optional[list[str]] = Field(
+        default=None,
+        description="Omni 参考音频 URL（最多 3；Seedance multimodal / 唇形引导）",
+        max_length=3,
+    )
+    omni: Optional[bool] = Field(
+        default=None,
+        description="强制 Seedance Omni 多模态参考模式（多图/视频/音频）",
+    )
+    generate_audio: Optional[bool] = Field(
+        default=False,
+        description="Seedance Omni 是否同时生成音轨",
     )
     seed: Optional[int] = Field(default=None, ge=0, le=2147483647, description="随机种子（复现同一结果；留空则随机）")
 
@@ -141,10 +159,22 @@ async def execute_generation(
     # Normalize multi-ref: reference_images wins; image_url kept as first for compat.
     ref_images: list[str] = []
     if req.reference_images:
-        ref_images = [u.strip() for u in req.reference_images if u and str(u).strip()][:4]
+        ref_images = [u.strip() for u in req.reference_images if u and str(u).strip()][:9]
     elif req.image_url and str(req.image_url).strip():
         ref_images = [str(req.image_url).strip()]
+    # Image i2i stays ≤4; video Omni may use up to 9 (enforced in adapter).
+    if effective_media == "image" or req.media_type == "image":
+        ref_images = ref_images[:4]
     primary_image = ref_images[0] if ref_images else None
+    ref_videos = [u.strip() for u in (req.reference_videos or []) if u and str(u).strip()][:3]
+    ref_audios = [u.strip() for u in (req.reference_audios or []) if u and str(u).strip()][:3]
+    omni = bool(req.omni) or bool(ref_videos or ref_audios or (len(ref_images) > 1 and effective_media == "video"))
+
+    # Omni prefers Seedance when user left model=auto
+    if omni and (req.model or "auto") in ("auto", "", None) and effective_media == "video":
+        estimated_model = "seedance-2.0"
+        routing_info["omni_routed"] = True
+        routing_info["omni_model"] = estimated_model
 
     params = {
         "resolution": req.resolution,
@@ -154,11 +184,17 @@ async def execute_generation(
         "seed": seed,
         "original_prompt": req.prompt if enhanced_prompt != req.prompt else None,
         "routing_info": json.dumps(routing_info),
+        "omni": omni,
+        "generate_audio": bool(req.generate_audio),
     }
     if primary_image:
         params["image_url"] = primary_image
     if ref_images:
         params["reference_images"] = ref_images
+    if ref_videos:
+        params["reference_videos"] = ref_videos
+    if ref_audios:
+        params["reference_audios"] = ref_audios
 
     # Create Task record
     task = Task(
@@ -205,11 +241,17 @@ async def execute_generation(
         "count": req.count,
         "style": req.style,
         "seed": seed,
+        "omni": omni,
+        "generate_audio": bool(req.generate_audio),
     }
     if primary_image:
         celery_params["image_url"] = primary_image
     if ref_images:
         celery_params["reference_images"] = ref_images
+    if ref_videos:
+        celery_params["reference_videos"] = ref_videos
+    if ref_audios:
+        celery_params["reference_audios"] = ref_audios
 
     # Dispatch appropriate Celery task — refund if broker/dispatch fails after deduct.
     try:
@@ -561,6 +603,18 @@ async def extract_prompt(
     filename = ""
     content_type = ""
     resolved_url = (media_url or "").strip()
+    # Honesty: TikTok/Instagram/page URLs are not scraped (no URL-to-Viral yet).
+    if resolved_url and not media_file:
+        from app.services.prompt_extract import is_unsupported_social_page_url
+        if is_unsupported_social_page_url(resolved_url):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "暂不支持从 TikTok/Instagram/X 等页面链接抓取媒体。"
+                    "请上传文件，或粘贴可直链访问的图片/视频 URL（非社媒页面）。"
+                    "（对标 Yapper URL-to-Viral 仍为缺口，不假装已解析。）"
+                ),
+            )
     if media_file is not None:
         raw = await media_file.read()
         if not raw:

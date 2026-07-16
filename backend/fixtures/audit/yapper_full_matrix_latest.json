@@ -1,14 +1,14 @@
 {
   "suite": "yapper_full_matrix_audit",
-  "ts": "2026-07-16T12:48:19Z",
+  "ts": "2026-07-16T13:28:55Z",
   "meta": {
     "active_models": 9,
     "lab_models": 20,
     "gallery_items": 32,
-    "gallery_total": 32,
+    "gallery_total": 72,
     "stripe": false,
     "oidc": false,
-    "ts": "2026-07-16T12:48:19Z"
+    "ts": "2026-07-16T13:28:55Z"
   },
   "yapper_matrix_size": 25,
   "checks": [
@@ -164,7 +164,7 @@
     {
       "name": "fe:product_shots",
       "ok": true,
-      "detail": "no dedicated product-shot workflow app (partial surface)",
+      "detail": "frontend/src/app/create/product/page.tsx (partial surface)",
       "partial": true,
       "gap": true,
       "yapper": "Stunning Product Shots (dedicated)"
@@ -172,7 +172,7 @@
     {
       "name": "fe:headshots",
       "ok": true,
-      "detail": "no dedicated headshot pack app (partial surface)",
+      "detail": "frontend/src/app/create/headshots/page.tsx (partial surface)",
       "partial": true,
       "gap": true,
       "yapper": "Professional Headshots (dedicated)"
@@ -180,7 +180,7 @@
     {
       "name": "fe:photo_packs",
       "ok": true,
-      "detail": "missing dedicated photo-pack surface",
+      "detail": "missing dedicated surface",
       "expected_missing": true,
       "gap": true,
       "yapper": "AI Photo Packs"
@@ -188,7 +188,7 @@
     {
       "name": "fe:face_swap",
       "ok": true,
-      "detail": "no face-swap SKU/route",
+      "detail": "no verified upstream SKU — capabilities.face_swap=unavailable",
       "expected_missing": true,
       "gap": true,
       "yapper": "AI Face Swapping / viral templates"
@@ -196,7 +196,7 @@
     {
       "name": "fe:url_viral",
       "ok": true,
-      "detail": "extractor accepts URL form but not social-page scrape (partial surface)",
+      "detail": "social page URLs honestly rejected; direct media URL ok (partial surface)",
       "partial": true,
       "gap": true,
       "yapper": "URL-to-Viral (TikTok/IG reel → prompt)"
@@ -204,7 +204,7 @@
     {
       "name": "fe:motion_voice",
       "ok": true,
-      "detail": "no voice-changer on motion path (partial surface)",
+      "detail": "voice_text TTS旁白有；非实时变声引擎 (partial surface)",
       "partial": true,
       "gap": true,
       "yapper": "Motion + Voice Changer"
@@ -212,7 +212,7 @@
     {
       "name": "fe:seedance_omni",
       "ok": true,
-      "detail": "Seedance active but Omni productization thin (partial surface)",
+      "detail": "frontend/src/app/create/video/page.tsx (partial surface)",
       "partial": true,
       "gap": true,
       "yapper": "Seedance 2.0 Omni multi-modal / multi-shot"
@@ -291,7 +291,7 @@
     {
       "name": "api:extractor_social_url_honest",
       "ok": true,
-      "detail": "status=200 mode=heuristic detail={'mode': 'heuristic', 'media_kind': 'video', 'media_url': 'https://www.tiktok.com/@x/video/123', 'pr",
+      "detail": "status=400 mode=None detail={'detail': '暂不支持从 TikTok/Instagram/X 等页面链接抓取媒体。请上传文件，或粘贴可直链访问的图片/视频 URL（非社媒页面）。（对标 Yapper URL-to-Vir",
       "gap": true
     },
     {
@@ -342,28 +342,27 @@
     {
       "name": "api:gallery_list",
       "ok": true,
-      "detail": "items=32 total=32"
+      "detail": "items=32 total=72"
     },
     {
       "name": "api:gallery_stats",
       "ok": true,
-      "detail": "{'total_items': 64, 'total_images': 47, 'total_videos': 9, 'total_credits_consumed': 89, 'style_options': [{'key': 'all'"
+      "detail": "{'total_items': 108, 'total_images': 80, 'total_videos': 18, 'total_credits_consumed': 97, 'style_options': [{'key': 'al"
     },
     {
       "name": "api:gallery_remix",
       "ok": true,
-      "detail": "status=200 {\"remix\":true,\"source_item_key\":\"acbb0a2b-b4a4-4484-a6dd-55e5cd1f8c4b_0\",\"prompt"
+      "detail": "status=200 {\"remix\":true,\"source_item_key\":\"c432729c-23f6-454c-843b-6aab08e963ca_0\",\"prompt"
     },
     {
       "name": "api:pricing_four_tiers",
       "ok": true,
-      "detail": "['creator', 'personal', 'pro', 'starter']"
+      "detail": "['creator', 'max', 'personal', 'starter']"
     },
     {
-      "name": "pricing:fe_max_vs_api_pro",
+      "name": "pricing:fe_max_aligned",
       "ok": true,
-      "detail": "FE markets Max; API plan id remains 'pro' — naming drift vs Yapper Max",
-      "gap": true
+      "detail": "FE Max ↔ API id=max aligned (pro kept as alias)"
     },
     {
       "name": "api:library",
@@ -400,7 +399,7 @@
     {
       "name": "enqueue:generate_image",
       "ok": true,
-      "detail": "status=202 {\"task_id\":\"9d40756a-9670-45c5-bb0e-c04ba95e0d48\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
+      "detail": "status=202 {\"task_id\":\"694d1662-9bb9-4640-9eca-90db67eb7c5c\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
     },
     {
       "name": "enqueue:speech_contract",
@@ -446,115 +445,23 @@
   ],
   "live": [
     {
-      "name": "live:image_sample",
+      "name": "live:skipped",
       "ok": true,
-      "detail": "outframe_ok=2 failed=[]",
-      "evidence": {
-        "mode": "live_image_sample",
-        "probed": 2,
-        "ok": 2,
-        "outframe_ok": 2,
-        "failed": [],
-        "quarantined": [],
-        "details": [
-          {
-            "model_id": "gpt-image-2",
-            "ok": true,
-            "latency_ms": 129832,
-            "error": "",
-            "mode": "live",
-            "evidence": {
-              "kie_id": "gpt-image-2-text-to-image",
-              "path": "live_image",
-              "url_prefix": "https://tempfile.aiquickdraw.com/images/chatgpt/"
-            }
-          },
-          {
-            "model_id": "nano-banana",
-            "ok": true,
-            "latency_ms": 24999,
-            "error": "",
-            "mode": "live",
-            "evidence": {
-              "kie_id": "nano-banana-2",
-              "path": "live_image",
-              "url_prefix": "https://tempfile.aiquickdraw.com/ggc/74e90f9b8c7"
-            }
-          }
-        ],
-        "ts": "2026-07-16T12:50:54Z"
-      }
-    },
-    {
-      "name": "live:video_ge2",
-      "ok": true,
-      "detail": "outframe_ok=2 models=['seedance-2.0-fast', 'seedance-2.0']",
-      "evidence": {
-        "outframe_ok": 2,
-        "failed": [],
-        "details": [
-          {
-            "model_id": "seedance-2.0-fast",
-            "ok": true,
-            "latency_ms": 280726,
-            "error": "",
-            "mode": "live_video",
-            "evidence": {
-              "kie_id": "bytedance/seedance-2-fast",
-              "path": "live_video",
-              "url_prefix": "https://tempfile.aiquickdraw.com/seedance/178420"
-            }
-          },
-          {
-            "model_id": "seedance-2.0",
-            "ok": true,
-            "latency_ms": 177145,
-            "error": "",
-            "mode": "live_video",
-            "evidence": {
-              "kie_id": "bytedance/seedance-2",
-              "path": "live_video",
-              "url_prefix": "https://tempfile.aiquickdraw.com/h/d9870360cc213"
-            }
-          }
-        ],
-        "ts": "2026-07-16T12:58:32Z"
-      }
-    },
-    {
-      "name": "live:motion_native",
-      "ok": true,
-      "detail": "model=kling-3.0/motion-control source=kie_public_examples err=KIE task 2d5a94201d84fa6fe23d527ef33d0f5e failed: No valid characters detected i",
-      "evidence": {
-        "ok": true,
-        "media_url": "https://tempfile.aiquickdraw.com/k/b6ad74cf5c53b548f7ed13ee1cb478d9_1_1784207201_3308.mp4",
-        "model": "kling-3.0/motion-control",
-        "cost": 3.0,
-        "motion_mode": "native",
-        "sku": "kling-3.0/motion-control",
-        "source": "kie_public_examples",
-        "fixture_error": "KIE task 2d5a94201d84fa6fe23d527ef33d0f5e failed: No valid characters detected in the video",
-        "report_path": "/workspace/backend/fixtures/motion/last_run.json"
-      }
-    },
-    {
-      "name": "live:motion_last_run_file",
-      "ok": true,
-      "detail": "model=kling-3.0/motion-control source=kie_public_examples"
+      "detail": "YAPPER_AUDIT_LIVE not set — contract-only"
     }
   ],
   "scoring": {
-    "contract_hard_ok": 62,
-    "contract_hard_total": 62,
+    "contract_hard_ok": 64,
+    "contract_hard_total": 64,
     "contract_pass_pct": 100.0,
-    "live_ok": 4,
-    "live_total": 4,
-    "live_pass_pct": 100.0,
-    "betty_internal_readiness_approx": 91.9,
-    "overall_vs_yapper_approx": 73.2,
+    "live_ok": 0,
+    "live_total": 0,
+    "live_pass_pct": null,
+    "betty_internal_readiness_approx": 77.2,
+    "overall_vs_yapper_approx": 62.7,
     "components": {
       "tool_surface": 100.0,
-      "live": 100.0,
+      "live": 58,
       "model_shelf": 42,
       "billing": 28,
       "community": 56.4
@@ -640,10 +547,8 @@
     ],
     "soft_known_gaps": [
       "api:extractor_social_url_honest",
-      "fe:tools_motion_copy",
       "ops:oidc_configured",
-      "ops:stripe_configured",
-      "pricing:fe_max_vs_api_pro"
+      "ops:stripe_configured"
     ]
   },
   "honesty": "Contract checks ≠ Yapper product parity. Live only when YAPPER_AUDIT_LIVE=1. Do not treat mapping smoke as outframe. Motion native ≠ Act-One."

@@ -240,18 +240,30 @@ export default function CreateVideoPage() {
         ? `${prompt}\n\n[多镜头序列]\n${shots.map((s, i) => `镜头${i + 1}: ${s.prompt}`).join("\n")}`
         : prompt;
 
-      // Upload image references (multi-ref; first used for i2v / storyboard)
+      // Upload multimodal references (Seedance Omni: images + videos + audios)
       // Remix may inject a remote URL with file=null (Explore → Create).
       const referenceImages: string[] = [];
-      for (const ref of references.filter((r) => r.type === "image").slice(0, 4)) {
+      const referenceVideos: string[] = [];
+      const referenceAudios: string[] = [];
+      const pushUpload = async (ref: ReferenceMedia, into: string[]) => {
         if (ref.file) {
           const uploaded = await uploadImage(ref.file);
-          if (uploaded.url) referenceImages.push(uploaded.url);
+          if (uploaded.url) into.push(uploaded.url);
         } else if (ref.preview && (ref.preview.startsWith("http") || ref.preview.startsWith("/"))) {
-          referenceImages.push(ref.preview);
+          into.push(ref.preview);
         }
+      };
+      for (const ref of references.filter((r) => r.type === "image").slice(0, 9)) {
+        await pushUpload(ref, referenceImages);
+      }
+      for (const ref of references.filter((r) => r.type === "video").slice(0, 3)) {
+        await pushUpload(ref, referenceVideos);
+      }
+      for (const ref of references.filter((r) => r.type === "audio").slice(0, 3)) {
+        await pushUpload(ref, referenceAudios);
       }
       const imageUrl = referenceImages[0];
+      const omni = referenceVideos.length > 0 || referenceAudios.length > 0 || referenceImages.length > 1;
 
       // True storyboard: each shot → Director video step (not prompt stitch)
       if (multiShotMode && shots.length > 0) {
@@ -281,7 +293,12 @@ export default function CreateVideoPage() {
       const body: any = {
         prompt: finalPrompt,
         media_type: "video",
-        model: selectedModel === "auto" ? undefined : selectedModel,
+        // Omni auto-routes to seedance-2.0 server-side when model=auto
+        model: omni && (selectedModel === "auto" || !selectedModel)
+          ? "seedance-2.0"
+          : selectedModel === "auto"
+            ? undefined
+            : selectedModel,
         quality,
         resolution: aspectRatio === "1:1" ? "1080x1080"
           : aspectRatio === "16:9" ? "1920x1080"
@@ -293,6 +310,10 @@ export default function CreateVideoPage() {
         enhance_prompt: true,
         image_url: imageUrl,
         reference_images: referenceImages.length ? referenceImages : undefined,
+        reference_videos: referenceVideos.length ? referenceVideos : undefined,
+        reference_audios: referenceAudios.length ? referenceAudios : undefined,
+        omni: omni || undefined,
+        generate_audio: referenceAudios.length > 0 || undefined,
       };
 
       const res = await submitGeneration(body);

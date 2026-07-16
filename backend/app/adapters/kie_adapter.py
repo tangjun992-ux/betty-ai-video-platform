@@ -405,9 +405,84 @@ class KieAdapter(BaseModelAdapter):
         image_url: Optional[str] = None,
         **kwargs,
     ) -> GenerationResult:
-        """Generate video via KIE unified API."""
+        """Generate video via KIE unified API.
+
+        Seedance Omni (multimodal): pass ``reference_image_urls`` /
+        ``reference_video_urls`` / ``reference_audio_urls`` (and optional
+        ``generate_audio``). Single-image i2v still uses ``image_url`` /
+        ``imageUrl`` for non-Omni models.
+        """
         kie_id = _resolve_kie_model_id(model_id)
         logger.info("[KIE] video → model=%s prompt=%r dur=%ds", kie_id, prompt, duration)
+
+        ref_images = [
+            u for u in (kwargs.get("reference_image_urls") or kwargs.get("reference_images") or [])
+            if u
+        ]
+        if image_url and image_url not in ref_images:
+            # Prefer explicit multi-ref list; keep primary as first when building Omni.
+            ref_images = [image_url] + ref_images
+        ref_images = ref_images[:9]
+        ref_videos = [u for u in (kwargs.get("reference_video_urls") or kwargs.get("reference_videos") or []) if u][:3]
+        ref_audios = [u for u in (kwargs.get("reference_audio_urls") or kwargs.get("reference_audios") or []) if u][:3]
+        omni = bool(kwargs.get("omni")) or bool(ref_videos or ref_audios or len(ref_images) > 1)
+        is_seedance = "seedance" in (kie_id or "")
+        generate_audio = bool(kwargs.get("generate_audio"))
+
+        # Omni productization: Seedance multimodal reference-to-video.
+        # Do not mix first/last-frame mode with multi-ref in the same request.
+        if omni and is_seedance and (ref_images or ref_videos or ref_audios):
+            motion_prompt = (prompt or "").strip()
+            # Annotate @ImageN / @VideoN / @AudioN when caller did not.
+            if ref_images and "@Image" not in motion_prompt:
+                tags = " ".join(f"@Image{i+1}" for i in range(len(ref_images)))
+                motion_prompt = f"{motion_prompt} References: {tags}".strip()
+            if ref_videos and "@Video" not in motion_prompt:
+                tags = " ".join(f"@Video{i+1}" for i in range(len(ref_videos)))
+                motion_prompt = f"{motion_prompt} Motion refs: {tags}".strip()
+            if ref_audios and "@Audio" not in motion_prompt:
+                tags = " ".join(f"@Audio{i+1}" for i in range(len(ref_audios)))
+                motion_prompt = f"{motion_prompt} Audio refs: {tags}".strip()
+
+            kie_res = _size_to_resolution(resolution)
+            payload = {
+                "model": kie_id,
+                "prompt": motion_prompt[:2500] if len(motion_prompt) > 2500 else motion_prompt,
+                "duration": int(duration or 5),
+                "resolution": kie_res if kie_res in ("720p", "480p") else "720p",
+                "aspect_ratio": kwargs.get("aspect_ratio") or "16:9",
+                "generate_audio": generate_audio,
+            }
+            if ref_images:
+                payload["reference_image_urls"] = ref_images
+            if ref_videos:
+                payload["reference_video_urls"] = ref_videos
+            if ref_audios:
+                payload["reference_audio_urls"] = ref_audios
+            logger.info(
+                "[KIE] seedance omni → imgs=%d vids=%d auds=%d",
+                len(ref_images), len(ref_videos), len(ref_audios),
+            )
+            result = await self._submit_and_poll(payload, media_type="video", timeout=900)
+            url = _extract_url(result, "videoUrl")
+            cover = _extract_url(result, "coverUrl") or url
+            return GenerationResult(
+                media_url=url,
+                thumbnail_url=cover,
+                media_type="video",
+                model=kie_id,
+                cost=_extract_kie_cost(result, "video", duration),
+                duration=float(duration),
+                meta={
+                    "kie_task_id": result.get("taskId", ""),
+                    "resolution": payload.get("resolution"),
+                    "duration": duration,
+                    "omni": True,
+                    "reference_image_count": len(ref_images),
+                    "reference_video_count": len(ref_videos),
+                    "reference_audio_count": len(ref_audios),
+                },
+            )
 
         payload = {
             "model": kie_id,
@@ -419,9 +494,10 @@ class KieAdapter(BaseModelAdapter):
         kie_res = _size_to_resolution(resolution)
         is_kling_t2v = (kie_id.startswith("kling/") or kie_id.startswith("kling-")) and not _is_native_motion_control(kie_id)
 
-        # Image-to-video
-        if image_url:
-            payload["imageUrl"] = image_url
+        # Single-image i2v (non-Omni)
+        primary = image_url or (ref_images[0] if ref_images else None)
+        if primary:
+            payload["imageUrl"] = primary
 
         # Kling market ops are often keyed as Model_resolution_duration; many
         # turbo SKUs reject explicit resolution (Operation not found …_720p_5).
@@ -481,6 +557,7 @@ class KieAdapter(BaseModelAdapter):
                 "kie_task_id": result.get("taskId", ""),
                 "resolution": kie_res,
                 "duration": duration,
+                "omni": False,
             },
         )
 
