@@ -1,6 +1,6 @@
 {
   "suite": "yapper_full_matrix_audit",
-  "ts": "2026-07-16T14:51:50Z",
+  "ts": "2026-07-16T14:53:02Z",
   "meta": {
     "active_models": 9,
     "lab_models": 20,
@@ -8,7 +8,7 @@
     "gallery_total": 72,
     "stripe": false,
     "oidc": false,
-    "ts": "2026-07-16T14:51:50Z",
+    "ts": "2026-07-16T14:53:02Z",
     "face_swap_live": true,
     "lipsync_live": true,
     "omni_live": true,
@@ -406,7 +406,7 @@
     {
       "name": "api:gallery_stats",
       "ok": true,
-      "detail": "{'total_items': 120, 'total_images': 90, 'total_videos': 18, 'total_credits_consumed': 168, 'style_options': [{'key': 'a"
+      "detail": "{'total_items': 121, 'total_images': 91, 'total_videos': 18, 'total_credits_consumed': 170, 'style_options': [{'key': 'a"
     },
     {
       "name": "api:gallery_remix",
@@ -458,7 +458,7 @@
     {
       "name": "enqueue:generate_image",
       "ok": true,
-      "detail": "status=202 {\"task_id\":\"060eeb8f-27e9-4ff3-a296-8cbe70379d66\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
+      "detail": "status=202 {\"task_id\":\"f808f1a3-1bca-4685-92cb-4a837f5367c4\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
     },
     {
       "name": "enqueue:speech_contract",
