@@ -1,0 +1,650 @@
+{
+  "suite": "yapper_full_matrix_audit",
+  "ts": "2026-07-16T12:48:19Z",
+  "meta": {
+    "active_models": 9,
+    "lab_models": 20,
+    "gallery_items": 32,
+    "gallery_total": 32,
+    "stripe": false,
+    "oidc": false,
+    "ts": "2026-07-16T12:48:19Z"
+  },
+  "yapper_matrix_size": 25,
+  "checks": [
+    {
+      "name": "auth_register",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "fe:agent",
+      "ok": true,
+      "detail": "frontend/src/app/agent/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Yapper Agent (Don't prompt, Just Direct)"
+    },
+    {
+      "name": "fe:image_gen",
+      "ok": true,
+      "detail": "frontend/src/app/create/image/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Pro Image Generation"
+    },
+    {
+      "name": "fe:video_gen",
+      "ok": true,
+      "detail": "frontend/src/app/create/video/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Video Generation / Seedance Omni"
+    },
+    {
+      "name": "fe:lipsync",
+      "ok": true,
+      "detail": "frontend/src/app/create/lipsync/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Studio Lip-Syncing"
+    },
+    {
+      "name": "fe:avatar",
+      "ok": true,
+      "detail": "frontend/src/app/create/avatar/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Talking Avatar"
+    },
+    {
+      "name": "fe:motion",
+      "ok": true,
+      "detail": "frontend/src/app/create/motion/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Motion Control"
+    },
+    {
+      "name": "fe:timeline",
+      "ok": true,
+      "detail": "frontend/src/app/create/timeline/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Timeline Editor"
+    },
+    {
+      "name": "fe:upscale",
+      "ok": true,
+      "detail": "frontend/src/app/create/upscale/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Media Upscaling"
+    },
+    {
+      "name": "fe:bg_remove",
+      "ok": true,
+      "detail": "frontend/src/app/create/bg-remove/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Image Background Remover"
+    },
+    {
+      "name": "fe:extend",
+      "ok": true,
+      "detail": "frontend/src/app/create/extend/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Image Extender"
+    },
+    {
+      "name": "fe:image_editor",
+      "ok": true,
+      "detail": "frontend/src/app/create/image-editor/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Pro Image Editor"
+    },
+    {
+      "name": "fe:extractor",
+      "ok": true,
+      "detail": "frontend/src/app/create/extract/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Prompt Extractor (+ social URL)"
+    },
+    {
+      "name": "fe:audio",
+      "ok": true,
+      "detail": "frontend/src/app/create/audio/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Generate Audio"
+    },
+    {
+      "name": "fe:explore",
+      "ok": true,
+      "detail": "frontend/src/app/explore/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Explore / Remix"
+    },
+    {
+      "name": "fe:pricing",
+      "ok": true,
+      "detail": "frontend/src/app/pricing/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Flexible Pricing (Starter→Max)"
+    },
+    {
+      "name": "fe:sessions",
+      "ok": true,
+      "detail": "frontend/src/app/sessions/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "Sessions"
+    },
+    {
+      "name": "fe:tools_hub",
+      "ok": true,
+      "detail": "frontend/src/app/tools/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "All Tools hub"
+    },
+    {
+      "name": "fe:library",
+      "ok": true,
+      "detail": "frontend/src/app/library/page.tsx",
+      "partial": false,
+      "gap": false,
+      "yapper": "My Library / Assets"
+    },
+    {
+      "name": "fe:product_shots",
+      "ok": true,
+      "detail": "no dedicated product-shot workflow app (partial surface)",
+      "partial": true,
+      "gap": true,
+      "yapper": "Stunning Product Shots (dedicated)"
+    },
+    {
+      "name": "fe:headshots",
+      "ok": true,
+      "detail": "no dedicated headshot pack app (partial surface)",
+      "partial": true,
+      "gap": true,
+      "yapper": "Professional Headshots (dedicated)"
+    },
+    {
+      "name": "fe:photo_packs",
+      "ok": true,
+      "detail": "missing dedicated photo-pack surface",
+      "expected_missing": true,
+      "gap": true,
+      "yapper": "AI Photo Packs"
+    },
+    {
+      "name": "fe:face_swap",
+      "ok": true,
+      "detail": "no face-swap SKU/route",
+      "expected_missing": true,
+      "gap": true,
+      "yapper": "AI Face Swapping / viral templates"
+    },
+    {
+      "name": "fe:url_viral",
+      "ok": true,
+      "detail": "extractor accepts URL form but not social-page scrape (partial surface)",
+      "partial": true,
+      "gap": true,
+      "yapper": "URL-to-Viral (TikTok/IG reel → prompt)"
+    },
+    {
+      "name": "fe:motion_voice",
+      "ok": true,
+      "detail": "no voice-changer on motion path (partial surface)",
+      "partial": true,
+      "gap": true,
+      "yapper": "Motion + Voice Changer"
+    },
+    {
+      "name": "fe:seedance_omni",
+      "ok": true,
+      "detail": "Seedance active but Omni productization thin (partial surface)",
+      "partial": true,
+      "gap": true,
+      "yapper": "Seedance 2.0 Omni multi-modal / multi-shot"
+    },
+    {
+      "name": "cap:motion_transfer",
+      "ok": true,
+      "detail": "{'available': True, 'mode': 'native', 'sku': 'kling-3.0/motion-control', 'note': '原生 Kling Motion Control（KIE kling-3.0/"
+    },
+    {
+      "name": "cap:prompt_extractor",
+      "ok": true,
+      "detail": "{'available': True, 'path': '/generate/extract-prompt', 'modes': ['vision', 'heuristic'], 'note': '对标 Yapper Prompt Extr"
+    },
+    {
+      "name": "cap:talking_avatar",
+      "ok": true,
+      "detail": "{'available': True, 'path': '/create/avatar', 'backend': '/lipsync', 'note': 'Talking Avatar UI 走唇形同步链路（图+音频/文本）。'}"
+    },
+    {
+      "name": "cap:storyboard",
+      "ok": true,
+      "detail": "{'available': True, 'path': '/director/storyboard', 'note': '显式多镜头计划（每镜独立 video step），非提示词拼接。'}"
+    },
+    {
+      "name": "cap:share_permalink",
+      "ok": true,
+      "detail": "{'available': True, 'path': '/explore/{task_id}', 'requires_publish': True, 'note': '须调用 POST /gallery/share/{task_id}/p"
+    },
+    {
+      "name": "cap:failure_refund",
+      "ok": true,
+      "detail": "{'available': True, 'note': '任务 failed/cancelled 时幂等退还预扣积分；调度失败与图像工具失败同步退款。'}"
+    },
+    {
+      "name": "cap:director_minimal",
+      "ok": true,
+      "detail": "{'available': True, 'note': 'PlanRequest.minimal / 快速成片：enhance→1图→1视，跳过配音字幕合成。'}"
+    },
+    {
+      "name": "cap:multi_reference_i2i",
+      "ok": true,
+      "detail": "{'available': True, 'max_refs': 4, 'note': 'GenerateRequest.reference_images → Celery edit_image 真 i2i。'}"
+    },
+    {
+      "name": "cap:motion_native",
+      "ok": true,
+      "detail": "{'available': True, 'mode': 'native', 'sku': 'kling-3.0/motion-control', 'note': '原生 Kling Motion Control（KIE kling-3.0/motion-control：input_urls+video_urls）；非 "
+    },
+    {
+      "name": "models:active_ge_1",
+      "ok": true,
+      "detail": "active=9 lab=20 total_catalog=None"
+    },
+    {
+      "name": "models:shelf_vs_yapper",
+      "ok": false,
+      "detail": "Betty active=9 (Yapper claims 17+ image / 26+ video) — intentional gap record",
+      "score_note": "gap"
+    },
+    {
+      "name": "api:analyze_image",
+      "ok": true,
+      "detail": "{\"analysis\":{\"media_type\":\"image\",\"quality\":\"balanced\",\"styles\":[],\"complexity\":\"simple\",\"mood\":\"coo"
+    },
+    {
+      "name": "api:analyze_video",
+      "ok": true,
+      "detail": "{\"analysis\":{\"media_type\":\"video\",\"quality\":\"high\",\"styles\":[\"cinematic\"],\"compl"
+    },
+    {
+      "name": "api:extractor_upload",
+      "ok": true,
+      "detail": "mode=heuristic"
+    },
+    {
+      "name": "api:extractor_social_url_honest",
+      "ok": true,
+      "detail": "status=200 mode=heuristic detail={'mode': 'heuristic', 'media_kind': 'video', 'media_url': 'https://www.tiktok.com/@x/video/123', 'pr",
+      "gap": true
+    },
+    {
+      "name": "api:motion_samples",
+      "ok": true,
+      "detail": "kling-3.0/motion-control"
+    },
+    {
+      "name": "api:motion_sample_bytes",
+      "ok": true,
+      "detail": "img=3308 vid=6135"
+    },
+    {
+      "name": "api:lipsync_voices",
+      "ok": true,
+      "detail": "n=6"
+    },
+    {
+      "name": "api:director_modes",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "api:director_plan",
+      "ok": true,
+      "detail": "{\"brief\":\"15s product ad\",\"intent\":\"image\",\"summary\":\"已规划 2 步，将产出 1 个资产，预计消耗 4 积分。意图：image\",\"total_c"
+    },
+    {
+      "name": "api:director_minimal",
+      "ok": true,
+      "detail": "['enhance_prompt', 'image', 'video']"
+    },
+    {
+      "name": "api:director_storyboard",
+      "ok": true,
+      "detail": "status=200 {\"plan\":{\"brief\":\"三镜广告\",\"intent\":\"storyboard\",\"summary\":\"真分镜计划：3 个独立视频步骤，预计 12 积分\",\"total_credits\":1"
+    },
+    {
+      "name": "api:director_ideate",
+      "ok": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "api:timeline_parse",
+      "ok": true,
+      "detail": "status=200 {\"subtitle_track\":[{\"text\":\"Hello Betty\",\"start\":0.0,\"end\":2.0}],\"cue_count\":1}"
+    },
+    {
+      "name": "api:gallery_list",
+      "ok": true,
+      "detail": "items=32 total=32"
+    },
+    {
+      "name": "api:gallery_stats",
+      "ok": true,
+      "detail": "{'total_items': 64, 'total_images': 47, 'total_videos': 9, 'total_credits_consumed': 89, 'style_options': [{'key': 'all'"
+    },
+    {
+      "name": "api:gallery_remix",
+      "ok": true,
+      "detail": "status=200 {\"remix\":true,\"source_item_key\":\"acbb0a2b-b4a4-4484-a6dd-55e5cd1f8c4b_0\",\"prompt"
+    },
+    {
+      "name": "api:pricing_four_tiers",
+      "ok": true,
+      "detail": "['creator', 'personal', 'pro', 'starter']"
+    },
+    {
+      "name": "pricing:fe_max_vs_api_pro",
+      "ok": true,
+      "detail": "FE markets Max; API plan id remains 'pro' — naming drift vs Yapper Max",
+      "gap": true
+    },
+    {
+      "name": "api:library",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "api:sessions",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "api:developer_keys",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "api:readiness_surface",
+      "ok": true,
+      "detail": "ok=True stripe=False oidc_blockers=0"
+    },
+    {
+      "name": "ops:stripe_configured",
+      "ok": false,
+      "detail": "{'api_key_configured': False, 'webhook_secret_configured': False, 'plan_price_ids': {'STRIPE_PRICE_STARTER_MONTHLY': False, 'STRIPE_PRICE_STARTER_YEARLY': False",
+      "gap": true
+    },
+    {
+      "name": "ops:oidc_configured",
+      "ok": false,
+      "detail": "{'configured': False, 'issuer': '', 'client_id_set': False, 'redirect_uri': '', 'discovery_ok': False, 'authorize_url': '', 'token_url': '', 'userinfo_url': '',",
+      "gap": true
+    },
+    {
+      "name": "enqueue:generate_image",
+      "ok": true,
+      "detail": "status=202 {\"task_id\":\"9d40756a-9670-45c5-bb0e-c04ba95e0d48\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
+    },
+    {
+      "name": "enqueue:speech_contract",
+      "ok": true,
+      "detail": "status=422 (paid TTS gated; contract expects validation error)"
+    },
+    {
+      "name": "openapi:speech",
+      "ok": true,
+      "detail": "speech route registered"
+    },
+    {
+      "name": "openapi:/api/v1/generate/",
+      "ok": true,
+      "detail": "registered"
+    },
+    {
+      "name": "openapi:/api/v1/generate/edit",
+      "ok": true,
+      "detail": "registered"
+    },
+    {
+      "name": "openapi:/api/v1/lipsync",
+      "ok": true,
+      "detail": "registered"
+    },
+    {
+      "name": "openapi:/api/v1/motion",
+      "ok": true,
+      "detail": "registered"
+    },
+    {
+      "name": "openapi:/api/v1/director/run",
+      "ok": true,
+      "detail": "registered"
+    },
+    {
+      "name": "fe:tools_motion_copy",
+      "ok": true,
+      "detail": "motion copy ok",
+      "gap": false
+    }
+  ],
+  "live": [
+    {
+      "name": "live:image_sample",
+      "ok": true,
+      "detail": "outframe_ok=2 failed=[]",
+      "evidence": {
+        "mode": "live_image_sample",
+        "probed": 2,
+        "ok": 2,
+        "outframe_ok": 2,
+        "failed": [],
+        "quarantined": [],
+        "details": [
+          {
+            "model_id": "gpt-image-2",
+            "ok": true,
+            "latency_ms": 129832,
+            "error": "",
+            "mode": "live",
+            "evidence": {
+              "kie_id": "gpt-image-2-text-to-image",
+              "path": "live_image",
+              "url_prefix": "https://tempfile.aiquickdraw.com/images/chatgpt/"
+            }
+          },
+          {
+            "model_id": "nano-banana",
+            "ok": true,
+            "latency_ms": 24999,
+            "error": "",
+            "mode": "live",
+            "evidence": {
+              "kie_id": "nano-banana-2",
+              "path": "live_image",
+              "url_prefix": "https://tempfile.aiquickdraw.com/ggc/74e90f9b8c7"
+            }
+          }
+        ],
+        "ts": "2026-07-16T12:50:54Z"
+      }
+    },
+    {
+      "name": "live:video_ge2",
+      "ok": true,
+      "detail": "outframe_ok=2 models=['seedance-2.0-fast', 'seedance-2.0']",
+      "evidence": {
+        "outframe_ok": 2,
+        "failed": [],
+        "details": [
+          {
+            "model_id": "seedance-2.0-fast",
+            "ok": true,
+            "latency_ms": 280726,
+            "error": "",
+            "mode": "live_video",
+            "evidence": {
+              "kie_id": "bytedance/seedance-2-fast",
+              "path": "live_video",
+              "url_prefix": "https://tempfile.aiquickdraw.com/seedance/178420"
+            }
+          },
+          {
+            "model_id": "seedance-2.0",
+            "ok": true,
+            "latency_ms": 177145,
+            "error": "",
+            "mode": "live_video",
+            "evidence": {
+              "kie_id": "bytedance/seedance-2",
+              "path": "live_video",
+              "url_prefix": "https://tempfile.aiquickdraw.com/h/d9870360cc213"
+            }
+          }
+        ],
+        "ts": "2026-07-16T12:58:32Z"
+      }
+    },
+    {
+      "name": "live:motion_native",
+      "ok": true,
+      "detail": "model=kling-3.0/motion-control source=kie_public_examples err=KIE task 2d5a94201d84fa6fe23d527ef33d0f5e failed: No valid characters detected i",
+      "evidence": {
+        "ok": true,
+        "media_url": "https://tempfile.aiquickdraw.com/k/b6ad74cf5c53b548f7ed13ee1cb478d9_1_1784207201_3308.mp4",
+        "model": "kling-3.0/motion-control",
+        "cost": 3.0,
+        "motion_mode": "native",
+        "sku": "kling-3.0/motion-control",
+        "source": "kie_public_examples",
+        "fixture_error": "KIE task 2d5a94201d84fa6fe23d527ef33d0f5e failed: No valid characters detected in the video",
+        "report_path": "/workspace/backend/fixtures/motion/last_run.json"
+      }
+    },
+    {
+      "name": "live:motion_last_run_file",
+      "ok": true,
+      "detail": "model=kling-3.0/motion-control source=kie_public_examples"
+    }
+  ],
+  "scoring": {
+    "contract_hard_ok": 62,
+    "contract_hard_total": 62,
+    "contract_pass_pct": 100.0,
+    "live_ok": 4,
+    "live_total": 4,
+    "live_pass_pct": 100.0,
+    "betty_internal_readiness_approx": 91.9,
+    "overall_vs_yapper_approx": 73.2,
+    "components": {
+      "tool_surface": 100.0,
+      "live": 100.0,
+      "model_shelf": 42,
+      "billing": 28,
+      "community": 56.4
+    },
+    "gaps": [
+      {
+        "area": "模型货架深度",
+        "yapper": "宣传 17+ 图 / 26+ 视频全开",
+        "betty": "active=9（诚实货架）",
+        "severity": "P0",
+        "impact": "高"
+      },
+      {
+        "area": "Seedance Omni 产品化",
+        "yapper": "多模态参考 + 内建唇形 + 多镜叙事",
+        "betty": "Seedance T2V/I2V 可用，Omni 体验未产品化",
+        "severity": "P0",
+        "impact": "高"
+      },
+      {
+        "area": "Studio Lip-Sync / Max Lip-Sync",
+        "yapper": "强调专有/本地化训练级口型",
+        "betty": "KIE kling/ai-avatar 通用链路；缺 fixture live 稳定 SLA",
+        "severity": "P1",
+        "impact": "高"
+      },
+      {
+        "area": "Face Swap / 病毒模板",
+        "yapper": "人脸替换 + 模板玩法",
+        "betty": "无独立 SKU/路由",
+        "severity": "P1",
+        "impact": "中高"
+      },
+      {
+        "area": "URL-to-Viral（社媒链接反推）",
+        "yapper": "TikTok/IG URL → 提示词/结构",
+        "betty": "Extractor 支持文件/直链；不抓社媒页面",
+        "severity": "P1",
+        "impact": "中高"
+      },
+      {
+        "area": "专用 Image Apps",
+        "yapper": "Product Shots / Headshots / Photo Packs",
+        "betty": "多并入 /create/image，缺独立工作流",
+        "severity": "P2",
+        "impact": "中"
+      },
+      {
+        "area": "Motion + Voice Changer",
+        "yapper": "动作迁移可叠加变声",
+        "betty": "原生 Kling Motion 有；无变声组合",
+        "severity": "P2",
+        "impact": "中"
+      },
+      {
+        "area": "Explore 飞轮密度",
+        "yapper": "百万级资产叙事 + 强 Remix",
+        "betty": "gallery items≈32；publish/remix 有，氛围弱",
+        "severity": "P1",
+        "impact": "中高"
+      },
+      {
+        "area": "收款 / SSO 生产",
+        "yapper": "成熟订阅收款",
+        "betty": "Stripe key=False OIDC=False",
+        "severity": "P0（上线）",
+        "impact": "高"
+      },
+      {
+        "area": "定价命名",
+        "yapper": "第四档 Max + credits 滑块",
+        "betty": "FE Max / API id=pro 漂移",
+        "severity": "P2",
+        "impact": "低"
+      },
+      {
+        "area": "Act-One 级 Motion 质量叙事",
+        "yapper": "Advanced Motion Control 成片感",
+        "betty": "原生 kling-3.0/motion-control 已通；非 Act-One，本地样片无人物需 playground 样例",
+        "severity": "P1（体验）",
+        "impact": "中"
+      }
+    ],
+    "soft_known_gaps": [
+      "api:extractor_social_url_honest",
+      "fe:tools_motion_copy",
+      "ops:oidc_configured",
+      "ops:stripe_configured",
+      "pricing:fe_max_vs_api_pro"
+    ]
+  },
+  "honesty": "Contract checks ≠ Yapper product parity. Live only when YAPPER_AUDIT_LIVE=1. Do not treat mapping smoke as outframe. Motion native ≠ Act-One."
+}

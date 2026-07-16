@@ -65,21 +65,23 @@ cd backend
 
 | 项 | 说明 |
 |----|------|
-| live_video 出片 | 本环境仍无稳定成功记录；**不等于** Yapper 默认成片感 |
-| Motion 质量 | 输入样片库 ≠ Kling Motion / Act-One |
-| 模型数量话术 | Yapper 宣传 17+ / 24+；Betty **9 active** 诚实货架 |
-| Stripe 真收款 | bootstrap 有；本环境无 Key |
-| 社区飞轮 | Explore 有门闩，内容供给仍弱于 Yapper |
+| 完整矩阵审计 | 见 **`docs/YAPPER_FULL_MATRIX_AUDIT.md`**（2026-07-16 真测） |
+| live 出片 | 图2 + 视2 + Motion native 已有证据；仍 ≠ Yapper 默认成片感/货架 |
+| Motion | 原生 Kling Motion Control；**≠ Act-One** |
+| 模型数量话术 | Yapper 宣传 17+ / 26+；Betty **9 active** 诚实货架 |
+| Stripe / OIDC | 本环境未注入 |
+| 社区飞轮 / Omni / FaceSwap / URL-to-Viral | 仍弱或缺失 |
 
-**综合对 Yapper：** 工具面契约约 **90–92%**；生产就绪仍受出片/密钥拖累 → 全局约 **~77–78**（相对此前 ~76 小幅↑）。
+**综合对 Yapper（完整审计）：** 工具面契约 **100%**；产品对标约 **~73**；Betty 内部就绪约 **~92**（live 拉高，货架/收款拉低对标分）。
 
 ---
 
 ## 5. 下一刀（ROI）
 
-1. 付费 live_video 周检 ≥2 SKU `outframe_ok`  
-2. Extractor vision E2E（稳定 Key + 公开图 URL）  
-3. Explore 内容供给 / Remix 转化漏斗  
-4. Stripe Price 真注入  
+1. Seedance Omni 产品化（多 ref + 真分镜接到 Create Video）  
+2. Active 货架扩展（必须带 live 周检）  
+3. Stripe / OIDC 注入  
+4. Explore 飞轮 + Extractor 社媒 URL（或诚实禁用）  
+5. Face Swap / Photo Packs 选一个做深  
 
-勿再重复：空壳 create 页、假「即将推出」、把 mapping 冒烟当出片。
+勿再重复：空壳 create 页、假「即将推出」、把 mapping 冒烟当出片、宣称 Act-One。

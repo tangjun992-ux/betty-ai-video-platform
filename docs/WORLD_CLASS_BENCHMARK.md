@@ -25,7 +25,7 @@
 | **Yapper** | 最近竞品；工具契约约 **90–92%** 对齐，主差距在**出片稳定、默认成片感、社区飞轮** |
 | **Kling / Runway / Luma** | 可借道网关调用部分 SKU，**无原生模型护城河**；Motion/视频质量**禁止宣称对等** |
 | **Midjourney / OpenAI** | 审美社区与一等公民模型差距大；Betty 是工具聚合，不是审美飞轮 |
-| **综合生产就绪** | **~86 / 100** — 含 live 图 2/2 + 视频 ≥2 SKU（Seedance×2，Kling 已修参出片）+ 原生 Motion live；密钥与 Act-One 仍待 |
+| **综合生产就绪** | **~92 内部 / ~73 vs Yapper** — 完整矩阵审计见 `YAPPER_FULL_MATRIX_AUDIT.md`；live 图视 Motion 全绿，货架/收款/社区拖累对标分 |
 
 ---
 

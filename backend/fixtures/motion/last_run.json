@@ -1,16 +1,10 @@
 {
   "ok": true,
-  "media_url": "https://tempfile.aiquickdraw.com/k/d80174b142cde95bece31346b152961c_1_1784205076_4802.mp4",
+  "media_url": "https://tempfile.aiquickdraw.com/k/b6ad74cf5c53b548f7ed13ee1cb478d9_1_1784207201_3308.mp4",
   "model": "kling-3.0/motion-control",
-  "meta": {
-    "kie_task_id": "d80174b142cde95bece31346b152961c",
-    "op": "motion",
-    "motion_mode": "native",
-    "sku": "kling-3.0/motion-control",
-    "mode": "720p",
-    "character_orientation": "video",
-    "duration": 5
-  },
   "cost": 3.0,
-  "source": "kie_public_examples"
+  "motion_mode": "native",
+  "sku": "kling-3.0/motion-control",
+  "source": "kie_public_examples",
+  "fixture_error": "KIE task 2d5a94201d84fa6fe23d527ef33d0f5e failed: No valid characters detected in the video"
 }

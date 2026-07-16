@@ -31,7 +31,7 @@ const ALL_TOOLS: Tool[] = [
   { icon: Video, label: "视频生成", desc: "文生/图生视频，多镜头叙事", href: "/create/video", color: "from-blue-400 to-blue-500", badge: "Hot", useCase: "短视频、广告", group: "video" },
   { icon: Mic, label: "唇形同步", desc: "Studio Lip-Syncing — 图+文/音频说话视频", href: "/create/lipsync", color: "from-purple-500 to-pink-500", badge: "Core", useCase: "虚拟主播、口播", group: "video" },
   { icon: User, label: "Talking Avatar", desc: "头像说话视频（图+音频优先）", href: "/create/avatar", color: "from-fuchsia-500 to-pink-600", useCase: "数字人、克隆", group: "video" },
-  { icon: Move, label: "运动控制", desc: "参考视频动作迁移（best-effort）", href: "/create/motion", color: "from-rose-500 to-red-600", badge: "Beta", useCase: "舞蹈、动作复制", group: "video" },
+  { icon: Move, label: "运动控制", desc: "原生 Kling Motion Control（非 Act-One）", href: "/create/motion", color: "from-rose-500 to-red-600", badge: "Native", useCase: "舞蹈、动作复制", group: "video" },
   { icon: Clapperboard, label: "时间轴编辑", desc: "片段编排、字幕与合成", href: "/create/timeline", color: "from-sky-500 to-blue-600", useCase: "后期成片", group: "video" },
   // Image
   { icon: Sparkles, label: "图片生成", desc: "多模型文生图 / 多参考图 i2i", href: "/create/image", color: "from-violet-500 to-purple-600", badge: "Hot", useCase: "创意、产品图", group: "image" },
