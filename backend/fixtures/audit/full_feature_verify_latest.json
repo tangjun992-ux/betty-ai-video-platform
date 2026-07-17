@@ -1,0 +1,525 @@
+{
+  "generated_at": "2026-07-17T14:09Z",
+  "commit": "317aa25",
+  "mode": "plan+dry_run",
+  "kie_credits": 7280.78,
+  "rows": [
+    {
+      "scenario": "product_ad",
+      "title": "Meta Advantage+ creatives",
+      "peers": [
+        "Meta Advantage+ creatives",
+        "Pika / Runway product ads",
+        "Pencil"
+      ],
+      "must": [
+        "单条可投放成片（多镜合成，非散落分镜）",
+        "前 3 秒钩子清晰、卖点可读",
+        "商业级产品质感与稳定主体",
+        "响度接近社媒投放习惯（有配音时）"
+      ],
+      "plan_score": {
+        "checks": [
+          {
+            "name": "aspect_lock",
+            "pass": true,
+            "detail": "16:9"
+          },
+          {
+            "name": "has_compose",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_subtitle",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_cta",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_bgm_flag",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "multi_or_enough_shots",
+            "pass": true,
+            "detail": "n=3"
+          },
+          {
+            "name": "identity_lock",
+            "pass": true,
+            "detail": ""
+          }
+        ],
+        "pass": 7,
+        "total": 7,
+        "score_pct": 100.0
+      },
+      "n_video": 3,
+      "n_image": 1,
+      "has_compose": true,
+      "has_subtitle": true,
+      "aspect": "16:9",
+      "intent": "campaign",
+      "dry_run": {
+        "final_url": "/api/v1/media/generated/final_372423133894_sub_cta.mp4",
+        "export_preset": "landscape_16_9",
+        "dims": "1920x1080",
+        "duration_s": 17.42,
+        "bgm": true,
+        "cta": true
+      },
+      "dry_elapsed_s": 28.8
+    },
+    {
+      "scenario": "ugc",
+      "title": "Arcads",
+      "peers": [
+        "Arcads",
+        "Creatify UGC",
+        "TikTok creative center native ads"
+      ],
+      "must": [
+        "竖屏 9:16，原生信息流节奏",
+        "手持/自拍感，避免影院建立镜头",
+        "产品出镜自然（手持/使用），口语推荐感",
+        "多镜合成一条短视频"
+      ],
+      "plan_score": {
+        "checks": [
+          {
+            "name": "aspect_lock",
+            "pass": true,
+            "detail": "9:16"
+          },
+          {
+            "name": "has_compose",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_subtitle",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_cta",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_bgm_flag",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "multi_or_enough_shots",
+            "pass": true,
+            "detail": "n=3"
+          },
+          {
+            "name": "identity_lock",
+            "pass": true,
+            "detail": ""
+          }
+        ],
+        "pass": 7,
+        "total": 7,
+        "score_pct": 100.0
+      },
+      "n_video": 3,
+      "n_image": 1,
+      "has_compose": true,
+      "has_subtitle": true,
+      "aspect": "9:16",
+      "intent": "campaign",
+      "dry_run": {
+        "final_url": "/api/v1/media/generated/final_be139d4bffee_sub_cta.mp4",
+        "export_preset": "portrait_9_16",
+        "dims": "1080x1920",
+        "duration_s": 17.42,
+        "bgm": true,
+        "cta": true
+      },
+      "dry_elapsed_s": 32.5
+    },
+    {
+      "scenario": "anime",
+      "title": "Runway anime motion",
+      "peers": [
+        "Runway anime motion",
+        "Luma stylized",
+        "Pika anime"
+      ],
+      "must": [
+        "明确二次元/新海诚式光影，非写实真人",
+        "角色与场景风格统一",
+        "多镜叙事（开场→登场→情感→高潮），非单镜氛围敷衍",
+        "运动连贯、跨镜身份锁定"
+      ],
+      "plan_score": {
+        "checks": [
+          {
+            "name": "aspect_lock",
+            "pass": true,
+            "detail": "16:9"
+          },
+          {
+            "name": "has_compose",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_subtitle",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_cta",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_bgm_flag",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "multi_or_enough_shots",
+            "pass": true,
+            "detail": "n=2"
+          },
+          {
+            "name": "identity_lock",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "anime_narrative_beats",
+            "pass": true,
+            "detail": ""
+          }
+        ],
+        "pass": 8,
+        "total": 8,
+        "score_pct": 100.0
+      },
+      "n_video": 2,
+      "n_image": 1,
+      "has_compose": true,
+      "has_subtitle": true,
+      "aspect": "16:9",
+      "intent": "video_from_text",
+      "dry_run": {
+        "final_url": "/api/v1/media/generated/final_42b56724b281_sub_cta.mp4",
+        "export_preset": "landscape_16_9",
+        "dims": "1920x1080",
+        "duration_s": 12.42,
+        "bgm": true,
+        "cta": true
+      },
+      "dry_elapsed_s": 12.3
+    },
+    {
+      "scenario": "ai_portrait",
+      "title": "Aragon / HeadshotPro",
+      "peers": [
+        "Aragon / HeadshotPro",
+        "Remini portrait",
+        "Astria headshots"
+      ],
+      "must": [
+        "职业形象照构图（头肩/胸像），非产品三视图",
+        "正装/柔光/自然表情",
+        "多姿态统一身份与色调",
+        "适合领英/简历裁切"
+      ],
+      "plan_score": {
+        "checks": [
+          {
+            "name": "portrait_not_product",
+            "pass": true,
+            "detail": ""
+          }
+        ],
+        "pass": 1,
+        "total": 1,
+        "score_pct": 100.0
+      },
+      "n_video": 0,
+      "n_image": 4,
+      "has_compose": false,
+      "has_subtitle": false,
+      "aspect": null,
+      "intent": "image_series",
+      "dry_run": {
+        "final_url": "/api/v1/media/generated/689463b68b0f.jpg",
+        "export_preset": null,
+        "dims": "4_images",
+        "duration_s": null,
+        "bgm": null,
+        "cta": null
+      },
+      "dry_elapsed_s": 0.1
+    },
+    {
+      "scenario": "product_commercial",
+      "title": "Runway Gen-3 brand films",
+      "peers": [
+        "Runway Gen-3 brand films",
+        "Kling Master demos",
+        "Luma Dream Machine"
+      ],
+      "must": [
+        "多镜叙事（建立→细节→动态→收束）",
+        "电影级布光与运镜连贯",
+        "品牌高级感，非 UGC 手持感",
+        "合成后成片可发布"
+      ],
+      "plan_score": {
+        "checks": [
+          {
+            "name": "aspect_lock",
+            "pass": true,
+            "detail": "16:9"
+          },
+          {
+            "name": "has_compose",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_subtitle",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_cta",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_bgm_flag",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "multi_or_enough_shots",
+            "pass": true,
+            "detail": "n=4"
+          },
+          {
+            "name": "identity_lock",
+            "pass": true,
+            "detail": ""
+          }
+        ],
+        "pass": 7,
+        "total": 7,
+        "score_pct": 100.0
+      },
+      "n_video": 4,
+      "n_image": 1,
+      "has_compose": true,
+      "has_subtitle": true,
+      "aspect": "16:9",
+      "intent": "campaign",
+      "dry_run": {
+        "final_url": "/api/v1/media/generated/final_ef3b7887d1ae_sub_cta.mp4",
+        "export_preset": "landscape_16_9",
+        "dims": "1920x1080",
+        "duration_s": 22.43,
+        "bgm": true,
+        "cta": true
+      },
+      "dry_elapsed_s": 43.0
+    },
+    {
+      "scenario": "micro_drama",
+      "title": "ShortMax / DramaBox pacing",
+      "peers": [
+        "ShortMax / DramaBox pacing",
+        "CapCut AI story",
+        "Runway narrative shorts"
+      ],
+      "must": [
+        "竖屏，钩子开场 + 冲突/反转节拍",
+        "人物情绪可读，非纯空镜产品片",
+        "至少多镜叙事（非单镜 5 秒敷衍）",
+        "合成成片"
+      ],
+      "plan_score": {
+        "checks": [
+          {
+            "name": "aspect_lock",
+            "pass": true,
+            "detail": "9:16"
+          },
+          {
+            "name": "has_compose",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_subtitle",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_cta",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_bgm_flag",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "multi_or_enough_shots",
+            "pass": true,
+            "detail": "n=2"
+          },
+          {
+            "name": "identity_lock",
+            "pass": true,
+            "detail": ""
+          }
+        ],
+        "pass": 7,
+        "total": 7,
+        "score_pct": 100.0
+      },
+      "n_video": 2,
+      "n_image": 1,
+      "has_compose": true,
+      "has_subtitle": true,
+      "aspect": "9:16",
+      "intent": "video_from_text",
+      "dry_run": {
+        "final_url": "/api/v1/media/generated/final_b28c61f47980_sub_cta.mp4",
+        "export_preset": "portrait_9_16",
+        "dims": "1080x1920",
+        "duration_s": 12.42,
+        "bgm": true,
+        "cta": true
+      },
+      "dry_elapsed_s": 11.6
+    },
+    {
+      "scenario": "product_photo",
+      "title": "Photoroom",
+      "peers": [
+        "Photoroom",
+        "Claid",
+        "Pebblely",
+        "Flair.ai"
+      ],
+      "must": [
+        "影棚布光、商业反光与材质可读",
+        "多角度套图风格一致",
+        "主体居中、背景干净"
+      ],
+      "plan_score": {
+        "checks": [
+          {
+            "name": "photo_series",
+            "pass": true,
+            "detail": ""
+          }
+        ],
+        "pass": 1,
+        "total": 1,
+        "score_pct": 100.0
+      },
+      "n_video": 0,
+      "n_image": 4,
+      "has_compose": false,
+      "has_subtitle": false,
+      "aspect": null,
+      "intent": "image_series",
+      "dry_run": {
+        "final_url": "/api/v1/media/generated/56f67b0c7636.jpg",
+        "export_preset": null,
+        "dims": "4_images",
+        "duration_s": null,
+        "bgm": null,
+        "cta": null
+      },
+      "dry_elapsed_s": 1.8
+    },
+    {
+      "scenario": "talking_avatar",
+      "title": "HeyGen",
+      "peers": [
+        "HeyGen",
+        "Hedra",
+        "D-ID",
+        "Synthesia"
+      ],
+      "must": [
+        "竖屏口播，驱动音清晰（约 -16 LUFS）",
+        "口型与语音基本同步（非纯 Ken Burns）",
+        "正面人像身份稳定",
+        "成片可直接社媒试投放"
+      ],
+      "plan_score": {
+        "checks": [
+          {
+            "name": "aspect_lock",
+            "pass": true,
+            "detail": "9:16"
+          },
+          {
+            "name": "has_compose",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_subtitle",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_cta",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "has_lipsync",
+            "pass": true,
+            "detail": ""
+          },
+          {
+            "name": "voice_id",
+            "pass": true,
+            "detail": ""
+          }
+        ],
+        "pass": 6,
+        "total": 6,
+        "score_pct": 100.0
+      },
+      "n_video": 0,
+      "n_image": 1,
+      "has_compose": true,
+      "has_subtitle": true,
+      "aspect": "9:16",
+      "intent": "talking",
+      "dry_run": {
+        "final_url": "/api/v1/media/generated/final_222653fb0d12_sub_cta.mp4",
+        "export_preset": "portrait_9_16",
+        "dims": "1080x1920",
+        "duration_s": 7.43,
+        "bgm": false,
+        "cta": true
+      },
+      "dry_elapsed_s": 6.4
+    }
+  ]
+}
