@@ -59,9 +59,18 @@ def test_director_talking_preview_assets_honest():
         return assets
 
     assets = asyncio.run(_run())
-    media = [a for a in assets if a.get("type") in ("image", "video")]
+    # Preview honesty applies to generated media steps — not finish packaging (compose).
+    media = [
+        a for a in assets
+        if a.get("type") in ("image", "video", "audio")
+        and not a.get("final")
+        and a.get("model") != "FFmpeg Compose"
+    ]
     assert media, assets
     for a in media:
+        if a.get("type") == "audio" and a.get("mode") == "demo_tone":
+            assert a.get("honesty") == "offline_preview_not_tts"
+            continue
         assert a.get("honesty"), a
         label = a.get("model") or ""
         assert "本地预览" in label or "DEMO" in label.upper() or "占位" in label, label
@@ -74,3 +83,7 @@ def test_director_talking_preview_assets_honest():
     img = next(a for a in media if a.get("type") == "image")
     assert img.get("mode") == "portrait_stub"
     assert "占位" in (img.get("model") or "") or "预览" in (img.get("model") or "")
+    # Packaging ladder must still produce a social-ready final in preview
+    finals = [a for a in assets if a.get("final")]
+    assert finals, assets
+    assert finals[-1].get("export_preset") == "portrait_9_16"
