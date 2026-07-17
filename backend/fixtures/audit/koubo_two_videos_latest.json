@@ -1,0 +1,101 @@
+{
+  "suite": "koubo_two_videos_real",
+  "ts": "2026-07-17T03:19:55Z",
+  "platform_path": "GPT Image 2 → edge-tts → kling/ai-avatar-pro",
+  "tts_honesty": "KIE ElevenLabs TTS still returning internal error; used Microsoft Edge Neural TTS (edge-tts) so lip-sync could be judged on real speech.",
+  "videos": [
+    {
+      "id": "A_earbuds_female",
+      "title": "口播 A · 女主播 · 无线耳机种草",
+      "script": "大家好，今天给大家推荐一款真正能听一整天的无线耳机。音质干净清晰，降噪很稳，通勤开会都合适。现在下单还有限时优惠，喜欢的朋友可以冲。",
+      "started_ts": "2026-07-17T03:01:27Z",
+      "portrait": {
+        "model": "gpt-image-2-text-to-image",
+        "url": "https://tempfile.aiquickdraw.com/images/chatgpt/file_00000000327871f6b70884da2d1d183c.png",
+        "local": "/opt/cursor/artifacts/koubo_two_videos/A_earbuds_female/portrait.png",
+        "bytes": 2085229,
+        "cost": 5.0
+      },
+      "tts": {
+        "engine": "edge-tts",
+        "voice": "zh-CN-XiaoxiaoNeural",
+        "mp3": "/opt/cursor/artifacts/koubo_two_videos/A_earbuds_female/narration.mp3",
+        "wav": "/opt/cursor/artifacts/koubo_two_videos/A_earbuds_female/narration.wav",
+        "duration_s": 14.4,
+        "bytes": 635118,
+        "honesty": "not_elevenlabs_kie; Microsoft Edge Neural TTS fallback while KIE TTS 5xx"
+      },
+      "lipsync": {
+        "model": "kling/ai-avatar-pro",
+        "url": "https://tempfile.aiquickdraw.com/k/53170c020e8cd6a5227ec40a35f4720d_1_1784257933_3094.mp4",
+        "local": "/opt/cursor/artifacts/koubo_two_videos/A_earbuds_female/talking.mp4",
+        "bytes": 14457656,
+        "cost": 0.6,
+        "mode": "kling_avatar"
+      },
+      "analysis": {
+        "n_frames": 72,
+        "mouth_roi_mad_mean": 12.434,
+        "identity_pixel_mad": 4.69,
+        "audio_duration_s": 14.42,
+        "audio_energy_cv": 0.83,
+        "review_frames": [
+          "/opt/cursor/artifacts/koubo_two_videos/A_earbuds_female/talking_frame_0.jpg",
+          "/opt/cursor/artifacts/koubo_two_videos/A_earbuds_female/talking_frame_1.jpg",
+          "/opt/cursor/artifacts/koubo_two_videos/A_earbuds_female/talking_frame_2.jpg",
+          "/opt/cursor/artifacts/koubo_two_videos/A_earbuds_female/talking_frame_3.jpg"
+        ],
+        "passes_talking_proxy": true
+      },
+      "elapsed_s": 654.8,
+      "ok": true
+    },
+    {
+      "id": "B_skincare_male",
+      "title": "口播 B · 男主播 · 护肤精华讲解",
+      "script": "兄弟们，今天分享一瓶我最近每天都在用的护肤精华。质地清爽不黏腻，温和好吸收，熬夜后脸也不容易干。如果你也想把基础护理做扎实，可以试试看。",
+      "started_ts": "2026-07-17T03:12:22Z",
+      "portrait": {
+        "model": "gpt-image-2-text-to-image",
+        "url": "https://tempfile.aiquickdraw.com/images/chatgpt/file_00000000f6a4722fa1087612dc105795.png",
+        "local": "/opt/cursor/artifacts/koubo_two_videos/B_skincare_male/portrait.png",
+        "bytes": 1846893,
+        "cost": 5.0
+      },
+      "tts": {
+        "engine": "edge-tts",
+        "voice": "zh-CN-YunxiNeural",
+        "mp3": "/opt/cursor/artifacts/koubo_two_videos/B_skincare_male/narration.mp3",
+        "wav": "/opt/cursor/artifacts/koubo_two_videos/B_skincare_male/narration.wav",
+        "duration_s": 14.28,
+        "bytes": 629826,
+        "honesty": "not_elevenlabs_kie; Microsoft Edge Neural TTS fallback while KIE TTS 5xx"
+      },
+      "lipsync": {
+        "model": "kling/ai-avatar-pro",
+        "url": "https://tempfile.aiquickdraw.com/k/258afbfacb3794a86615cf7c07365911_1_1784258390_2176.mp4",
+        "local": "/opt/cursor/artifacts/koubo_two_videos/B_skincare_male/talking.mp4",
+        "bytes": 12123806,
+        "cost": 0.6,
+        "mode": "kling_avatar"
+      },
+      "analysis": {
+        "n_frames": 72,
+        "mouth_roi_mad_mean": 9.759,
+        "identity_pixel_mad": 5.94,
+        "audio_duration_s": 14.28,
+        "audio_energy_cv": 1.231,
+        "review_frames": [
+          "/opt/cursor/artifacts/koubo_two_videos/B_skincare_male/talking_frame_0.jpg",
+          "/opt/cursor/artifacts/koubo_two_videos/B_skincare_male/talking_frame_1.jpg",
+          "/opt/cursor/artifacts/koubo_two_videos/B_skincare_male/talking_frame_2.jpg",
+          "/opt/cursor/artifacts/koubo_two_videos/B_skincare_male/talking_frame_3.jpg"
+        ],
+        "passes_talking_proxy": true
+      },
+      "elapsed_s": 453.5,
+      "ok": true
+    }
+  ],
+  "pass_count": 2
+}
