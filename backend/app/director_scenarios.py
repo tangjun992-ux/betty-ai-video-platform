@@ -65,7 +65,8 @@ BENCHMARKS: dict[str, dict] = {
         "must": [
             "明确二次元/新海诚式光影，非写实真人",
             "角色与场景风格统一",
-            "运动连贯、氛围优先",
+            "多镜叙事（开场→登场→情感→高潮），非单镜氛围敷衍",
+            "运动连贯、跨镜身份锁定",
         ],
     },
     "product_photo": {
@@ -144,6 +145,43 @@ DRAMA_BEATS = [
      "brief lingering close, cliffhanger energy for episode follow"),
 ]
 
+# 动漫：叙事弧（对标 Runway/Luma 多镜 stylized short）— 禁止单镜氛围敷衍
+ANIME_BEATS = [
+    ("世界观开场", "建立二次元世界与光影基调",
+     "anime world establishing shot, Makoto Shinkai luminous sky, stylized environment, NOT photoreal"),
+    ("角色登场", "主角清晰出场，身份锁定",
+     "lead character entrance, consistent face design, expressive anime eyes, identity locked"),
+    ("情感推进", "情绪升温或冲突暗示",
+     "emotional beat, character reaction close-up, cinematic anime lighting"),
+    ("高潮运镜", "动态跟拍或戏剧转折",
+     "dynamic tracking or dramatic turn, fluid anime motion, peak color"),
+    ("余韵收束", "留白收尾可续写",
+     "lingering anime close, soft afterglow, sequel-ready pause"),
+]
+
+# 强制画幅（渠道对标）：竖屏信息流 / 横屏投放与品牌片
+_ASPECT_9_16 = ("ugc", "micro_drama", "talking_avatar")
+_ASPECT_16_9 = ("product_ad", "product_commercial", "anime")
+
+# 需要成片包装（字幕 + BGM + 片尾 CTA）的场景
+PACKAGING_SCENARIOS = (
+    "product_ad",
+    "product_commercial",
+    "ugc",
+    "micro_drama",
+    "anime",
+    "talking_avatar",
+)
+
+_CTA_DEFAULTS = {
+    "product_ad": "了解更多 · 立即选购",
+    "product_commercial": "Discover More · 品牌官网",
+    "ugc": "同款安利 · 评论区见",
+    "micro_drama": "下集更精彩",
+    "anime": "故事未完 · 续写下章",
+    "talking_avatar": "关注了解更多",
+}
+
 PRODUCT_PHOTO_VARIATIONS = [
     ("正面主视觉", "centered hero angle, softbox key light, clean seamless backdrop, commercial catalog"),
     ("侧面 45°", "three-quarter product angle, controlled specular highlights, premium material read"),
@@ -188,6 +226,39 @@ def infer_scenario(brief: str) -> str:
 
 def scenario_vertical(scenario: str) -> bool:
     return scenario in ("ugc", "micro_drama", "talking_avatar", "ai_portrait")
+
+
+def scenario_aspect(scenario: str) -> str | None:
+    """Hard channel aspect for video cards. None = do not force (stills / freeform)."""
+    if scenario in _ASPECT_9_16:
+        return "9:16"
+    if scenario in _ASPECT_16_9:
+        return "16:9"
+    return None
+
+
+def scenario_cta_text(scenario: str, brief: str = "") -> str:
+    """End-card CTA copy for finish packaging (Creatify/HeyGen-style deliverable)."""
+    b = (brief or "").strip()
+    # Prefer a short trailing CTA phrase from brief if user wrote one
+    for marker in ("CTA：", "CTA:", "行动号召：", "结尾："):
+        if marker in b:
+            tail = b.split(marker, 1)[1].strip().split("\n")[0][:28]
+            if tail:
+                return tail
+    return _CTA_DEFAULTS.get(scenario, "了解更多")
+
+
+def scenario_default_voice(brief: str, scenario: str = "") -> str:
+    """Stable Chinese Neural TTS voice for talking / narration."""
+    b = brief or ""
+    if any(k in b for k in ("男主播", "男士", "男声", "男生旁白", "男性", "他讲解")):
+        return "zh-CN-YunxiNeural"
+    if any(k in b for k in ("女主播", "女士", "女声", "女生", "她讲解")):
+        return "zh-CN-XiaoxiaoNeural"
+    if scenario == "talking_avatar" and "男" in b:
+        return "zh-CN-YunxiNeural"
+    return "zh-CN-XiaoxiaoNeural"
 
 
 def scenario_intent(scenario: str) -> str:

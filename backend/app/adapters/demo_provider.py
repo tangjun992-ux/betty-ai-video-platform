@@ -582,19 +582,140 @@ def _burn_subtitles(video_path: Path, subtitle_track: list[dict]) -> Path:
     return out_path
 
 
+_CTA_FONT_CANDIDATES = (
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+    _FONT_BOLD,
+)
+
+
+def _cta_fontfile() -> str:
+    for p in _CTA_FONT_CANDIDATES:
+        if Path(p).exists():
+            return p
+    return _FONT_BOLD
+
+
+def _escape_drawtext(text: str) -> str:
+    # ffmpeg drawtext: escape \ : ' %
+    t = (text or "").replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%")
+    return t[:36]
+
+
+def _render_bgm_wav(duration: float, dest: Path) -> Path:
+    """Soft dual-tone bed for finish packaging (not a licensed music library)."""
+    dur = max(1.0, min(float(duration), 120.0))
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-t", f"{dur:.2f}",
+            "-i", "sine=frequency=196:sample_rate=44100",
+            "-f", "lavfi", "-t", f"{dur:.2f}",
+            "-i", "sine=frequency=293.66:sample_rate=44100",
+            "-filter_complex",
+            "[0:a][1:a]amix=inputs=2:duration=longest,lowpass=f=1800,volume=0.14[a]",
+            "-map", "[a]", "-ac", "2", str(dest),
+        ],
+        check=True, capture_output=True, timeout=60,
+    )
+    return dest
+
+
+def _append_cta_card(video_path: Path, cta_text: str, *, seconds: float = 2.4) -> Path:
+    """Append a short end card with CTA copy (Creatify/HeyGen-style finish)."""
+    text = (cta_text or "").strip()
+    if not text or seconds <= 0.3:
+        return video_path
+    w, h = _probe_size(video_path)
+    w -= w % 2
+    h -= h % 2
+    font = _cta_fontfile().replace("\\", "\\\\").replace(":", "\\:")
+    safe = _escape_drawtext(text)
+    fontsize = max(28, min(56, w // 14))
+    gen_dir = video_path.parent
+    card = gen_dir / f"cta_{uuid.uuid4().hex[:10]}.mp4"
+    out = gen_dir / f"{video_path.stem}_cta.mp4"
+    vf = (
+        f"drawtext=fontfile='{font}':text='{safe}':fontsize={fontsize}:"
+        f"fontcolor=white:borderw=2:bordercolor=black@0.55:"
+        f"x=(w-text_w)/2:y=(h-text_h)/2"
+    )
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", f"color=c=0x0B0D14:s={w}x{h}:d={seconds:.2f}",
+                "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={seconds:.2f}",
+                "-vf", vf,
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25",
+                "-c:a", "aac", "-shortest", str(card),
+            ],
+            check=True, capture_output=True, timeout=60,
+        )
+        # Guarantee main has audio before concat
+        main = video_path
+        try:
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "a",
+                 "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(video_path)],
+                capture_output=True, text=True, timeout=30,
+            )
+            if not (probe.stdout or "").strip():
+                filled = gen_dir / f"main_a_{uuid.uuid4().hex[:8]}.mp4"
+                dur = max(_probe_duration(video_path), 0.5)
+                subprocess.run(
+                    [
+                        "ffmpeg", "-y", "-loglevel", "error", "-i", str(video_path),
+                        "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={dur:.2f}",
+                        "-map", "0:v:0", "-map", "1:a:0", "-shortest",
+                        "-c:v", "copy", "-c:a", "aac", str(filled),
+                    ],
+                    check=True, capture_output=True, timeout=120,
+                )
+                main = filled
+        except Exception:
+            main = video_path
+
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-i", str(main), "-i", str(card),
+                "-filter_complex",
+                "[0:v]fps=25,setsar=1[v0];"
+                "[1:v]fps=25,setsar=1[v1];"
+                "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a0];"
+                "[1:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
+                "[v0][a0][v1][a1]concat=n=2:v=1:a=1[v][a]",
+                "-map", "[v]", "-map", "[a]",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                "-movflags", "+faststart", str(out),
+            ],
+            check=True, capture_output=True, timeout=180,
+        )
+        return out if out.exists() else video_path
+    except Exception as e:
+        logger.warning("[demo] CTA card append failed: %s", e)
+        return video_path
+
+
 def compose_final_video(video_urls: list[str], style: Optional[str] = None,
                         with_audio: bool = True, narration_url: Optional[str] = None,
                         *, transitions: Optional[list[str]] = None,
                         subtitle_track: Optional[list[dict]] = None,
                         clip_trims: Optional[list[dict]] = None,
-                        export_preset: Optional[str] = None) -> tuple[str, str]:
+                        export_preset: Optional[str] = None,
+                        bgm: bool = False,
+                        cta_text: Optional[str] = None,
+                        cta_seconds: float = 2.4,
+                        preserve_clip_audio: bool = False) -> tuple[str, str]:
     """
     Stitch multiple shot videos into ONE final film (the Director Agent's hero
-    deliverable). Scales/pads every shot to the first shot's canvas, concatenates
-    with ffmpeg, and muxes audio: a real TTS narration track when provided
-    (narration_url), otherwise a soft procedural ambient bed. Optional subtitle_track
-    is burned into the final MP4 via ffmpeg subtitles filter. Returns
-    (final_video_url, poster_url).
+    deliverable). Scales/pads every shot to the export canvas, concatenates with
+    ffmpeg, muxes narration and/or soft BGM, burns subtitles, and optionally
+    appends an end CTA card. Returns (final_video_url, poster_url).
+
+    ``preserve_clip_audio=True`` keeps speech already baked into clips (口播 lipsync)
+    instead of replacing with narration/BGM beds.
     """
     paths = [p for p in (_local_media_path(u) for u in video_urls) if p]
     if not paths:
@@ -613,7 +734,7 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
         full_dur = _probe_duration(src)
         end = end_raw if end_raw > 0 else full_dur
         needs_trim = start > 0.05 or end < full_dur - 0.05
-        if needs_trim:
+        if needs_trim and not preserve_clip_audio:
             trimmed = gen_dir / f"trim_{uuid.uuid4().hex[:10]}.mp4"
             _trim_video(src, start, end, trimmed)
             work_paths.append(trimmed)
@@ -631,50 +752,145 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
     w -= w % 2
     h -= h % 2
 
-    audio_args = []
-    total_dur = sum(_probe_duration(p) for p in paths) if with_audio else 0.0
-    narration_path = _local_media_path(narration_url) if narration_url else None
-    if with_audio and narration_path:
-        # Real narration voiceover, trimmed to film length via -shortest.
-        audio_args = ["-i", narration_path]
-    elif with_audio and total_dur > 0:
-        # FINITE soft sine pad (196Hz), length = total film — 无限源会让 ffmpeg 挂起。
-        audio_args = ["-f", "lavfi", "-t", f"{total_dur:.2f}",
-                      "-i", "sine=frequency=196:sample_rate=44100"]
+    # ── Talking / baked-audio path: keep clip speech, package subs + CTA ──
+    if preserve_clip_audio:
+        # Ensure every clip has an audio stream (demo Ken Burns may be silent)
+        norm_paths: list[Path] = []
+        for src in paths:
+            dur = max(_probe_duration(src), 0.5)
+            has_a = False
+            try:
+                probe = subprocess.run(
+                    ["ffprobe", "-v", "error", "-select_streams", "a",
+                     "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(src)],
+                    capture_output=True, text=True, timeout=30,
+                )
+                has_a = bool((probe.stdout or "").strip())
+            except Exception:
+                has_a = False
+            if has_a:
+                norm_paths.append(src)
+                continue
+            filled = gen_dir / f"witha_{uuid.uuid4().hex[:10]}.mp4"
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-loglevel", "error",
+                    "-i", str(src),
+                    "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={dur:.2f}",
+                    "-map", "0:v:0", "-map", "1:a:0", "-shortest",
+                    "-c:v", "copy", "-c:a", "aac", str(filled),
+                ],
+                check=True, capture_output=True, timeout=120,
+            )
+            norm_paths.append(filled)
+        paths = norm_paths
+
+        inputs = []
+        for p in paths:
+            inputs += ["-i", str(p)]
+        n_vid = len(paths)
+        filters = []
+        for i in range(n_vid):
+            filters.append(
+                f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25[v{i}];"
+                f"[{i}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[a{i}]"
+            )
+        concat_in = "".join(f"[v{i}][a{i}]" for i in range(n_vid))
+        filter_complex = ";".join(filters) + f";{concat_in}concat=n={n_vid}:v=1:a=1[outv][aud]"
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error", *inputs,
+            "-filter_complex", filter_complex,
+            "-map", "[outv]", "-map", "[aud]",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25", "-c:a", "aac",
+            "-movflags", "+faststart", str(out_path),
+        ]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, timeout=300)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            logger.warning("[demo] preserve_clip_audio concat failed, fallback scale: %s", e)
+            src0 = paths[0]
+            dur0 = max(_probe_duration(src0), 0.5)
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-loglevel", "error", "-i", str(src0),
+                    "-f", "lavfi", "-i", f"anullsrc=r=44100:cl=stereo:d={dur0:.2f}",
+                    "-vf",
+                    f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                    f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25",
+                    "-map", "0:v:0", "-map", "1:a:0", "-shortest",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                    "-movflags", "+faststart", str(out_path),
+                ],
+                check=True, capture_output=True, timeout=180,
+            )
     else:
-        with_audio = False
+        total_dur = sum(_probe_duration(p) for p in paths) if with_audio else 0.0
+        narration_path = _local_media_path(narration_url) if narration_url else None
+        bgm_path: Optional[Path] = None
+        if with_audio and bgm and total_dur > 0:
+            try:
+                bgm_path = _render_bgm_wav(total_dur, gen_dir / f"bgm_{uuid.uuid4().hex[:8]}.wav")
+            except Exception as e:
+                logger.warning("[demo] bgm render failed: %s", e)
+                bgm_path = None
 
-    inputs = []
-    for p in paths:
-        inputs += ["-i", p]
-    audio_idx = len(paths)  # the lavfi audio input index (added after video inputs)
+        audio_args: list = []
+        use_narr = bool(with_audio and narration_path)
+        use_bgm = bool(with_audio and bgm_path)
+        if use_narr:
+            audio_args += ["-i", str(narration_path)]
+        if use_bgm:
+            audio_args += ["-i", str(bgm_path)]
+        if with_audio and not use_narr and not use_bgm and total_dur > 0:
+            audio_args = ["-f", "lavfi", "-t", f"{total_dur:.2f}",
+                          "-i", "sine=frequency=196:sample_rate=44100"]
+            sine_fallback = True
+        else:
+            sine_fallback = False
+        if not (use_narr or use_bgm or sine_fallback):
+            with_audio = False
 
-    filters = []
-    for i in range(len(paths)):
-        filters.append(
-            f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
-            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25[v{i}]"
-        )
-    concat_in = "".join(f"[v{i}]" for i in range(len(paths)))
-    filter_complex = ";".join(filters) + f";{concat_in}concat=n={len(paths)}:v=1:a=0[outv]"
-    if with_audio:
-        # Narration at full listenable volume; procedural ambient bed kept subtle.
-        a_filter = "volume=1.0" if narration_path else "tremolo=f=0.12:d=0.6,volume=0.05"
-        filter_complex += f";[{audio_idx}:a]{a_filter}[aud]"
+        inputs = []
+        for p in paths:
+            inputs += ["-i", p]
+        n_vid = len(paths)
 
-    cmd = ["ffmpeg", "-y", "-loglevel", "error", *inputs, *audio_args,
-           "-filter_complex", filter_complex, "-map", "[outv]"]
-    if with_audio:
-        cmd += ["-map", "[aud]", "-c:a", "aac", "-shortest"]
-    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25",
-            "-movflags", "+faststart", str(out_path)]
+        filters = []
+        for i in range(n_vid):
+            filters.append(
+                f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+                f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=25[v{i}]"
+            )
+        concat_in = "".join(f"[v{i}]" for i in range(n_vid))
+        filter_complex = ";".join(filters) + f";{concat_in}concat=n={n_vid}:v=1:a=0[outv]"
+        if with_audio:
+            if use_narr and use_bgm:
+                filter_complex += (
+                    f";[{n_vid}:a]volume=1.0[narr];"
+                    f"[{n_vid + 1}:a]volume=0.22[bed];"
+                    f"[narr][bed]amix=inputs=2:duration=first:dropout_transition=0[aud]"
+                )
+            elif use_narr:
+                filter_complex += f";[{n_vid}:a]volume=1.0[aud]"
+            elif use_bgm:
+                filter_complex += f";[{n_vid}:a]volume=0.85[aud]"
+            else:
+                filter_complex += f";[{n_vid}:a]tremolo=f=0.12:d=0.6,volume=0.05[aud]"
 
-    try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=300)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        stderr = getattr(e, "stderr", b"")
-        logger.error("[demo] compose failed: %s", stderr[:600] if stderr else e)
-        raise RuntimeError(f"Final compose failed: {e}")
+        cmd = ["ffmpeg", "-y", "-loglevel", "error", *inputs, *audio_args,
+               "-filter_complex", filter_complex, "-map", "[outv]"]
+        if with_audio:
+            cmd += ["-map", "[aud]", "-c:a", "aac", "-shortest"]
+        cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "25",
+                "-movflags", "+faststart", str(out_path)]
+
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, timeout=300)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            stderr = getattr(e, "stderr", b"")
+            logger.error("[demo] compose failed: %s", stderr[:600] if stderr else e)
+            raise RuntimeError(f"Final compose failed: {e}")
 
     if subtitle_track:
         try:
@@ -684,6 +900,15 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
                 out_name = out_path.name
         except Exception as e:
             logger.warning("[demo] subtitle burn failed (video still usable): %s", e)
+
+    if cta_text:
+        try:
+            with_cta = _append_cta_card(out_path, cta_text, seconds=float(cta_seconds or 2.4))
+            if with_cta != out_path and with_cta.exists():
+                out_path = with_cta
+                out_name = out_path.name
+        except Exception as e:
+            logger.warning("[demo] CTA packaging failed: %s", e)
 
     # Poster = first frame of the final film
     poster_name = f"finalposter_{uuid.uuid4().hex[:12]}.jpg"

@@ -248,9 +248,11 @@ class DirectorPlanner:
         ``minimal=True`` skips TTS/subtitle; multi-shot scenarios still stitch compose.
         """
         from app.director_scenarios import (
-            AD_BEATS, COMMERCIAL_BEATS, UGC_BEATS, DRAMA_BEATS,
+            AD_BEATS, COMMERCIAL_BEATS, UGC_BEATS, DRAMA_BEATS, ANIME_BEATS,
             PRODUCT_PHOTO_VARIATIONS, PORTRAIT_VARIATIONS,
-            infer_scenario, scenario_vertical, scenario_intent, SCENARIO_IDS,
+            PACKAGING_SCENARIOS,
+            infer_scenario, scenario_vertical, scenario_intent, scenario_aspect,
+            scenario_cta_text, scenario_default_voice, SCENARIO_IDS,
         )
 
         brief = (brief or "").strip()
@@ -272,6 +274,12 @@ class DirectorPlanner:
         styles = _styles_from_brief(brief)
         vertical = _has(brief, ["竖屏", "抖音", "tiktok", "reels", "shorts", "手机", "9:16"])
         if scenario and scenario_vertical(scenario):
+            vertical = True
+        # Hard channel lock: ads/commercial/anime are landscape even if brief says 竖屏
+        locked_aspect = scenario_aspect(scenario) if scenario else None
+        if locked_aspect == "16:9":
+            vertical = False
+        elif locked_aspect == "9:16":
             vertical = True
 
         # Scenario style bias (prevents「产品」keyword from drowning portrait/anime)
@@ -316,18 +324,32 @@ class DirectorPlanner:
 
         intent = scenario_intent(scenario) if scenario else ""
 
-        def _add_video_shots(prev: str, beats: list, n: int, vid: dict, aspect: str) -> list[str]:
+        def _add_video_shots(
+            prev: str, beats: list, n: int, vid: dict, aspect: str,
+            *, hero_id: str | None = None,
+        ) -> list[str]:
+            """Chain shots; every shot keeps identity_from=hero for cross-shot lock."""
             ids: list[str] = []
+            identity = hero_id or prev
             for i in range(n):
                 beat_cn, beat_desc, cam_en = beats[i % len(beats)]
+                # Depend on previous shot for order; identity resolved from hero image at execute
+                deps = [prev]
+                if identity and identity not in deps:
+                    deps.append(identity)
                 sv = DirectorStep(
                     id=sid(), action="video",
                     title=f"分镜 {i+1}/{n} · {beat_cn}",
                     model_id=vid["id"], model_name=vid["display_name"],
                     reason=f"{beat_desc}，选 {vid['display_name']}",
-                    prompt=_shot_prompt(brief, f"{beat_cn}·{beat_desc}", cam_en, styles),
-                    depends_on=[prev], est_credits=_credits_of(vid, "video", 5),
-                    params={"aspect_ratio": aspect, "duration": 5, "shot": i + 1},
+                    prompt=_shot_prompt(
+                        brief, f"{beat_cn}·{beat_desc}", cam_en, styles,
+                    ) + "，same subject identity locked to hero frame",
+                    depends_on=deps, est_credits=_credits_of(vid, "video", 5),
+                    params={
+                        "aspect_ratio": aspect, "duration": 5, "shot": i + 1,
+                        "identity_from": identity,
+                    },
                 )
                 steps.append(sv)
                 ids.append(sv.id)
@@ -339,24 +361,33 @@ class DirectorPlanner:
             intent = "talking"
             scenario = scenario or "talking_avatar"
             img = _pick_model("image", styles + ["portrait"], "quality")
+            voice_id = scenario_default_voice(brief, scenario)
             s_voice = DirectorStep(id=sid(), action="audio", title="AI 配音 · 旁白 (TTS)",
-                model_id="elevenlabs-tts", model_name="ElevenLabs TTS",
-                reason="把脚本转成自然旁白，用于驱动数字人口型与成片解说",
-                prompt=brief, depends_on=[enh_id], est_credits=2, params={"script": brief})
+                model_id="edge-tts", model_name="Edge Neural TTS",
+                reason="Edge Neural 中文配音（稳定）+ loudnorm，驱动数字人口型",
+                prompt=brief, depends_on=[enh_id], est_credits=2,
+                params={"script": brief, "voice_id": voice_id, "talking": True})
             s_img = DirectorStep(id=sid(), action="image", title="生成数字人形象",
                 model_id=img["id"], model_name=img["display_name"],
                 reason=f"口播需要高保真人像，选 {img['display_name']}（人像/写实强）",
                 prompt=(f"{brief}｜digital human talking-head portrait, front-facing, "
-                        "chest-up, professional softbox, clean backdrop, natural skin, mouth slightly closed"),
+                        "chest-up, professional softbox, clean backdrop, natural skin, mouth slightly closed, "
+                        "vertical 9:16, identity locked"),
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
-                params={"aspect_ratio": "9:16" if vertical else "3:4"})
+                params={"aspect_ratio": "9:16"})
             s_talk = DirectorStep(id=sid(), action="lipsync", title="唇形同步驱动 (数字人开口)",
                 model_id="kling-avatar", model_name="Kling AI Avatar",
                 reason="用旁白音频精准驱动人像口型，生成自然开口说话的数字人",
-                prompt=("natural talking head to camera, precise lip sync matching speech audio, "
-                        "subtle blinks and micro head motion, identity locked, no warping"),
+                prompt=("close-up talking head, mouth shapes precisely match the speech audio, "
+                        "natural jaw and lip motion, clear articulation, keep facial identity, "
+                        "subtle head motion, no dubbing mismatch"),
                 depends_on=[s_img.id, s_voice.id], est_credits=6,
-                params={"aspect_ratio": "9:16" if vertical else "16:9"})
+                params={
+                    "aspect_ratio": "9:16",
+                    "identity_from": None,  # filled after ids known
+                    "lipsync_model": "kling/ai-avatar-pro",
+                })
+            s_talk.params["identity_from"] = s_img.id
             steps += [s_voice, s_img, s_talk]
 
         elif scenario in ("product_ad", "product_commercial", "ugc") or (
@@ -393,15 +424,16 @@ class DirectorPlanner:
                 )
                 n = max(4, _n_shots(duration))  # commercial never collapses to 1 shot
                 vid_aspect = "16:9"
-            else:  # product_ad
+            else:  # product_ad — always 16:9 delivery (Meta/placement landscape)
                 vid = _force_vid("kling-2.1-master", "kling-2.1-pro",
                                  fallback_styles=styles, prefer="quality")
                 beats, hero = AD_BEATS, (
                     f"{brief}｜high-converting product ad hero frame, crisp commercial lighting, "
-                    "instant product readability, social-ad key art"
+                    "instant product readability, social-ad key art, 16:9"
                 )
                 n = min(3, max(2, _n_shots(duration))) if duration <= 15 else _n_shots(duration)
-                vid_aspect = "9:16" if vertical else "16:9"
+                vid_aspect = "16:9"
+                img_aspect = "16:9"
 
             s_img = DirectorStep(id=sid(), action="image", title="产品主视觉 (Hero Shot)",
                 model_id=img["id"], model_name=img["display_name"],
@@ -409,7 +441,7 @@ class DirectorPlanner:
                 prompt=hero, depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": img_aspect})
             steps.append(s_img)
-            _add_video_shots(s_img.id, beats, n, vid, vid_aspect)
+            _add_video_shots(s_img.id, beats, n, vid, vid_aspect, hero_id=s_img.id)
 
         elif scenario == "micro_drama":
             intent = "video_from_text"
@@ -431,7 +463,7 @@ class DirectorPlanner:
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": "9:16"})
             steps.append(s_img)
-            _add_video_shots(s_img.id, DRAMA_BEATS, n, vid, "9:16")
+            _add_video_shots(s_img.id, DRAMA_BEATS, n, vid, "9:16", hero_id=s_img.id)
 
         elif scenario == "anime":
             intent = "video_from_text"
@@ -447,16 +479,18 @@ class DirectorPlanner:
                 if hit:
                     vid = hit
                     break
-            n = 1 if minimal else min(3, _n_shots(duration))
+            # Narrative anime: multi-beat even in「快速成片」(对标 Runway stylized shorts)
+            n = 2 if minimal else max(3, min(_n_shots(duration), 4))
             s_img = DirectorStep(id=sid(), action="image", title="动漫关键帧",
                 model_id=img["id"], model_name=img["display_name"],
-                reason="锁定二次元角色与光影",
+                reason="锁定二次元角色与光影（跨镜身份锚点）",
                 prompt=(f"{brief}｜anime keyframe, Makoto Shinkai inspired luminous atmosphere, "
-                        "detailed character, cinematic color, NOT photoreal live-action"),
+                        "detailed lead character face design, cinematic color, "
+                        "NOT photoreal live-action, identity locked hero frame"),
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": "16:9"})
             steps.append(s_img)
-            _add_video_shots(s_img.id, _SHOT_BEATS, n, vid, "16:9")
+            _add_video_shots(s_img.id, ANIME_BEATS, n, vid, "16:9", hero_id=s_img.id)
 
         elif scenario == "ai_portrait" or (
             force_image_series is False and not scenario and _has(brief, ["写真", "形象照", "领英"]) and _has(brief, _SERIES_KW)
@@ -528,7 +562,7 @@ class DirectorPlanner:
                     depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                     params={"aspect_ratio": img_aspect})
                 steps.append(s_img)
-                _add_video_shots(s_img.id, _SHOT_BEATS, n, vid, vid_aspect)
+                _add_video_shots(s_img.id, _SHOT_BEATS, n, vid, vid_aspect, hero_id=s_img.id)
 
         elif _has(brief, _SERIES_KW):
             intent = "image_series"
@@ -560,41 +594,123 @@ class DirectorPlanner:
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": img_aspect}))
 
-        # 视频后期：多镜必须合成一条成片（对标顶级投放/短剧平台）
-        # minimal：跳过配音/字幕，但仍 stitch；完整成片：TTS+字幕+合成
+        # 视频后期：合成 + 成片包装（字幕 / BGM / 片尾 CTA）— 对标 Creatify/HeyGen 可发成片
         video_steps = [s for s in steps if s.action in ("video", "lipsync")]
         multi = len([s for s in steps if s.action == "video"]) > 1
-        if video_steps and intent != "talking":
-            vid_ids = [s.id for s in video_steps if s.action == "video"] or [s.id for s in video_steps]
-            if not minimal:
-                s_audio = DirectorStep(id=sid(), action="audio", title="AI 配音 · 解说 (TTS)",
-                    model_id="elevenlabs-tts", model_name="ElevenLabs TTS",
-                    reason="将创意脚本转成自然解说旁白，随成片一起输出",
-                    prompt=brief, depends_on=[vid_ids[-1]], est_credits=2, params={"script": brief})
-                s_sub = DirectorStep(id=sid(), action="subtitle", title="智能字幕",
-                    model_id="subtitle-engine", model_name="Auto Caption",
-                    reason="自动生成并烧录字幕，适配社媒传播",
-                    prompt=brief, depends_on=[vid_ids[-1]], est_credits=1)
-                s_comp = DirectorStep(id=sid(), action="compose", title="剪辑合成成片",
-                    model_id="compose-engine", model_name="FFmpeg Compose",
-                    reason=f"将 {len(vid_ids)} 个分镜 + 配乐 + 字幕剪辑合成为最终可发布成片",
-                    prompt=brief, depends_on=vid_ids + [s_audio.id, s_sub.id], est_credits=0)
-                steps += [s_audio, s_sub, s_comp]
-            elif multi:
-                # 快速成片但仍交付「一条成片」，避免散落分镜无法验收
-                s_comp = DirectorStep(id=sid(), action="compose", title="分镜合成成片",
-                    model_id="compose-engine", model_name="FFmpeg Compose",
-                    reason=f"将 {len(vid_ids)} 个分镜合成为一条可发布成片（快速模式跳过配音字幕）",
-                    prompt=brief, depends_on=vid_ids, est_credits=0)
-                steps.append(s_comp)
+        need_pack = bool(scenario and scenario in PACKAGING_SCENARIOS)
+        finish_aspect = locked_aspect or ("9:16" if vertical else "16:9")
+        finish_preset = _ASPECT_TO_EXPORT.get(finish_aspect)
+        cta = scenario_cta_text(scenario, brief) if scenario else "了解更多"
 
-        # 跨镜共享 seed（保持全片风格一致）+ 参考图注入（真正参与图生视频）
+        if video_steps and (intent != "talking" or need_pack):
+            if intent == "talking":
+                # 口播：唇形成片再包字幕 + CTA（无额外 BGM，避免盖过人声）
+                talk_ids = [s.id for s in video_steps]
+                s_sub = DirectorStep(
+                    id=sid(), action="subtitle", title="智能字幕",
+                    model_id="subtitle-engine", model_name="Auto Caption",
+                    reason="口播成片烧录字幕，社媒可直接试投",
+                    prompt=brief, depends_on=[talk_ids[-1]], est_credits=1,
+                    params={"script": brief},
+                )
+                s_comp = DirectorStep(
+                    id=sid(), action="compose", title="口播成片包装",
+                    model_id="compose-engine", model_name="FFmpeg Compose",
+                    reason="字幕 + 片尾 CTA 包装为可发布口播成片",
+                    prompt=brief, depends_on=talk_ids + [s_sub.id], est_credits=0,
+                    params={
+                        "aspect_ratio": "9:16",
+                        "export_preset": "portrait_9_16",
+                        "bgm": False,
+                        "cta_text": cta,
+                        "keep_source_audio": True,
+                    },
+                )
+                steps += [s_sub, s_comp]
+            else:
+                vid_ids = [s.id for s in video_steps if s.action == "video"] or [
+                    s.id for s in video_steps
+                ]
+                compose_params = {
+                    "aspect_ratio": finish_aspect,
+                    "export_preset": finish_preset,
+                    "bgm": True,
+                    "cta_text": cta,
+                }
+                if not minimal:
+                    voice_id = scenario_default_voice(brief, scenario)
+                    s_audio = DirectorStep(
+                        id=sid(), action="audio", title="AI 配音 · 解说 (TTS)",
+                        model_id="edge-tts", model_name="Edge Neural TTS",
+                        reason="将创意脚本转成自然解说旁白，随成片一起输出",
+                        prompt=brief, depends_on=[vid_ids[-1]], est_credits=2,
+                        params={"script": brief, "voice_id": voice_id},
+                    )
+                    s_sub = DirectorStep(
+                        id=sid(), action="subtitle", title="智能字幕",
+                        model_id="subtitle-engine", model_name="Auto Caption",
+                        reason="自动生成并烧录字幕，适配社媒传播",
+                        prompt=brief, depends_on=[vid_ids[-1]], est_credits=1,
+                        params={"script": brief},
+                    )
+                    s_comp = DirectorStep(
+                        id=sid(), action="compose", title="剪辑合成成片",
+                        model_id="compose-engine", model_name="FFmpeg Compose",
+                        reason=f"将 {len(vid_ids)} 个分镜 + 配乐 + 字幕 + 片尾 CTA 合成为可发布成片",
+                        prompt=brief,
+                        depends_on=vid_ids + [s_audio.id, s_sub.id],
+                        est_credits=0,
+                        params=compose_params,
+                    )
+                    steps += [s_audio, s_sub, s_comp]
+                elif multi or need_pack:
+                    # 快速成片：仍 stitch + 字幕/BGM/CTA（跳过 TTS 控成本）
+                    s_sub = DirectorStep(
+                        id=sid(), action="subtitle", title="智能字幕",
+                        model_id="subtitle-engine", model_name="Auto Caption",
+                        reason="快速模式仍烧录字幕，对标可发成片",
+                        prompt=brief, depends_on=[vid_ids[-1]], est_credits=1,
+                        params={"script": brief},
+                    )
+                    s_comp = DirectorStep(
+                        id=sid(), action="compose", title="分镜合成成片",
+                        model_id="compose-engine", model_name="FFmpeg Compose",
+                        reason=f"将 {len(vid_ids)} 个分镜 + BGM + 字幕 + CTA 合成为一条成片",
+                        prompt=brief, depends_on=vid_ids + [s_sub.id], est_credits=0,
+                        params=compose_params,
+                    )
+                    steps += [s_sub, s_comp]
+
+        # 跨镜共享 seed + 身份锚点 + 画幅硬化 + 参考图注入
         shared_seed = hashlib.sha1((brief or "x").encode()).hexdigest()[:12]
+        hero_step = next(
+            (
+                s for s in steps
+                if s.action == "image" and any(
+                    k in (s.title or "")
+                    for k in ("Hero", "主视觉", "关键帧", "首帧", "数字人", "短剧首帧")
+                )
+            ),
+            next((s for s in steps if s.action == "image"), None),
+        )
         for s in steps:
+            if s.action in ("image", "video", "lipsync", "compose"):
+                s.params = {**(s.params or {}), "scenario": scenario or None}
             if s.action in ("image", "video", "lipsync"):
-                s.params = {**(s.params or {}), "seed": shared_seed, "scenario": scenario or None}
+                s.params["seed"] = shared_seed
                 if ref_image_url and s.action in ("video", "lipsync"):
                     s.params["image_url"] = ref_image_url
+                if hero_step and s.action in ("video", "lipsync") and not s.params.get("identity_from"):
+                    s.params["identity_from"] = hero_step.id
+            # Channel aspect lock (stills series keep their own ratios)
+            if locked_aspect and s.action in ("video", "lipsync", "compose"):
+                s.params["aspect_ratio"] = locked_aspect
+                if s.action == "compose":
+                    s.params["export_preset"] = _ASPECT_TO_EXPORT.get(locked_aspect)
+            if locked_aspect and s.action == "image" and scenario not in (
+                "ai_portrait", "product_photo",
+            ):
+                s.params["aspect_ratio"] = locked_aspect
 
         total = sum(s.est_credits for s in steps)
         n_assets = len([s for s in steps if s.action in ("image", "video", "lipsync", "compose")])
@@ -683,12 +799,24 @@ def refine_plan(plan: DirectorPlan, directive: str) -> tuple[DirectorPlan, list[
             changes.append(f"{'第' + str(idx) + '镜' if target else '全部镜头'}调整为「{note}」")
             break
 
-    # 2) Aspect ratio
+    # 2) Aspect ratio — scenario channel lock wins over freeform directives
+    from app.director_scenarios import scenario_aspect as _scenario_aspect
+    locked = _scenario_aspect(getattr(plan, "scenario", "") or "")
     for kws, ratio in _ASPECT_DIRECTIVES:
         if _has(d, kws):
-            for s in media_steps:
-                s.params = {**(s.params or {}), "aspect_ratio": ratio}
-            changes.append(f"画幅改为 {ratio}")
+            if locked and ratio != locked:
+                changes.append(f"画幅保持场景锁定 {locked}（忽略「改为 {ratio}」）")
+            else:
+                for s in media_steps:
+                    s.params = {**(s.params or {}), "aspect_ratio": ratio}
+                for s in steps:
+                    if s.action == "compose":
+                        s.params = {
+                            **(s.params or {}),
+                            "aspect_ratio": ratio,
+                            "export_preset": _ASPECT_TO_EXPORT.get(ratio),
+                        }
+                changes.append(f"画幅改为 {ratio}")
             break
 
     # 3) Model swap (video first, then image)
@@ -886,6 +1014,8 @@ class DirectorExecutor:
                 # and that lip-sync uses to drive the avatar. Demo → local tone.
                 script = (step.params or {}).get("script") or step.prompt or ""
                 script = script[:600]
+                voice_id = (step.params or {}).get("voice_id") or "zh-CN-XiaoxiaoNeural"
+                is_talking = bool((step.params or {}).get("talking"))
                 try:
                     from app.adapters.demo_provider import demo_mode_active
                     use_demo_a = self.dry_run or demo_mode_active()
@@ -904,16 +1034,18 @@ class DirectorExecutor:
                         }
                     from app.adapters.kie_adapter import KieAdapter
                     from app.services.media_store import persist_results
-                    from app.services.audio_prep import synthesize_speech_edge
+                    from app.services.audio_prep import synthesize_speech_edge, is_azure_neural_voice
                     import uuid as _uuid
                     # Concise narration for clearer phonemes / lip sync.
                     narrate = script
-                    if len(narrate) > 180:
-                        narrate = narrate[:180].rstrip("，。；、 ") + "。"
-                    # Prefer Edge Neural (matches 口播 Chinese labels; KIE ElevenLabs flaky).
+                    max_chars = 280 if is_talking else 180
+                    if len(narrate) > max_chars:
+                        narrate = narrate[:max_chars].rstrip("，。；、 ") + "。"
+                    # Prefer Edge Neural (stable Chinese); fall back to ElevenLabs.
                     try:
+                        edge_voice = voice_id if is_azure_neural_voice(voice_id) else "zh-CN-XiaoxiaoNeural"
                         wav_bytes, used_voice = await synthesize_speech_edge(
-                            narrate, "zh-CN-XiaoxiaoNeural",
+                            narrate, edge_voice,
                         )
                         url = await KieAdapter().upload_public_url(
                             wav_bytes,
@@ -932,7 +1064,9 @@ class DirectorExecutor:
                     except Exception as edge_err:
                         logger.warning("[director] edge-tts failed (%s) → ElevenLabs", edge_err)
                     last_err: Exception | None = None
-                    for voice in ("Rachel", "Adam"):
+                    # Gender-aware ElevenLabs fallback from Edge voice choice
+                    el_order = ("Adam", "Rachel") if "Yunxi" in (voice_id or "") else ("Rachel", "Adam")
+                    for voice in el_order:
                         for attempt in range(2):
                             try:
                                 res = await KieAdapter().generate_speech(narrate, voice=voice)
@@ -959,9 +1093,10 @@ class DirectorExecutor:
 
             if step.action == "compose":
                 # Stitch all upstream shot videos into ONE final film (hero deliverable),
-                # muxing the real narration voiceover when available.
+                # muxing narration + optional BGM/CTA packaging.
                 results = getattr(self, "_results", {}) or {}
                 shot_urls, narration_url = [], None
+                keep_source_audio = bool((step.params or {}).get("keep_source_audio"))
                 for dep in step.depends_on:
                     r = results.get(dep)
                     if not isinstance(r, dict):
@@ -981,6 +1116,10 @@ class DirectorExecutor:
                     if isinstance(r, dict) and r.get("type") == "subtitle":
                         subtitle_track = r.get("subtitle_track") or subtitle_track
                 export_preset = _export_preset_from_params(step.params)
+                want_bgm = bool((step.params or {}).get("bgm"))
+                cta_text = (step.params or {}).get("cta_text") or None
+                # Talking lipsync already has speech in the clip — preserve it
+                narr_for_mux = None if keep_source_audio else narration_url
                 try:
                     from app.adapters.demo_provider import compose_final_video
                     final_url, poster = await asyncio.to_thread(
@@ -988,18 +1127,23 @@ class DirectorExecutor:
                         shot_urls,
                         None,
                         True,
-                        narration_url,
+                        narr_for_mux,
                         subtitle_track=subtitle_track,
                         export_preset=export_preset,
+                        bgm=want_bgm and not keep_source_audio,
+                        cta_text=cta_text,
+                        preserve_clip_audio=keep_source_audio,
                     )
                     step.status = "done"
                     return {
                         "type": "video", "media_url": final_url, "url": final_url,
                         "thumbnail": poster, "model": step.model_name, "cost": 0,
                         "final": True, "shot_count": len(shot_urls),
-                        "has_voiceover": bool(narration_url),
+                        "has_voiceover": bool(narration_url) or keep_source_audio,
                         "subtitle_cues": len(subtitle_track),
                         "export_preset": export_preset,
+                        "bgm": want_bgm and not keep_source_audio,
+                        "cta": bool(cta_text),
                     }
                 except Exception as e:
                     logger.warning("[director] compose failed: %s", e)
@@ -1066,12 +1210,22 @@ class DirectorExecutor:
                         )
                     except Exception as prep_err:
                         logger.warning("[director] lipsync audio prep skipped: %s", prep_err)
+                    # Prefer identity_from hero when params override is missing
+                    identity_from = (step.params or {}).get("identity_from")
+                    if identity_from and isinstance(results.get(identity_from), dict):
+                        r0 = results[identity_from]
+                        img_pub = r0.get("source_url") or r0.get("media_url") or img_pub
                     ls_prompt = (
-                        "close-up talking head, mouth shapes precisely match the speech audio, "
-                        "natural jaw and lip motion, clear articulation, keep facial identity"
+                        step.prompt
+                        or "close-up talking head, mouth shapes precisely match the speech audio, "
+                        "natural jaw and lip motion, clear articulation, keep facial identity, "
+                        "subtle head motion, no dubbing mismatch"
                     )
+                    ls_model = (step.params or {}).get("lipsync_model") or "kling/ai-avatar-pro"
                     res = await KieAdapter().generate_lipsync(
-                        image_url=img_pub, audio_url=aud_pub, prompt=ls_prompt)
+                        image_url=img_pub, audio_url=aud_pub, prompt=ls_prompt,
+                        model_id=ls_model, resolution="720p",
+                    )
                     final_url = res.media_url
                     try:
                         boosted = await asyncio.to_thread(boost_video_audio, res.media_url)
@@ -1096,9 +1250,8 @@ class DirectorExecutor:
             media_type = "video" if step.action in ("video", "lipsync") else "image"
             duration = int((step.params or {}).get("duration", 5) or 5)
             seed = (step.params or {}).get("seed")
-            # Image-to-video consistency: a video shot animates its explicit
-            # reference image, else the keyframe produced by an image dependency —
-            # so every shot shares the same look (跨镜风格一致).
+            # Image-to-video identity lock: prefer explicit image_url, then
+            # identity_from hero step, then image deps, then any hero in results.
             base_image_url = (step.params or {}).get("image_url")
             if media_type == "video" and not base_image_url:
                 results = getattr(self, "_results", {}) or {}
@@ -1107,11 +1260,18 @@ class DirectorExecutor:
                     # Prefer public provider URL — KIE Kling Pro requires reachable image_url.
                     return r.get("source_url") or r.get("media_url") or r.get("url")
 
-                for dep in step.depends_on:
-                    r = results.get(dep)
-                    if isinstance(r, dict) and r.get("type") == "image" and _img_ref(r):
-                        base_image_url = _img_ref(r)
-                        break
+                identity_from = (step.params or {}).get("identity_from")
+                if identity_from and isinstance(results.get(identity_from), dict):
+                    ref = _img_ref(results[identity_from])
+                    if ref:
+                        base_image_url = ref
+
+                if not base_image_url:
+                    for dep in step.depends_on:
+                        r = results.get(dep)
+                        if isinstance(r, dict) and r.get("type") == "image" and _img_ref(r):
+                            base_image_url = _img_ref(r)
+                            break
                 # Multi-shot i2v: later shots often depend on prior *video*; still drive
                 # from the hero/keyframe image so Kling Pro (image_url required) works.
                 if not base_image_url:

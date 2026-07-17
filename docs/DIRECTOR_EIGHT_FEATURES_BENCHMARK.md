@@ -41,6 +41,14 @@
 7. **Kling Pro i2v** 公开 `image_url`/`source_url` + 本地上传兜底  
 8. **口播** Edge Neural TTS + loudnorm（-16 LUFS）；InfiniTalk **不再静默回退**（仅 Studio 显式 `prefer_infinitalk`）
 
+### 对标对齐 · 第二轮（画幅 / 包装 / 口播 / 身份 / 叙事）
+
+1. **画幅硬化**：UGC / 微短剧 / 口播强制 `9:16`；产品广告 / 商业片 / 动漫强制 `16:9`（brief 写「竖屏」也不能撬开渠道锁；refine 同理）  
+2. **成片包装层**：字幕烧录 + 软 BGM + 片尾 CTA（快速模式也保留字幕/BGM/CTA；完整模式另加 TTS）  
+3. **口播强化**：男女声 Edge Neural 路由（Xiaoxiao / Yunxi）、更长旁白、统一 lipsync prompt、成片保留人声并包字幕+CTA  
+4. **跨镜身份锁定**：hero/关键帧 `identity_from`，多镜 i2v 始终锚定同一主体图  
+5. **动漫/短剧多镜叙事**：`ANIME_BEATS` 叙事弧；动漫 minimal 亦 ≥2 镜并合成
+
 ## 诚实天花板
 
 - 视频运动/口型受 Kling、Seedance、Avatar 上游限制，无法宣称已全面追平 HeyGen/Runway 旗舰演示  
