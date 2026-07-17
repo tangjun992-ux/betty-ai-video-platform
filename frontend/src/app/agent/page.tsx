@@ -23,7 +23,12 @@ interface Step {
   status: string; result?: any; params?: StepParams; skip?: boolean;
 }
 interface Plan { brief: string; intent: string; summary: string; total_credits: number; steps: Step[]; }
-interface Asset { step_id?: string; step: string; model: string; type?: string; media_url?: string; url?: string; thumbnail?: string; shot?: number; final?: boolean; shot_count?: number; }
+interface Asset {
+  step_id?: string; step: string; model: string; type?: string;
+  media_url?: string; url?: string; thumbnail?: string; shot?: number;
+  final?: boolean; shot_count?: number;
+  mode?: string; honesty?: string; planned_model_name?: string; planned_model?: string;
+}
 interface Session { id: string; title: string; lastMessage: string; }
 interface ModelOpt { id: string; name: string; }
 
@@ -870,6 +875,7 @@ export default function AgentPage() {
                             </button>
                             <button
                               onClick={() => execute(true)}
+                              title="本地占位预览：不调用 GPT Image / ElevenLabs / Kling，数字人为占位图+Ken Burns"
                               className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border border-cosmic-border text-text-secondary hover:bg-cosmic-subtle transition-all"
                             >
                               <Clapperboard className="w-4 h-4" />{t("agent.preview")}
@@ -953,10 +959,16 @@ export default function AgentPage() {
                 {running ? <Loader2 className="w-4 h-4 text-brand animate-spin" /> : <Check className="w-4 h-4 text-emerald-500" />}
                 <h3 className="text-sm font-semibold">
                   {running ? "逐镜产出中" : "分镜素材"} {shotAssets.length} 个
-                  {dryRunMode && <span className="text-[11px] text-text-secondary ml-1">(预览模式)</span>}
+                  {dryRunMode && <span className="text-[11px] text-amber-600 ml-1">(本地预览 · 非真实模型)</span>}
                   {totalMs != null && !running && <span className="text-[11px] text-text-tertiary ml-2">⚡ 用时 {(totalMs / 1000).toFixed(1)}s</span>}
                 </h3>
               </div>
+              {dryRunMode && (
+                <div className="mb-3 rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+                  免费预览不会调用计划里的 GPT Image / ElevenLabs / Kling。数字人步骤使用本地占位人像 + Ken Burns 动效；
+                  要点「真实生成」才会按规划扣积分跑真实口型。
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {shotAssets.map((a, i) => {
                   const media = resolveMedia(a.media_url || a.url);
@@ -990,7 +1002,13 @@ export default function AgentPage() {
                       </div>
                       <div className="p-2.5">
                         <p className="text-xs font-medium truncate">{a.step}</p>
-                        <p className="text-[10px] text-text-secondary truncate">{a.model}</p>
+                        <p className={cn(
+                          "text-[10px] truncate",
+                          a.honesty || a.mode ? "text-amber-600" : "text-text-secondary",
+                        )}>{a.model}</p>
+                        {a.planned_model_name && (a.honesty || a.mode) && (
+                          <p className="text-[9px] text-text-tertiary truncate">计划模型：{a.planned_model_name}</p>
+                        )}
                       </div>
                     </motion.div>
                   );

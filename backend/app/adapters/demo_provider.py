@@ -225,17 +225,120 @@ def _load_local_image(url: str):
     return None
 
 
+_PORTRAIT_HINTS = (
+    "portrait", "人像", "数字人", "口播", "主播", "半身", "棚拍",
+    "talking", "avatar", "face", "headshot", "唇形",
+)
+
+
+def _wants_portrait(prompt: str, style: Optional[str]) -> bool:
+    s = (style or "").lower()
+    if s in ("portrait", "人像"):
+        return True
+    p = (prompt or "").lower()
+    return any(h.lower() in p for h in _PORTRAIT_HINTS)
+
+
+def _render_portrait_stub(w: int, h: int, seed: str):
+    """Deterministic studio headshot placeholder (no random landscape).
+
+    Free preview must never imply a photoreal digital human from picsum stock.
+    This draws an obvious DEMO avatar so talking/lipsync plans stay on-subject.
+    """
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+
+    hv = int(seed[:12], 16) if seed else 0
+    # Soft studio backdrop
+    bg = (
+        40 + (hv & 0x1F),
+        44 + ((hv >> 5) & 0x1F),
+        56 + ((hv >> 10) & 0x2F),
+    )
+    img = Image.new("RGB", (w, h), bg)
+    draw = ImageDraw.Draw(img, "RGBA")
+    # Soft key light ellipse behind subject
+    glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    cx, cy = w // 2, int(h * 0.38)
+    gd.ellipse(
+        [cx - int(w * 0.42), cy - int(h * 0.28), cx + int(w * 0.42), cy + int(h * 0.28)],
+        fill=(255, 240, 220, 55),
+    )
+    img = Image.alpha_composite(img.convert("RGBA"), glow.filter(ImageFilter.GaussianBlur(radius=max(8, w // 40)))).convert("RGB")
+    draw = ImageDraw.Draw(img, "RGBA")
+
+    skin = (
+        210 - ((hv >> 8) & 0x28),
+        175 - ((hv >> 12) & 0x20),
+        150 - ((hv >> 16) & 0x18),
+    )
+    shirt = (
+        70 + ((hv >> 4) & 0x40),
+        90 + ((hv >> 10) & 0x50),
+        140 + ((hv >> 14) & 0x40),
+    )
+    # Shoulders / torso
+    shoulder_y = int(h * 0.58)
+    draw.ellipse(
+        [int(w * 0.08), shoulder_y, int(w * 0.92), h + int(h * 0.2)],
+        fill=shirt + (255,),
+    )
+    # Neck
+    nw = int(w * 0.14)
+    draw.rectangle(
+        [cx - nw // 2, int(h * 0.42), cx + nw // 2, shoulder_y + int(h * 0.05)],
+        fill=skin + (255,),
+    )
+    # Head
+    head_r = int(min(w, h) * 0.18)
+    draw.ellipse(
+        [cx - head_r, cy - int(head_r * 1.15), cx + head_r, cy + int(head_r * 1.05)],
+        fill=skin + (255,),
+    )
+    # Simple facial features (clearly a placeholder, not photoreal)
+    eye_y = cy - int(head_r * 0.15)
+    eye_dx = int(head_r * 0.38)
+    eye_r = max(3, head_r // 10)
+    for ex in (cx - eye_dx, cx + eye_dx):
+        draw.ellipse([ex - eye_r, eye_y - eye_r, ex + eye_r, eye_y + eye_r], fill=(40, 35, 35, 255))
+    # Mouth (neutral closed line — preview is NOT lip-synced)
+    mw = int(head_r * 0.45)
+    my = cy + int(head_r * 0.35)
+    draw.arc([cx - mw, my - eye_r, cx + mw, my + eye_r * 2], 20, 160, fill=(120, 70, 70, 255), width=max(2, head_r // 18))
+
+    try:
+        font = ImageFont.truetype(_FONT_BOLD, max(14, int(min(w, h) * 0.035)))
+        font_s = ImageFont.truetype(_FONT_REGULAR, max(11, int(min(w, h) * 0.022)))
+    except Exception:
+        font = ImageFont.load_default()
+        font_s = font
+    title = "DEMO · Digital Human Placeholder"
+    sub = "Not GPT Image / Not real lipsync"
+    # Top banner
+    draw.rectangle([0, 0, w, int(h * 0.08)], fill=(0, 0, 0, 160))
+    draw.text((int(w * 0.04), int(h * 0.02)), title, font=font, fill=(255, 255, 255, 230))
+    draw.text((int(w * 0.04), int(h * 0.085) + 4), sub, font=font_s, fill=(255, 220, 160, 220))
+    return img.convert("RGB")
+
+
 def render_demo_image(prompt: str, size: str, style: Optional[str], index: int = 0,
                       seed: Optional[str] = None) -> str:
-    """Render one demo image locally; return its /api/v1/media/... URL."""
+    """Render one demo image locally; return its /api/v1/media/... URL.
+
+    Portrait / talking briefs use a studio headshot stub — never random picsum
+    landscapes — so free Director preview stays on-subject for digital humans.
+    """
     from PIL import Image  # noqa: F401 — ensure Pillow present
 
     w, h = _parse_size(size)
     seed = seed or _seed_from(prompt, index)
-    img = _fetch_seed_photo(seed, w, h) or _gradient_image(seed, w, h)
-    if img.size != (w, h):
-        img = img.resize((w, h))
-    img = _apply_style_grade(img, style)
+    if _wants_portrait(prompt, style):
+        img = _render_portrait_stub(w, h, seed)
+    else:
+        img = _fetch_seed_photo(seed, w, h) or _gradient_image(seed, w, h)
+        if img.size != (w, h):
+            img = img.resize((w, h))
+        img = _apply_style_grade(img, style)
     img = _add_watermark(img)
 
     name = f"{uuid.uuid4().hex[:12]}.jpg"

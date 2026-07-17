@@ -147,10 +147,17 @@ def _styles_from_brief(brief: str) -> list[str]:
     m = {
         "电影": "cinematic", "写实": "realistic", "真实": "realistic", "动漫": "anime",
         "二次元": "anime", "国风": "chinese", "中式": "chinese", "产品": "product",
-        "人像": "portrait", "风景": "landscape", "科幻": "sci-fi", "奇幻": "fantasy",
-        "美食": "food", "logo": "logo", "海报": "poster", "矢量": "vector", "梗图": "meme",
+        "人像": "portrait", "数字人": "portrait", "口播": "portrait", "主播": "portrait",
+        "棚拍": "portrait", "半身": "portrait", "风景": "landscape", "科幻": "sci-fi",
+        "奇幻": "fantasy", "美食": "food", "logo": "logo", "海报": "poster",
+        "矢量": "vector", "梗图": "meme",
     }
     found = [v for k, v in m.items() if k in brief.lower()]
+    # Talking / avatar briefs: portrait must win over incidental「产品」卖点.
+    if _has(brief, _TALK_KW) and "portrait" in found:
+        found = ["portrait"] + [s for s in found if s != "portrait"]
+    elif _has(brief, _TALK_KW):
+        found = ["portrait"] + found
     return list(dict.fromkeys(found)) or ["cinematic", "realistic"]
 
 
@@ -691,8 +698,12 @@ class DirectorExecutor:
                         from app.adapters.demo_provider import render_demo_speech
                         url = await asyncio.to_thread(render_demo_speech, script)
                         step.status = "done"
-                        return {"type": "audio", "url": url, "media_url": url,
-                                "model": "demo-tts", "cost": 0, "narration": True}
+                        return {
+                            "type": "audio", "url": url, "media_url": url,
+                            "model": "demo-tts", "planned_model": step.model_id,
+                            "mode": "demo_tone", "honesty": "offline_preview_not_tts",
+                            "cost": 0, "narration": True,
+                        }
                     from app.adapters.kie_adapter import KieAdapter
                     from app.services.media_store import persist_results
                     res = await KieAdapter().generate_speech(script, voice="Rachel")
@@ -777,13 +788,18 @@ class DirectorExecutor:
                     use_demo_l = self.dry_run
                 if use_demo_l or not (img_pub and aud_pub):
                     # Demo: animate the avatar image (Ken Burns) as a stand-in.
+                    # Never claim Kling ran — tag honesty fields for the UI.
                     from app.adapters.demo_provider import render_demo_video
                     ls_seed = (step.params or {}).get("seed")
                     v_url, thumb = await asyncio.to_thread(
                         render_demo_video, step.prompt, "720x1280", 5, "portrait", img_local, ls_seed)
                     step.status = "done"
-                    return {"type": "video", "media_url": v_url, "url": v_url, "thumbnail": thumb,
-                            "model": step.model_id, "cost": step.est_credits, "lipsync": True}
+                    return {
+                        "type": "video", "media_url": v_url, "url": v_url, "thumbnail": thumb,
+                        "model": "demo-lipsync", "planned_model": step.model_id,
+                        "mode": "ken_burns", "honesty": "offline_preview_not_lipsync",
+                        "cost": 0, "lipsync": False, "lipsync_preview": True,
+                    }
                 try:
                     from app.adapters.kie_adapter import KieAdapter
                     from app.services.media_store import persist_results
@@ -826,20 +842,41 @@ class DirectorExecutor:
             if use_demo:
                 from app.adapters.demo_provider import render_demo_image, render_demo_video
                 styles = _styles_from_brief(step.prompt)
-                style = styles[0] if styles else "cinematic"
+                # Talking-image steps / portrait briefs → portrait stub (not picsum landscape)
+                if (
+                    step.action == "image"
+                    and (
+                        _has(step.prompt or "", _TALK_KW)
+                        or "数字人" in (step.title or "")
+                        or "portrait" in styles
+                    )
+                ):
+                    style = "portrait"
+                else:
+                    style = styles[0] if styles else "cinematic"
                 if media_type == "video":
                     size = _size_from_params(step.params, "1280x720")
                     v_url, thumb = await asyncio.to_thread(
                         render_demo_video, step.prompt, size, min(duration, 6), style, base_image_url, seed)
                     step.status = "done"
-                    return {"type": "video", "media_url": v_url, "url": v_url,
-                            "thumbnail": thumb, "model": step.model_id, "cost": step.est_credits,
-                            "duration": duration, "used_ref": bool(base_image_url)}
+                    return {
+                        "type": "video", "media_url": v_url, "url": v_url,
+                        "thumbnail": thumb, "model": "demo-video",
+                        "planned_model": step.model_id, "mode": "ken_burns",
+                        "honesty": "offline_preview_not_provider",
+                        "cost": 0, "duration": duration, "used_ref": bool(base_image_url),
+                    }
                 size = _size_from_params(step.params, "1024x1024")
                 img_url = await asyncio.to_thread(render_demo_image, step.prompt, size, style, 0, seed)
                 step.status = "done"
-                return {"type": "image", "media_url": img_url, "url": img_url,
-                        "thumbnail": img_url, "model": step.model_id, "cost": step.est_credits}
+                return {
+                    "type": "image", "media_url": img_url, "url": img_url,
+                    "thumbnail": img_url, "model": "demo-image",
+                    "planned_model": step.model_id,
+                    "mode": "portrait_stub" if style == "portrait" else "stock_or_gradient",
+                    "honesty": "offline_preview_not_provider",
+                    "cost": 0,
+                }
 
             from app.adapters.registry import get_adapter
             from app.fallback_handler import get_fallback, is_retryable_error
@@ -935,8 +972,37 @@ class DirectorExecutor:
 
     @staticmethod
     def _asset_from(step: DirectorStep, r: dict) -> dict:
-        return {"step_id": step.id, "step": step.title, "model": step.model_name,
-                "shot": (step.params or {}).get("shot"), **r}
+        """Build UI asset. Preview must not display planned provider names as if they ran."""
+        mode = r.get("mode") or ""
+        honesty = r.get("honesty") or ""
+        is_preview = bool(honesty) or mode in (
+            "ken_burns", "portrait_stub", "stock_or_gradient",
+        ) or str(r.get("model") or "").startswith("demo-")
+        base = {k: v for k, v in r.items() if k != "model"}
+        if is_preview:
+            display = {
+                "ken_burns": "本地预览 · Ken Burns（非 Kling）",
+                "portrait_stub": "本地预览 · 数字人占位（非 GPT Image）",
+                "stock_or_gradient": "本地预览 · 素材图（非真实模型）",
+            }.get(mode) or "本地预览（非真实模型）"
+            return {
+                **base,
+                "step_id": step.id,
+                "step": step.title,
+                "shot": (step.params or {}).get("shot"),
+                "model": display,
+                "planned_model": r.get("planned_model") or step.model_id,
+                "planned_model_name": step.model_name,
+                "mode": mode or "demo_preview",
+                "honesty": honesty or "offline_preview_not_provider",
+            }
+        return {
+            **base,
+            "step_id": step.id,
+            "step": step.title,
+            "model": step.model_name,
+            "shot": (step.params or {}).get("shot"),
+        }
 
     async def run(self, plan: DirectorPlan) -> dict:
         """按 depends_on 拓扑顺序执行，无依赖关系的同层并行 (非流式)。"""
