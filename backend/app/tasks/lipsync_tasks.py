@@ -88,6 +88,7 @@ def process_lipsync(
                 data, filename=f"ls_{uuid.uuid4().hex[:8]}.{ext}", content_type=ct))
 
         demo = demo_mode_active()
+        tts_engine = None
 
         # Stage 2: voiceover — real TTS if text given
         audio_public = audio_url
@@ -99,17 +100,49 @@ def process_lipsync(
                 from app.adapters.demo_provider import render_demo_speech
                 audio_public = render_demo_speech(text)
             else:
-                voice = (voice_id or "Rachel").strip() or "Rachel"
-                # Azure-style neural ids → ElevenLabs-friendly short names when needed
-                if voice.startswith("zh-CN-") or voice.startswith("en-US-"):
-                    if any(k in voice for k in ("Xiaoxiao", "Xiaoyi", "Jenny")):
-                        voice = "Rachel"
-                    else:
-                        voice = "Adam"
-                res = asyncio.run(KieAdapter().generate_speech(text, voice=voice))
-                audio_public = res.media_url  # public KIE tempfile
+                from app.services.audio_prep import is_azure_neural_voice, synthesize_speech_edge
+                voice = (voice_id or "zh-CN-XiaoxiaoNeural").strip() or "zh-CN-XiaoxiaoNeural"
+                # Prefer real Neural TTS for Azure-style ids (matches FE labels;
+                # ElevenLabs remap caused 「配音感」+ weaker Chinese phonemes).
+                if is_azure_neural_voice(voice):
+                    try:
+                        wav_bytes, used_voice = asyncio.run(synthesize_speech_edge(text, voice))
+                        audio_public = asyncio.run(KieAdapter().upload_public_url(
+                            wav_bytes,
+                            filename=f"ls_tts_{uuid.uuid4().hex[:8]}.wav",
+                            content_type="audio/wav",
+                        ))
+                        tts_engine = f"edge-tts:{used_voice}"
+                    except Exception as e:
+                        logger.warning("[lipsync] edge-tts failed (%s) → ElevenLabs fallback", e)
+                        el_voice = "Rachel" if any(
+                            k in voice for k in ("Xiaoxiao", "Xiaoyi", "Jenny", "Nanami")
+                        ) else "Adam"
+                        res = asyncio.run(KieAdapter().generate_speech(
+                            text, voice=el_voice, language_code="zh" if voice.startswith("zh-") else None,
+                        ))
+                        audio_public = res.media_url
+                        tts_engine = f"elevenlabs:{el_voice}"
+                else:
+                    res = asyncio.run(KieAdapter().generate_speech(text, voice=voice))
+                    audio_public = res.media_url
+                    tts_engine = f"elevenlabs:{voice}"
         elif audio_url:
             audio_public = _to_public(audio_url, "audio/mpeg") if not demo else audio_url
+
+        # Stage 2b: loudnorm driving audio (−16 LUFS) before lip-sync
+        if not demo and audio_public:
+            try:
+                from app.services.audio_prep import prepare_lipsync_audio_url
+                _broadcast_progress(db_task_id, 22, "audio_prep", "正在均衡音量与清晰度...")
+                norm_wav = prepare_lipsync_audio_url(audio_public)
+                audio_public = asyncio.run(KieAdapter().upload_public_url(
+                    norm_wav.read_bytes(),
+                    filename=f"ls_norm_{uuid.uuid4().hex[:8]}.wav",
+                    content_type="audio/wav",
+                ))
+            except Exception as e:
+                logger.warning("[lipsync] audio loudnorm skipped: %s", e)
 
         # Stage 3: make the portrait publicly reachable by KIE
         self.update_state(state="PROGRESS", meta={"current_stage": "face_detect", "progress": 30})
@@ -121,6 +154,12 @@ def process_lipsync(
         self.update_state(state="PROGRESS", meta={"current_stage": "lipsync", "progress": 50})
         _update_task(db_task_id, progress=50, current_stage="lipsync")
         _broadcast_progress(db_task_id, 50, "lipsync", "正在生成唇形同步视频...")
+
+        LIPSYNC_PROMPT = (
+            "close-up talking head, mouth shapes precisely match the speech audio, "
+            "natural jaw and lip motion, clear articulation, keep facial identity, "
+            "subtle head motion, no dubbing mismatch"
+        )
 
         if demo:
             from app.adapters.demo_provider import render_demo_video
@@ -134,32 +173,42 @@ def process_lipsync(
                 "honesty": "offline_preview_not_lipsync",
             }])
         else:
-            # Studio tier bills lipsync-studio; prefer a higher-res avatar path.
+            # Studio: prefer infinitalk@720p when available; Demo stays on Kling.
             # Explicit KIE ids (contain "/") are honored as-is.
             model_id = "kling/ai-avatar-pro"
-            resolution = "480p"
+            resolution = "720p"
             product_tier = "demo"
             if model and "/" in model:
                 model_id = model
             elif model in ("lipsync-studio", "studio"):
-                model_id = "kling/ai-avatar-pro"
+                model_id = "infinitalk/from-audio"
                 resolution = "720p"
                 product_tier = "studio"
             res = asyncio.run(KieAdapter().generate_lipsync(
                 image_url=image_public, audio_url=audio_public,
-                prompt="a person talking naturally to camera, accurate lip sync",
+                prompt=LIPSYNC_PROMPT,
                 model_id=model_id,
                 resolution=resolution,
             ))
             _update_task(db_task_id, progress=85, current_stage="rendering")
-            _broadcast_progress(db_task_id, 85, "rendering", "正在渲染最终视频...")
+            _broadcast_progress(db_task_id, 85, "rendering", "正在均衡成片音量...")
+            final_url = res.media_url
+            try:
+                from app.services.audio_prep import boost_video_audio
+                boosted = boost_video_audio(res.media_url)
+                if boosted:
+                    final_url = boosted
+            except Exception as e:
+                logger.warning("[lipsync] post loudnorm skipped: %s", e)
             output = persist_results([{
-                "type": "video", "url": res.media_url,
+                "type": "video", "url": final_url,
                 "thumbnail": res.thumbnail_url or "", "model": res.model, "duration": 5,
                 "requested_model": model,
-                "mode": "kling_avatar",
+                "mode": "kling_avatar" if "kling" in (res.model or "") else "avatar_lipsync",
                 "product_tier": product_tier,
                 "resolution_intent": resolution,
+                "tts_engine": tts_engine,
+                "audio_prep": "loudnorm_-16LUFS",
             }])
 
         _update_task(

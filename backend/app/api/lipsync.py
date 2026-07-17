@@ -133,16 +133,21 @@ async def list_voices():
             "demo": {
                 "label": "Demo",
                 "credits": 4,
-                "description": "kling/ai-avatar-pro · 约 480p（需模型 Key；离线为 Ken Burns 预览）",
+                "description": "Kling AI Avatar · 响度归一化 · 中文 Neural TTS（需 Key；离线为 Ken Burns）",
             },
             "studio": {
                 "label": "Studio",
                 "credits": 10,
-                "description": "同模型更高分辨率意图 · 需 Personal+（非独立 SKU）",
+                "description": "优先 InfiniTalk 720p，失败回退 Kling · 需 Personal+",
             },
         },
         "voice_note": (
-            "列表展示友好音色名；实际上游 TTS 将 zh-CN/en-US Neural id "
-            "映射为 ElevenLabs Rachel/Adam，并非 Azure Neural 原声。"
+            "zh-CN / en-US / ja-JP Neural 音色走 Microsoft Edge TTS（与列表名一致）；"
+            "其它短名走 ElevenLabs。驱动音频与成片均做 -16 LUFS 响度归一化。"
         ),
+        "quality_tips": [
+            "用清晰正面真人照，嘴巴自然闭合或微张，避免夸张表情",
+            "台词控制在 8–20 秒，吐字清晰时口型更稳",
+            "自备音频请保证响度充足、无严重背景噪声",
+        ],
     }

@@ -35,5 +35,6 @@ loguru>=0.7.2
 # Demo generation mode (local image/video render when no provider key is set)
 # ffmpeg (system package) is also required for demo video rendering.
 Pillow>=10.0.0
+edge-tts>=6.1.0
 sentry-sdk>=2.0.0
 prometheus-client>=0.20.0

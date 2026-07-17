@@ -706,11 +706,33 @@ class DirectorExecutor:
                         }
                     from app.adapters.kie_adapter import KieAdapter
                     from app.services.media_store import persist_results
-                    # Talking briefs: keep narration concise — long Chinese briefs
-                    # increase ElevenLabs/KIE failure rate.
+                    from app.services.audio_prep import synthesize_speech_edge
+                    import uuid as _uuid
+                    # Concise narration for clearer phonemes / lip sync.
                     narrate = script
                     if len(narrate) > 180:
                         narrate = narrate[:180].rstrip("，。；、 ") + "。"
+                    # Prefer Edge Neural (matches 口播 Chinese labels; KIE ElevenLabs flaky).
+                    try:
+                        wav_bytes, used_voice = await synthesize_speech_edge(
+                            narrate, "zh-CN-XiaoxiaoNeural",
+                        )
+                        url = await KieAdapter().upload_public_url(
+                            wav_bytes,
+                            filename=f"dir_tts_{_uuid.uuid4().hex[:8]}.wav",
+                            content_type="audio/wav",
+                        )
+                        out = {
+                            "type": "audio", "url": url, "media_url": url,
+                            "model": f"edge-tts:{used_voice}", "cost": 0,
+                            "narration": True, "voice": used_voice,
+                            "audio_prep": "loudnorm_-16LUFS",
+                        }
+                        out = (await asyncio.to_thread(persist_results, [out]))[0]
+                        step.status = "done"
+                        return out
+                    except Exception as edge_err:
+                        logger.warning("[director] edge-tts failed (%s) → ElevenLabs", edge_err)
                     last_err: Exception | None = None
                     for voice in ("Rachel", "Adam"):
                         for attempt in range(2):
@@ -834,12 +856,36 @@ class DirectorExecutor:
                 try:
                     from app.adapters.kie_adapter import KieAdapter
                     from app.services.media_store import persist_results
+                    from app.services.audio_prep import prepare_lipsync_audio_url, boost_video_audio
+                    import uuid as _uuid
+                    # Loudnorm driving audio before Kling (fixes quiet 口播 + weak mouth drive)
+                    try:
+                        norm = await asyncio.to_thread(prepare_lipsync_audio_url, aud_pub)
+                        aud_pub = await KieAdapter().upload_public_url(
+                            norm.read_bytes(),
+                            filename=f"dir_ls_norm_{_uuid.uuid4().hex[:8]}.wav",
+                            content_type="audio/wav",
+                        )
+                    except Exception as prep_err:
+                        logger.warning("[director] lipsync audio prep skipped: %s", prep_err)
+                    ls_prompt = (
+                        "close-up talking head, mouth shapes precisely match the speech audio, "
+                        "natural jaw and lip motion, clear articulation, keep facial identity"
+                    )
                     res = await KieAdapter().generate_lipsync(
-                        image_url=img_pub, audio_url=aud_pub, prompt=step.prompt)
+                        image_url=img_pub, audio_url=aud_pub, prompt=ls_prompt)
+                    final_url = res.media_url
+                    try:
+                        boosted = await asyncio.to_thread(boost_video_audio, res.media_url)
+                        if boosted:
+                            final_url = boosted
+                    except Exception:
+                        pass
                     out = {
-                        "type": "video", "url": res.media_url, "media_url": res.media_url,
+                        "type": "video", "url": final_url, "media_url": final_url,
                         "thumbnail": res.thumbnail_url or "", "model": res.model,
                         "cost": res.cost, "lipsync": True, "mode": "kling_avatar",
+                        "audio_prep": "loudnorm_-16LUFS",
                     }
                     out = (await asyncio.to_thread(persist_results, [out]))[0]
                     step.status = "done"

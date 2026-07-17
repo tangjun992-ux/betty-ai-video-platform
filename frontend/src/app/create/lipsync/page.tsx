@@ -120,7 +120,7 @@ export default function LipsyncPage() {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-bold mb-2 gradient-text-static">唇形同步</h1>
         <p className="text-text-secondary text-sm mb-4">
-          上传清晰正面人物照 + 文字/语音，生成口型同步视频。卡通图或非语音音频会出现「任务成功但口型不动」。
+          上传清晰正面人物照 + 文字/语音，生成口型同步视频。建议嘴巴自然、台词 8–20 秒；卡通图或蜂鸣音会出现「成功但口型不动」。
         </p>
         <CapabilityNotice feature="lipsync" className="mb-4" onDemoChange={setOfflineDemo} />
         <div className="grid grid-cols-2 gap-2 mb-6 max-w-md">
@@ -130,14 +130,14 @@ export default function LipsyncPage() {
               label: "Demo",
               desc: offlineDemo
                 ? "4 积分 · 离线预览动效（非口型）"
-                : "4 积分 · Kling 口型 · 约 480p",
+                : "4 积分 · Kling 口型 · 音量均衡",
             },
             {
               id: "studio" as const,
               label: "Studio",
               desc: offlineDemo
                 ? "10 积分 · 仍需模型 Key · Personal+"
-                : "10 积分 · 同模型 · 720p 意图 · Personal+",
+                : "10 积分 · InfiniTalk 优先 · Personal+",
             },
           ]).map((t) => (
             <button key={t.id} type="button" onClick={() => setTier(t.id)}

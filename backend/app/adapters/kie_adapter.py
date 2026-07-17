@@ -759,10 +759,11 @@ class KieAdapter(BaseModelAdapter):
         is kept as a fallback. KIE lip-sync models are intermittently flaky
         ("internal error") and infinitalk can queue for many minutes, so we
         retry on transient errors and fall back across models."""
-        # Try primary model then fallback; retry each on transient errors.
-        candidates = [model_id]
-        if "infinitalk/from-audio" not in candidates:
-            candidates.append("infinitalk/from-audio")
+        # Primary then fallbacks (Studio may start on infinitalk; always keep Kling).
+        candidates: list[str] = []
+        for mid in (model_id, "kling/ai-avatar-pro", "infinitalk/from-audio"):
+            if mid and mid not in candidates:
+                candidates.append(mid)
         last_err: Exception | None = None
         for mid in candidates:
             for attempt in range(2):

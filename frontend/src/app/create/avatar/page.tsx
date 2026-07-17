@@ -89,7 +89,7 @@ export default function TalkingAvatarPage() {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
         <h1 className="text-2xl font-bold gradient-text-static mb-2">Talking Avatar</h1>
         <p className="text-sm text-text-secondary mb-3">
-          图片 + 音频/文本 → 说话头像视频（底层唇形同步）。请用清晰正面真人照 + 语音；卡通/蜂鸣音会「成功但不动嘴」。
+          图片 + 音频/文本 → 说话头像视频。请用清晰正面真人照 + 清晰语音（8–20 秒）；系统会自动做响度均衡。
         </p>
         <CapabilityNotice feature="lipsync" className="mb-4" onDemoChange={setOfflineDemo} />
         <div className="grid grid-cols-2 gap-2 max-w-md">
@@ -99,14 +99,14 @@ export default function TalkingAvatarPage() {
               label: "Demo",
               desc: offlineDemo
                 ? "4 积分 · 离线预览动效（非口型）"
-                : "4 积分 · Kling 口型 · 约 480p",
+                : "4 积分 · Kling 口型 · 音量均衡",
             },
             {
               id: "studio" as const,
               label: "Studio",
               desc: offlineDemo
                 ? "10 积分 · 仍需模型 Key · Personal+"
-                : "10 积分 · 同模型 · 720p 意图 · Personal+",
+                : "10 积分 · InfiniTalk 优先 · Personal+",
             },
           ]).map((t) => (
             <button
