@@ -48,3 +48,6 @@ backend/dump.rdb
 # Frontend test artifacts
 frontend/playwright-report/
 frontend/test-results/
+
+# Local e2e media packs (large binaries; keep under /opt/cursor/artifacts too)
+/artifacts/
