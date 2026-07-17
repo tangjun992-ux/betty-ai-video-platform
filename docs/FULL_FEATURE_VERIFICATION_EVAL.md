@@ -29,11 +29,19 @@
 | 八功能规划验收（aspect / packaging / identity / beats） | **44/44 checks (100%)** |
 | dry-run 成片规格 | 广告/商业/动漫 **1920×1080**；UGC/短剧/口播 **1080×1920**；均含 CTA |
 
-### 2.2 真实出片
+### 2.2 真实出片（新管线 · 进行中）
 
-- 上一轮付费样本：`director_eight_samples.zip`（16/16）  
-- 本轮新管线付费全量：`full_feature_verify_live/`（后台跑 8×2，见实时日志）  
-- 包装管线 demo：`director_packaging_v2.zip`
+| 功能 | A/B | 成片规格（实测） | 状态 |
+|------|-----|------------------|------|
+| 产品广告 | ✅/✅ | **1920×1080** · 17.5s（含 CTA） | 完成 |
+| UGC 种草 | ✅/✅ | **1080×1920** · 17.5s | 完成（分镜源片仍 1440²，合成强制竖屏） |
+| 动漫 | ✅/✅ | **1920×1080** · 12.5s · 多镜 | 完成 |
+| AI 写真 | ✅/✅ | 各 4 张职业头像 | 完成 |
+| 产品商业片 | 🔄 | — | 出片中 |
+| 微短剧 / 产品摄影 / 口播 | ⏳ | — | 排队中 |
+
+下载（已完成部分）：`/opt/cursor/artifacts/full_feature_verify_partial.zip`  
+完整目录：`/opt/cursor/artifacts/full_feature_verify_live/`
 
 ---
 
@@ -95,9 +103,10 @@
 
 ### P0 — 继续对标（下一迭代）
 
-1. **口播旗舰路径**：Studio 默认更高质量 lipsync；旁白分段；字幕按句对齐  
-2. **身份锁加强**：hero → 每镜 `edit_image` 变体再 i2v；或 Seedance reference_images  
-3. **包装升级**：可配置 BGM 库 + 人声侧链压低；CTA 模板（品牌色/Logo 位）  
+1. **上游竖屏生成**：UGC/短剧 hero 与 i2v 必须原生 9:16（本轮 FINAL 靠 pad，分镜仍 1:1）  
+2. **口播旗舰路径**：Studio 默认更高质量 lipsync；旁白分段；字幕按句对齐  
+3. **身份锁加强**：hero → 每镜 `edit_image` 变体再 i2v；或 Seedance reference_images  
+4. **包装升级**：可配置 BGM 库 + 人声侧链压低；CTA 模板（品牌色/Logo 位）  
 
 ### P1 — 投放完成度
 
