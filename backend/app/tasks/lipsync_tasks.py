@@ -189,6 +189,7 @@ def process_lipsync(
                 prompt=LIPSYNC_PROMPT,
                 model_id=model_id,
                 resolution=resolution,
+                prefer_infinitalk=(product_tier == "studio"),
             ))
             _update_task(db_task_id, progress=85, current_stage="rendering")
             _broadcast_progress(db_task_id, 85, "rendering", "正在均衡成片音量...")

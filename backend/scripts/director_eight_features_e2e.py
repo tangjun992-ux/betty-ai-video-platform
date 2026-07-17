@@ -93,7 +93,8 @@ FEATURES = [
     {
         "id": "product_commercial",
         "title": "产品商业片",
-        "duration": 30,
+        # QA pack uses 15s (≈3 shots) under upstream credit budget; card/prod plan stays 30s/6.
+        "duration": 15,
         "samples": [
             {
                 "tag": "A",
@@ -183,10 +184,18 @@ def _auth_client() -> tuple[httpx.Client, dict]:
         json={"email": email, "password": "Test1234!", "username": f"d8{uuid.uuid4().hex[:6]}"},
     )
     reg.raise_for_status()
-    token = reg.json()["access_token"]
+    body = reg.json() or {}
+    token = body["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
-    conn = sqlite3.connect(str(ROOT / "dev.db"))
-    uid = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()[0]
+    uid = (body.get("user") or {}).get("id")
+    db_path = ROOT / "dev.db"
+    conn = sqlite3.connect(str(db_path))
+    if not uid:
+        row = conn.execute("SELECT id FROM users WHERE email=?", (email,)).fetchone()
+        if not row:
+            conn.close()
+            raise RuntimeError(f"registered user not found in {db_path}: {email}")
+        uid = row[0]
     # Large pool: commercial ×2 alone can exceed 100 credits
     conn.execute(
         "UPDATE user_balance SET credits=5000, daily_credits=500, plan_credits=2000 WHERE user_id=?",
