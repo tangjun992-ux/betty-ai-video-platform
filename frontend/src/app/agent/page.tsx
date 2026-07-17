@@ -22,7 +22,7 @@ interface Step {
   reason: string; prompt: string; depends_on: string[]; est_credits: number;
   status: string; result?: any; params?: StepParams; skip?: boolean;
 }
-interface Plan { brief: string; intent: string; summary: string; total_credits: number; steps: Step[]; }
+interface Plan { brief: string; intent: string; summary: string; total_credits: number; steps: Step[]; scenario?: string; }
 interface Asset {
   step_id?: string; step: string; model: string; type?: string;
   media_url?: string; url?: string; thumbnail?: string; shot?: number;
@@ -33,33 +33,34 @@ interface Session { id: string; title: string; lastMessage: string; }
 interface ModelOpt { id: string; name: string; }
 
 // 场景化专业工作流 — 严格对标 yapper.so/agent 的 "Try Feature" 能力卡片
+// id 必须与 backend director_scenarios.SCENARIO_IDS 对齐
 interface Scenario {
-  icon: any; cat: "视频" | "图片" | "工具"; title: string; desc: string;
+  id: string; icon: any; cat: "视频" | "图片" | "工具"; title: string; desc: string;
   brief: string; duration?: number; vertical?: boolean; color: string;
 }
 const SCENARIOS: Scenario[] = [
-  { icon: Clapperboard, cat: "视频", title: "产品广告", color: "from-amber-500 to-orange-600",
+  { id: "product_ad", icon: Clapperboard, cat: "视频", title: "产品广告", color: "from-amber-500 to-orange-600",
     desc: "从产品/卖点/粗略创意，快速生成高转化投放广告",
     brief: "为新品制作一条高转化产品广告视频，突出核心卖点，适合社媒快速投放测试，电影级画质", duration: 15 },
-  { icon: Film, cat: "视频", title: "产品商业片", color: "from-brand to-accent-violet",
+  { id: "product_commercial", icon: Film, cat: "视频", title: "产品商业片", color: "from-brand to-accent-violet",
     desc: "电影级产品视频与品牌大片，用于发布与品牌campaign",
     brief: "一条电影级产品商业宣传片，精致布光与流畅运镜，高级品牌质感，多镜头叙事", duration: 30 },
-  { icon: Mic, cat: "视频", title: "UGC 种草", color: "from-rose-500 to-pink-600",
+  { id: "ugc", icon: Mic, cat: "视频", title: "UGC 种草", color: "from-rose-500 to-pink-600",
     desc: "真实、原生的创作者风格短视频，适配社交信息流",
     brief: "一条 UGC 风格种草短视频，真实自然，竖屏手机拍摄感，口语化推荐产品", duration: 15, vertical: true },
-  { icon: Layers, cat: "视频", title: "微短剧", color: "from-violet-500 to-purple-600",
+  { id: "micro_drama", icon: Layers, cat: "视频", title: "微短剧", color: "from-violet-500 to-purple-600",
     desc: "从一个前提/反转/人物弧，生成可追的竖屏短剧",
     brief: "一部竖屏微短剧短片，强钩子开场加剧情反转，人物情绪张力，电影级叙事运镜", duration: 30, vertical: true },
-  { icon: Sparkles, cat: "视频", title: "动漫生成", color: "from-cyan-500 to-blue-600",
+  { id: "anime", icon: Sparkles, cat: "视频", title: "动漫生成", color: "from-cyan-500 to-blue-600",
     desc: "从故事或情绪，生成电影级动漫场景、角色与运动",
     brief: "一段电影级动漫短片，唯美场景与角色，新海诚式光影与色彩，细腻氛围", duration: 15 },
-  { icon: ImageIcon, cat: "图片", title: "产品摄影", color: "from-emerald-500 to-teal-600",
+  { id: "product_photo", icon: ImageIcon, cat: "图片", title: "产品摄影", color: "from-emerald-500 to-teal-600",
     desc: "影棚级产品图，布光/场景/道具/商业质感一步到位",
     brief: "一组影棚级产品摄影图，柔光箱布光，纯净背景，反射高光，商业级质感，系列四张" },
-  { icon: Lightbulb, cat: "图片", title: "AI 写真", color: "from-fuchsia-500 to-pink-600",
+  { id: "ai_portrait", icon: Lightbulb, cat: "图片", title: "AI 写真", color: "from-fuchsia-500 to-pink-600",
     desc: "专业形象照，适合领英、简历、名片、社媒头像",
     brief: "一组专业形象写真，正装，柔和棚拍布光，自然表情，四张统一风格" },
-  { icon: Wand2, cat: "视频", title: "数字人口播", color: "from-sky-500 to-indigo-600",
+  { id: "talking_avatar", icon: Wand2, cat: "视频", title: "数字人口播", color: "from-sky-500 to-indigo-600",
     desc: "图像 + 文案生成开口说话的数字人讲解视频",
     brief: "一个竖屏数字人口播视频，自然口型同步，正面棚拍形象，讲解产品卖点", duration: 15, vertical: true },
 ];
@@ -111,6 +112,7 @@ export default function AgentPage() {
   const [creditGateOpen, setCreditGateOpen] = useState(false);
   const [creditNeeded, setCreditNeeded] = useState(0);
   const [trendChips, setTrendChips] = useState<{ title: string; hint: string; duration?: number }[]>([]);
+  const [activeScenario, setActiveScenario] = useState<string | null>(null);
 
   const maybePromptUpgrade = useCallback(async (force = false) => {
     if (!force && dryRunMode) return;
@@ -237,11 +239,13 @@ export default function AgentPage() {
 
   const reset = () => { setPlan(null); setAssets([]); setPhase("idle"); setErr(null); setEditingId(null); };
 
-  const makePlan = async (text?: string, opts?: { duration?: number }) => {
+  const makePlan = async (text?: string, opts?: { duration?: number; scenario?: string | null }) => {
     const b = (text ?? brief).trim();
     if (!b) return;
     const dur = opts?.duration ?? duration;
+    const sc = opts?.scenario !== undefined ? opts.scenario : activeScenario;
     setBrief(b); if (opts?.duration) setDuration(opts.duration);
+    if (opts?.scenario !== undefined) setActiveScenario(opts.scenario);
     reset(); setPhase("planning");
     try {
       const res = await fetch(`${API_BASE}/director/plan`, {
@@ -252,17 +256,19 @@ export default function AgentPage() {
           duration: dur,
           ref_image_url: refImageUrl,
           minimal,
+          scenario: sc || undefined,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Plan = await res.json();
       setPlan(data); setPhase("planned");
+      if (data.scenario) setActiveScenario(data.scenario);
     } catch (e: any) { setErr(`无法连接导演引擎 (${e?.message}) — 请确认后端已启动`); setPhase("idle"); }
   };
 
   const startScenario = (sc: Scenario) => {
     if (sc.duration) setDuration(sc.duration);
-    makePlan(sc.brief, { duration: sc.duration });
+    makePlan(sc.brief, { duration: sc.duration, scenario: sc.id });
   };
 
   // ── composer modes (对标 yapper: Help Prompt / Help Ideate) ──
@@ -357,6 +363,7 @@ export default function AgentPage() {
           brief: plan.brief, has_ref_image: refImage, duration, dry_run: false, plan,
           session_uid: activeUid || undefined,
           minimal,
+          scenario: plan.scenario || activeScenario || undefined,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -424,6 +431,7 @@ export default function AgentPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           brief: plan.brief, has_ref_image: refImage, duration, dry_run: dryRun, plan: planForRun, minimal,
+          scenario: plan.scenario || activeScenario || undefined,
         }),
         signal: ctrl.signal,
       });

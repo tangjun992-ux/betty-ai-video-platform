@@ -55,7 +55,11 @@ class PlanRequest(BaseModel):
     ref_image_url: Optional[str] = Field(default=None, description="参考图 URL（真正参与图生视频/关键帧）")
     minimal: bool = Field(
         default=False,
-        description="最短路径：跳过配音/字幕/合成，仅 enhance+1图+1视（对标 Yapper quick-direct）",
+        description="最短路径：跳过配音/字幕，多镜仍会合成一条成片（对标 Yapper quick-direct）",
+    )
+    scenario: Optional[str] = Field(
+        default=None,
+        description="Agent 场景卡 id：product_ad|product_commercial|ugc|micro_drama|anime|product_photo|ai_portrait|talking_avatar",
     )
 
 
@@ -91,6 +95,7 @@ def _resolve_plan(req: RunRequest):
         duration=req.duration,
         ref_image_url=req.ref_image_url,
         minimal=bool(req.minimal),
+        scenario=getattr(req, "scenario", None),
     )
 
 
@@ -123,6 +128,7 @@ async def make_plan(req: PlanRequest):
         duration=req.duration,
         ref_image_url=req.ref_image_url,
         minimal=bool(req.minimal),
+        scenario=req.scenario,
     )
     return plan.to_dict()
 

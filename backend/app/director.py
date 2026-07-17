@@ -58,11 +58,12 @@ class DirectorPlan:
     summary: str
     steps: list[DirectorStep]
     total_credits: int = 0
+    scenario: str = ""              # stable card id: product_ad | ugc | ai_portrait | ...
 
     def to_dict(self) -> dict:
         return {
             "brief": self.brief, "intent": self.intent, "summary": self.summary,
-            "total_credits": self.total_credits,
+            "total_credits": self.total_credits, "scenario": self.scenario,
             "steps": [s.to_dict() for s in self.steps],
         }
 
@@ -227,14 +228,28 @@ def _n_shots(duration: int) -> int:
 # ─────────────────────────────── 规划器 ───────────────────────────────
 class DirectorPlanner:
     def plan(self, brief: str, has_ref_image: bool = False, duration: int = 5,
-             ref_image_url: str | None = None, *, minimal: bool = False) -> DirectorPlan:
+             ref_image_url: str | None = None, *, minimal: bool = False,
+             scenario: str | None = None) -> DirectorPlan:
         """Plan a director workflow.
 
-        ``minimal=True`` (Yapper quick-direct): skip post ladder (audio/subtitle/compose)
-        so the shortest video path is enhance → 1 keyframe image → 1 video shot.
+        ``scenario`` — stable Agent card id (product_ad / ugc / ai_portrait / …).
+        When set, uses scenario-specific beats/models/aspect (top-tier card parity).
+        ``minimal=True`` skips TTS/subtitle; multi-shot scenarios still stitch compose.
         """
+        from app.director_scenarios import (
+            AD_BEATS, COMMERCIAL_BEATS, UGC_BEATS, DRAMA_BEATS,
+            PRODUCT_PHOTO_VARIATIONS, PORTRAIT_VARIATIONS,
+            infer_scenario, scenario_vertical, scenario_intent, SCENARIO_IDS,
+        )
+
         brief = (brief or "").strip()
         has_ref_image = has_ref_image or bool(ref_image_url)
+        scenario = (scenario or "").strip().lower()
+        if scenario and scenario not in SCENARIO_IDS:
+            scenario = ""
+        if not scenario:
+            scenario = infer_scenario(brief)
+
         # Brief keywords can force minimal / quick mode (对标 Yapper "just direct")
         if _has(brief, ["快速成片", "最短路径", "minimal", "quick direct", "只要视频", "不要配音"]):
             minimal = True
@@ -245,6 +260,23 @@ class DirectorPlanner:
             duration = max(5, min(int(dm.group(1)), 60))
         styles = _styles_from_brief(brief)
         vertical = _has(brief, ["竖屏", "抖音", "tiktok", "reels", "shorts", "手机", "9:16"])
+        if scenario and scenario_vertical(scenario):
+            vertical = True
+
+        # Scenario style bias (prevents「产品」keyword from drowning portrait/anime)
+        if scenario == "ai_portrait" or scenario == "talking_avatar":
+            styles = ["portrait", "realistic"] + [s for s in styles if s not in ("product", "portrait")]
+        elif scenario == "product_photo":
+            styles = ["product", "realistic"] + [s for s in styles if s != "product"]
+        elif scenario == "anime":
+            styles = ["anime"] + [s for s in styles if s != "anime"]
+        elif scenario == "ugc":
+            styles = ["realistic", "product"] + [s for s in styles if s not in ("cinematic",)]
+        elif scenario in ("product_ad", "product_commercial"):
+            styles = ["product", "cinematic", "realistic"] + [s for s in styles if s not in ("product", "cinematic")]
+        elif scenario == "micro_drama":
+            styles = ["cinematic", "realistic"] + styles
+
         steps: list[DirectorStep] = []
 
         def sid() -> str:
@@ -256,18 +288,45 @@ class DirectorPlanner:
             id=enh_id, action="enhance_prompt", title="解析创意 & 编写分镜脚本",
             model_id="prompt-enhancer", model_name="Director LLM",
             reason="把口语意图拆解为带景别/运镜/光影/风格的专业分镜脚本", prompt=brief,
-            est_credits=0, params={"styles": styles},
+            est_credits=0, params={"styles": styles, "scenario": scenario or None},
         ))
 
         img_aspect = _aspect_for(styles, vertical)
         vid_aspect = "9:16" if vertical else _aspect_for(styles)
+        if scenario == "product_photo":
+            img_aspect = "1:1"
+        elif scenario == "ai_portrait":
+            img_aspect = "3:4"
 
         # Yapper quick-direct: minimal ⇒ 默认视频最短路径，除非 brief 明确只要静图
         force_video = bool(minimal) and not _has(brief, _IMAGE_ONLY_KW) and not _has(brief, _SERIES_KW)
+        # Explicit scenario cards always win over keyword force_video heuristics
+        force_image_series = scenario in ("product_photo", "ai_portrait")
 
-        # 意图判定 (优先级: 口播 > 营销片 > 视频 > 系列图 > 单图)
-        if _has(brief, _TALK_KW):
+        intent = scenario_intent(scenario) if scenario else ""
+
+        def _add_video_shots(prev: str, beats: list, n: int, vid: dict, aspect: str) -> list[str]:
+            ids: list[str] = []
+            for i in range(n):
+                beat_cn, beat_desc, cam_en = beats[i % len(beats)]
+                sv = DirectorStep(
+                    id=sid(), action="video",
+                    title=f"分镜 {i+1}/{n} · {beat_cn}",
+                    model_id=vid["id"], model_name=vid["display_name"],
+                    reason=f"{beat_desc}，选 {vid['display_name']}",
+                    prompt=_shot_prompt(brief, f"{beat_cn}·{beat_desc}", cam_en, styles),
+                    depends_on=[prev], est_credits=_credits_of(vid, "video", 5),
+                    params={"aspect_ratio": aspect, "duration": 5, "shot": i + 1},
+                )
+                steps.append(sv)
+                ids.append(sv.id)
+                prev = sv.id
+            return ids
+
+        # ── Scenario-first planning (8 Agent cards) ─────────────────────
+        if scenario == "talking_avatar" or (not scenario and _has(brief, _TALK_KW)):
             intent = "talking"
+            scenario = scenario or "talking_avatar"
             img = _pick_model("image", styles + ["portrait"], "quality")
             s_voice = DirectorStep(id=sid(), action="audio", title="AI 配音 · 旁白 (TTS)",
                 model_id="elevenlabs-tts", model_name="ElevenLabs TTS",
@@ -276,44 +335,157 @@ class DirectorPlanner:
             s_img = DirectorStep(id=sid(), action="image", title="生成数字人形象",
                 model_id=img["id"], model_name=img["display_name"],
                 reason=f"口播需要高保真人像，选 {img['display_name']}（人像/写实强）",
-                prompt=f"{brief}｜数字人半身像，正面视角，专业棚拍布光，干净背景，真实皮肤质感",
+                prompt=(f"{brief}｜digital human talking-head portrait, front-facing, "
+                        "chest-up, professional softbox, clean backdrop, natural skin, mouth slightly closed"),
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": "9:16" if vertical else "3:4"})
             s_talk = DirectorStep(id=sid(), action="lipsync", title="唇形同步驱动 (数字人开口)",
                 model_id="kling-avatar", model_name="Kling AI Avatar",
                 reason="用旁白音频精准驱动人像口型，生成自然开口说话的数字人",
-                prompt="a person talking naturally to camera, accurate lip sync",
+                prompt=("natural talking head to camera, precise lip sync matching speech audio, "
+                        "subtle blinks and micro head motion, identity locked, no warping"),
                 depends_on=[s_img.id, s_voice.id], est_credits=6,
                 params={"aspect_ratio": "9:16" if vertical else "16:9"})
             steps += [s_voice, s_img, s_talk]
 
-        elif _has(brief, _CAMPAIGN_KW) and _has(brief, _VIDEO_KW):
+        elif scenario in ("product_ad", "product_commercial", "ugc") or (
+            not scenario and _has(brief, _CAMPAIGN_KW) and _has(brief, _VIDEO_KW)
+        ):
             intent = "campaign"
+            if not scenario:
+                scenario = infer_scenario(brief) or "product_ad"
             img = _pick_model("image", styles + ["product"], "quality")
-            vid = _pick_model("video", styles, "quality")
+            def _force_vid(*prefer_ids: str, fallback_styles: list[str], prefer: str) -> dict:
+                for mid in prefer_ids:
+                    hit = next((m for m in _catalog() if m["id"] == mid), None)
+                    if hit:
+                        return hit
+                return _pick_model("video", fallback_styles, prefer)
+
+            # UGC: Pro for native look; ads/commercial: Master for film grade
+            if scenario == "ugc":
+                vid = _force_vid("kling-2.1-pro", "kling-2.1-master",
+                                 fallback_styles=["realistic"], prefer="balanced")
+                beats, hero = UGC_BEATS, (
+                    f"{brief}｜UGC creator holding product, natural phone-camera look, "
+                    "real-life room light, vertical 9:16 framing, authentic not cinematic"
+                )
+                n = min(3, max(2, _n_shots(duration)))
+                vid_aspect = "9:16"
+                img_aspect = "9:16"
+            elif scenario == "product_commercial":
+                vid = _force_vid("kling-2.1-master", "kling-2.1-pro",
+                                 fallback_styles=styles, prefer="quality")
+                beats, hero = COMMERCIAL_BEATS, (
+                    f"{brief}｜luxury brand hero product still, cinematic soft light, "
+                    "premium materials, campaign key art, 16:9"
+                )
+                n = max(4, _n_shots(duration))  # commercial never collapses to 1 shot
+                vid_aspect = "16:9"
+            else:  # product_ad
+                vid = _force_vid("kling-2.1-master", "kling-2.1-pro",
+                                 fallback_styles=styles, prefer="quality")
+                beats, hero = AD_BEATS, (
+                    f"{brief}｜high-converting product ad hero frame, crisp commercial lighting, "
+                    "instant product readability, social-ad key art"
+                )
+                n = min(3, max(2, _n_shots(duration))) if duration <= 15 else _n_shots(duration)
+                vid_aspect = "9:16" if vertical else "16:9"
+
             s_img = DirectorStep(id=sid(), action="image", title="产品主视觉 (Hero Shot)",
                 model_id=img["id"], model_name=img["display_name"],
-                reason=f"营销片首帧需精致产品图，选 {img['display_name']}（产品/质感强）",
-                prompt=f"{brief}｜产品主视觉特写，柔光箱布光，纯净背景，反射高光，商业广告级质感",
-                depends_on=[enh_id], est_credits=_credits_of(img, "image"),
+                reason=f"营销片首帧需精致主视觉，选 {img['display_name']}",
+                prompt=hero, depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": img_aspect})
             steps.append(s_img)
-            # 多镜头产品广告：主视觉 + 若干动态镜头
-            n = _n_shots(duration)
-            prev = s_img.id
-            shot_ids = []
-            for i in range(n):
-                beat_cn, beat_desc, cam_en = _SHOT_BEATS[i % len(_SHOT_BEATS)]
-                sv = DirectorStep(id=sid(), action="video", title=f"分镜 {i+1}/{n} · {beat_cn}",
-                    model_id=vid["id"], model_name=vid["display_name"],
-                    reason=f"{beat_desc}，选 {vid['display_name']}（电影级运镜）",
-                    prompt=_shot_prompt(brief, f"{beat_cn}·{beat_desc}", cam_en, styles),
-                    depends_on=[prev], est_credits=_credits_of(vid, "video", 5),
-                    params={"aspect_ratio": vid_aspect, "duration": 5, "shot": i + 1})
-                steps.append(sv)
-                shot_ids.append(sv.id)
+            _add_video_shots(s_img.id, beats, n, vid, vid_aspect)
 
-        elif _has(brief, _VIDEO_KW) or has_ref_image or force_video:
+        elif scenario == "micro_drama":
+            intent = "video_from_text"
+            img = _pick_model("image", styles + ["cinematic"], "quality")
+            # Prefer Seedance for narrative motion
+            vid = _pick_model("video", styles, "balanced")
+            for mid in ("seedance-2.0",):
+                hit = next((m for m in _catalog() if m["id"] == mid), None)
+                if hit:
+                    vid = hit
+                    break
+            # Top-tier short drama needs multi-beat even in「快速成片」
+            n = 2 if minimal else max(3, min(_n_shots(duration), 4))
+            s_img = DirectorStep(id=sid(), action="image", title="短剧首帧 · 人物情绪",
+                model_id=img["id"], model_name=img["display_name"],
+                reason="锁定人物身份与情绪基调",
+                prompt=(f"{brief}｜vertical micro-drama keyframe, expressive lead character, "
+                        "cinematic face light, strong emotional subtext, 9:16"),
+                depends_on=[enh_id], est_credits=_credits_of(img, "image"),
+                params={"aspect_ratio": "9:16"})
+            steps.append(s_img)
+            _add_video_shots(s_img.id, DRAMA_BEATS, n, vid, "9:16")
+
+        elif scenario == "anime":
+            intent = "video_from_text"
+            img = _pick_model("image", ["anime"], "balanced")
+            vid = _pick_model("video", ["anime"], "balanced")
+            for mid in ("nano-banana", "nano-banana-pro"):
+                hit = next((m for m in _catalog() if m["id"] == mid), None)
+                if hit:
+                    img = hit
+                    break
+            for mid in ("seedance-2.0",):
+                hit = next((m for m in _catalog() if m["id"] == mid), None)
+                if hit:
+                    vid = hit
+                    break
+            n = 1 if minimal else min(3, _n_shots(duration))
+            s_img = DirectorStep(id=sid(), action="image", title="动漫关键帧",
+                model_id=img["id"], model_name=img["display_name"],
+                reason="锁定二次元角色与光影",
+                prompt=(f"{brief}｜anime keyframe, Makoto Shinkai inspired luminous atmosphere, "
+                        "detailed character, cinematic color, NOT photoreal live-action"),
+                depends_on=[enh_id], est_credits=_credits_of(img, "image"),
+                params={"aspect_ratio": "16:9"})
+            steps.append(s_img)
+            _add_video_shots(s_img.id, _SHOT_BEATS, n, vid, "16:9")
+
+        elif scenario == "ai_portrait" or (
+            force_image_series is False and not scenario and _has(brief, ["写真", "形象照", "领英"]) and _has(brief, _SERIES_KW)
+        ):
+            intent = "image_series"
+            scenario = scenario or "ai_portrait"
+            img = _pick_model("image", ["portrait", "realistic"], "quality")
+            for mid in ("gpt-image-2", "nano-banana-pro"):
+                hit = next((m for m in _catalog() if m["id"] == mid), None)
+                if hit:
+                    img = hit
+                    break
+            for i, (title_cn, en) in enumerate(PORTRAIT_VARIATIONS):
+                steps.append(DirectorStep(
+                    id=sid(), action="image", title=f"形象照 {i+1}/4 · {title_cn}",
+                    model_id=img["id"], model_name=img["display_name"],
+                    reason=f"职业写真套图 · {title_cn}（对标 HeadshotPro）",
+                    prompt=(f"{brief}｜{title_cn}：{en}，same person identity, matching wardrobe color grade, "
+                            "professional headshot, NOT product photography"),
+                    depends_on=[enh_id], est_credits=_credits_of(img, "image"),
+                    params={"aspect_ratio": "3:4"},
+                ))
+
+        elif scenario == "product_photo" or (
+            not scenario and _has(brief, _SERIES_KW) and _has(brief, ["产品", "影棚", "产品摄影"])
+        ):
+            intent = "image_series"
+            scenario = scenario or "product_photo"
+            img = _pick_model("image", ["product", "realistic"], "quality")
+            for i, (title_cn, en) in enumerate(PRODUCT_PHOTO_VARIATIONS):
+                steps.append(DirectorStep(
+                    id=sid(), action="image", title=f"产品摄影 {i+1}/4 · {title_cn}",
+                    model_id=img["id"], model_name=img["display_name"],
+                    reason=f"影棚套图 · {title_cn}（对标 Photoroom/Claid）",
+                    prompt=f"{brief}｜{title_cn}：{en}，consistent brand color and lighting",
+                    depends_on=[enh_id], est_credits=_credits_of(img, "image"),
+                    params={"aspect_ratio": "1:1"},
+                ))
+
+        elif _has(brief, _VIDEO_KW) or has_ref_image or (force_video and not force_image_series):
             n = 1 if minimal else _n_shots(duration)
             if has_ref_image:
                 intent = "video_from_image"
@@ -329,6 +501,7 @@ class DirectorPlanner:
                         depends_on=[prev], est_credits=_credits_of(vid, "video", 5),
                         params={"aspect_ratio": vid_aspect, "duration": 5, "shot": i + 1})
                     steps.append(sv)
+                    prev = sv.id
             else:
                 intent = "video_from_text"
                 img = _pick_model("image", styles, "balanced")
@@ -340,29 +513,27 @@ class DirectorPlanner:
                     depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                     params={"aspect_ratio": img_aspect})
                 steps.append(s_img)
-                prev = s_img.id
-                for i in range(n):
-                    beat_cn, beat_desc, cam_en = _SHOT_BEATS[i % len(_SHOT_BEATS)]
-                    sv = DirectorStep(id=sid(), action="video",
-                        title=(f"分镜 {i+1}/{n} · {beat_cn}" if n > 1 else "首帧转动态视频"),
-                        model_id=vid["id"], model_name=vid["display_name"],
-                        reason=f"{beat_desc}，选 {vid['display_name']}（运动连贯）",
-                        prompt=_shot_prompt(brief, f"{beat_cn}·{beat_desc}", cam_en, styles),
-                        depends_on=[prev], est_credits=_credits_of(vid, "video", 5),
-                        params={"aspect_ratio": vid_aspect, "duration": 5, "shot": i + 1})
-                    steps.append(sv)
+                _add_video_shots(s_img.id, _SHOT_BEATS, n, vid, vid_aspect)
 
         elif _has(brief, _SERIES_KW):
             intent = "image_series"
             img = _pick_model("image", styles, "balanced")
-            variations = ["正面主视角", "侧面 45° 视角", "特写细节", "环境全景"]
+            # Portrait briefs without explicit scenario still get headshot angles
+            if _has(brief, ["写真", "形象", "人像", "头像", "领英"]):
+                scenario = scenario or "ai_portrait"
+                variations = PORTRAIT_VARIATIONS
+                aspect = "3:4"
+            else:
+                variations = [(a, a) for a in ("正面主视角", "侧面 45° 视角", "特写细节", "环境全景")]
+                aspect = img_aspect
             for i, v in enumerate(variations):
-                steps.append(DirectorStep(id=sid(), action="image", title=f"系列图 {i+1}/4 · {v}",
+                title_cn, extra = v if isinstance(v, tuple) else (v, v)
+                steps.append(DirectorStep(id=sid(), action="image", title=f"系列图 {i+1}/4 · {title_cn}",
                     model_id=img["id"], model_name=img["display_name"],
-                    reason=f"成套出图保持风格一致 · {v}，选 {img['display_name']}",
-                    prompt=f"{brief}｜{v}，统一{_style_phrase(styles)}风格与配色，一致的光影",
+                    reason=f"成套出图保持风格一致 · {title_cn}，选 {img['display_name']}",
+                    prompt=f"{brief}｜{title_cn}：{extra}，统一{_style_phrase(styles)}风格与配色",
                     depends_on=[enh_id], est_credits=_credits_of(img, "image"),
-                    params={"aspect_ratio": img_aspect}))
+                    params={"aspect_ratio": aspect}))
 
         else:
             intent = "image"
@@ -374,32 +545,39 @@ class DirectorPlanner:
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": img_aspect}))
 
-        # 视频类意图自动追加成片步骤：配音 → 字幕 → 合成 (对标 yapper Agent 成片)
-        # 口播(talking)已自带配音+唇形，成品即唇形视频，无需再拼接。
-        # minimal / 短时长：跳过后期阶梯，保留最短 1 图 + 1 视（Yapper quick-direct）。
+        # 视频后期：多镜必须合成一条成片（对标顶级投放/短剧平台）
+        # minimal：跳过配音/字幕，但仍 stitch；完整成片：TTS+字幕+合成
         video_steps = [s for s in steps if s.action in ("video", "lipsync")]
-        skip_finish = minimal or (duration <= 5 and intent in ("video_from_text", "video_from_image") and len(video_steps) <= 1)
-        if video_steps and intent != "talking" and not skip_finish:
-            vid_ids = [s.id for s in video_steps]
-            s_audio = DirectorStep(id=sid(), action="audio", title="AI 配音 · 解说 (TTS)",
-                model_id="elevenlabs-tts", model_name="ElevenLabs TTS",
-                reason="将创意脚本转成自然解说旁白，随成片一起输出",
-                prompt=brief, depends_on=[vid_ids[-1]], est_credits=2, params={"script": brief})
-            s_sub = DirectorStep(id=sid(), action="subtitle", title="智能字幕",
-                model_id="subtitle-engine", model_name="Auto Caption",
-                reason="自动生成并烧录字幕，适配社媒传播",
-                prompt=brief, depends_on=[vid_ids[-1]], est_credits=1)
-            s_comp = DirectorStep(id=sid(), action="compose", title="剪辑合成成片",
-                model_id="compose-engine", model_name="FFmpeg Compose",
-                reason=f"将 {len(vid_ids)} 个分镜 + 配乐 + 字幕剪辑合成为最终可发布成片",
-                prompt=brief, depends_on=vid_ids + [s_audio.id, s_sub.id], est_credits=0)
-            steps += [s_audio, s_sub, s_comp]
+        multi = len([s for s in steps if s.action == "video"]) > 1
+        if video_steps and intent != "talking":
+            vid_ids = [s.id for s in video_steps if s.action == "video"] or [s.id for s in video_steps]
+            if not minimal:
+                s_audio = DirectorStep(id=sid(), action="audio", title="AI 配音 · 解说 (TTS)",
+                    model_id="elevenlabs-tts", model_name="ElevenLabs TTS",
+                    reason="将创意脚本转成自然解说旁白，随成片一起输出",
+                    prompt=brief, depends_on=[vid_ids[-1]], est_credits=2, params={"script": brief})
+                s_sub = DirectorStep(id=sid(), action="subtitle", title="智能字幕",
+                    model_id="subtitle-engine", model_name="Auto Caption",
+                    reason="自动生成并烧录字幕，适配社媒传播",
+                    prompt=brief, depends_on=[vid_ids[-1]], est_credits=1)
+                s_comp = DirectorStep(id=sid(), action="compose", title="剪辑合成成片",
+                    model_id="compose-engine", model_name="FFmpeg Compose",
+                    reason=f"将 {len(vid_ids)} 个分镜 + 配乐 + 字幕剪辑合成为最终可发布成片",
+                    prompt=brief, depends_on=vid_ids + [s_audio.id, s_sub.id], est_credits=0)
+                steps += [s_audio, s_sub, s_comp]
+            elif multi:
+                # 快速成片但仍交付「一条成片」，避免散落分镜无法验收
+                s_comp = DirectorStep(id=sid(), action="compose", title="分镜合成成片",
+                    model_id="compose-engine", model_name="FFmpeg Compose",
+                    reason=f"将 {len(vid_ids)} 个分镜合成为一条可发布成片（快速模式跳过配音字幕）",
+                    prompt=brief, depends_on=vid_ids, est_credits=0)
+                steps.append(s_comp)
 
         # 跨镜共享 seed（保持全片风格一致）+ 参考图注入（真正参与图生视频）
         shared_seed = hashlib.sha1((brief or "x").encode()).hexdigest()[:12]
         for s in steps:
             if s.action in ("image", "video", "lipsync"):
-                s.params = {**(s.params or {}), "seed": shared_seed}
+                s.params = {**(s.params or {}), "seed": shared_seed, "scenario": scenario or None}
                 if ref_image_url and s.action in ("video", "lipsync"):
                     s.params["image_url"] = ref_image_url
 
@@ -407,9 +585,13 @@ class DirectorPlanner:
         n_assets = len([s for s in steps if s.action in ("image", "video", "lipsync", "compose")])
         n_shots = len([s for s in steps if s.action == "video"])
         shot_note = f"，{n_shots} 个分镜" if n_shots > 1 else ""
+        sc_note = f"，场景：{scenario}" if scenario else ""
         summary = (f"已规划 {len(steps)} 步{shot_note}，将产出 {n_assets} 个资产，"
-                   f"预计消耗 {total} 积分。意图：{intent}")
-        return DirectorPlan(brief=brief, intent=intent, summary=summary, steps=steps, total_credits=total)
+                   f"预计消耗 {total} 积分。意图：{intent}{sc_note}")
+        return DirectorPlan(
+            brief=brief, intent=intent, summary=summary, steps=steps,
+            total_credits=total, scenario=scenario or "",
+        )
 
 
 def _catalog_lookup(directive: str, media_type: str):
@@ -576,6 +758,7 @@ def plan_from_dict(data: dict) -> DirectorPlan:
         intent=data.get("intent", "image"),
         summary=data.get("summary", ""),
         steps=steps, total_credits=total,
+        scenario=data.get("scenario", "") or "",
     )
 
 
