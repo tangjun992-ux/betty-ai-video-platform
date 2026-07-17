@@ -781,13 +781,18 @@ class KieAdapter(BaseModelAdapter):
                                resolution: str = "480p", **kwargs) -> GenerationResult:
         """Drive a portrait image with an audio track → talking video.
 
-        Primary model is kling/ai-avatar-pro (fast, reliable, ~3min). infinitalk
-        is kept as a fallback. KIE lip-sync models are intermittently flaky
-        ("internal error") and infinitalk can queue for many minutes, so we
-        retry on transient errors and fall back across models."""
-        # Primary then fallbacks (Studio may start on infinitalk; always keep Kling).
+        Primary: kling/ai-avatar-pro (~3min). InfiniTalk is opt-in only
+        (``prefer_infinitalk=True`` / Studio) — silent InfiniTalk fallback can
+        queue 15+ minutes and block the whole director job.
+        """
+        prefer_infini = bool(kwargs.get("prefer_infinitalk"))
         candidates: list[str] = []
-        for mid in (model_id, "kling/ai-avatar-pro", "infinitalk/from-audio"):
+        ordered = (
+            (model_id, "infinitalk/from-audio", "kling/ai-avatar-pro")
+            if prefer_infini or (model_id or "").startswith("infinitalk")
+            else (model_id, "kling/ai-avatar-pro")
+        )
+        for mid in ordered:
             if mid and mid not in candidates:
                 candidates.append(mid)
         last_err: Exception | None = None
@@ -797,9 +802,12 @@ class KieAdapter(BaseModelAdapter):
                            "audio_url": audio_url, "prompt": prompt}
                 if mid.startswith("infinitalk"):
                     payload["resolution"] = resolution
+                poll_timeout = 240 if mid.startswith("infinitalk") else 600
                 try:
                     logger.info("[KIE] lipsync → model=%s attempt=%d", mid, attempt + 1)
-                    result = await self._submit_and_poll(payload, media_type="video", timeout=1200)
+                    result = await self._submit_and_poll(
+                        payload, media_type="video", timeout=poll_timeout,
+                    )
                     return GenerationResult(
                         media_url=_extract_url(result, "videoUrl"),
                         thumbnail_url=_extract_url(result, "coverUrl") or "",
@@ -811,7 +819,7 @@ class KieAdapter(BaseModelAdapter):
                     last_err = e
                     msg = str(e).lower()
                     logger.warning("[KIE] lipsync %s attempt %d failed: %s", mid, attempt + 1, e)
-                    if "internal error" in msg or "try again" in msg:
+                    if "internal error" in msg or "try again" in msg or "timed out" in msg:
                         await asyncio.sleep(4)
                         continue
                     break  # non-transient → try next model
