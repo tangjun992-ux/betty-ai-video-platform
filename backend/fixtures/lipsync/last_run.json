@@ -1,6 +1,15 @@
 {
   "ok": true,
-  "media_url": "https://tempfile.aiquickdraw.com/k/fd170e7d35cdff08a755695ce093fca8_1_1784212221_9731.mp4",
+  "media_url": "https://tempfile.aiquickdraw.com/k/9536f13c5a74b4daf239e2900a2c449f_1_1784246454_2438.mp4",
   "model": "kling/ai-avatar-pro",
-  "cost": 0.6
+  "tier": "demo",
+  "source": "lipsync_accuracy_eval_photoreal",
+  "inputs": {
+    "image": "photo_face.jpg",
+    "audio": "speech_zh.wav"
+  },
+  "elapsed_s": 212.4,
+  "ts": "2026-07-17T00:00:57Z",
+  "digital_human_accuracy_0_to_5": 5.0,
+  "passes_as_digital_human": true
 }

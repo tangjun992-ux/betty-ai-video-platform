@@ -34,6 +34,7 @@ export default function LipsyncPage() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [audioName, setAudioName] = useState("");
   const [tier, setTier] = useState<"demo" | "studio">("demo");
+  const [offlineDemo, setOfflineDemo] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -119,13 +120,25 @@ export default function LipsyncPage() {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-2xl font-bold mb-2 gradient-text-static">唇形同步</h1>
         <p className="text-text-secondary text-sm mb-4">
-          上传图片，输入文字，AI 自动生成口型同步的说话视频
+          上传清晰正面人物照 + 文字/语音，生成口型同步视频。卡通图或非语音音频会出现「任务成功但口型不动」。
         </p>
-        <CapabilityNotice feature="lipsync" className="mb-4" />
+        <CapabilityNotice feature="lipsync" className="mb-4" onDemoChange={setOfflineDemo} />
         <div className="grid grid-cols-2 gap-2 mb-6 max-w-md">
           {([
-            { id: "demo" as const, label: "Demo", desc: "4 积分 · 标准唇形" },
-            { id: "studio" as const, label: "Studio", desc: "10 积分 · 高保真 · Personal+" },
+            {
+              id: "demo" as const,
+              label: "Demo",
+              desc: offlineDemo
+                ? "4 积分 · 离线预览动效（非口型）"
+                : "4 积分 · Kling 口型 · 约 480p",
+            },
+            {
+              id: "studio" as const,
+              label: "Studio",
+              desc: offlineDemo
+                ? "10 积分 · 仍需模型 Key · Personal+"
+                : "10 积分 · 同模型 · 720p 意图 · Personal+",
+            },
           ]).map((t) => (
             <button key={t.id} type="button" onClick={() => setTier(t.id)}
               className={cn("p-3 rounded-xl border text-left transition-all",

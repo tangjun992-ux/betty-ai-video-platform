@@ -130,7 +130,19 @@ async def list_voices():
         ],
         "default": "zh-CN-XiaoxiaoNeural",
         "tiers": {
-            "demo": {"label": "Demo", "credits": 4, "description": "标准唇形同步"},
-            "studio": {"label": "Studio", "credits": 10, "description": "高保真口型 · 需 Personal+"},
+            "demo": {
+                "label": "Demo",
+                "credits": 4,
+                "description": "kling/ai-avatar-pro · 约 480p（需模型 Key；离线为 Ken Burns 预览）",
+            },
+            "studio": {
+                "label": "Studio",
+                "credits": 10,
+                "description": "同模型更高分辨率意图 · 需 Personal+（非独立 SKU）",
+            },
         },
+        "voice_note": (
+            "列表展示友好音色名；实际上游 TTS 将 zh-CN/en-US Neural id "
+            "映射为 ElevenLabs Rachel/Adam，并非 Azure Neural 原声。"
+        ),
     }

@@ -29,7 +29,8 @@ const DEMO_TEXT: Record<Feature, string> = {
 };
 
 const REAL_TEXT: Record<Feature, string> = {
-  lipsync: "真实唇形同步可用（已配置模型凭证）。",
+  lipsync:
+    "真实唇形同步可用（kling/ai-avatar-pro）。请上传清晰正面真人照 + 清晰语音；卡通/蜂鸣音会导致「生成成功但不像数字人」。",
   motion:
     "原生 Kling Motion Control 可用（input_urls + video_urls）。非 Runway Act-One；失败时任务层可回退。",
   audio: "真实 TTS 配音可用（已配置模型凭证）。",

@@ -31,6 +31,7 @@ export default function TalkingAvatarPage() {
   const [text, setText] = useState("");
   const [voiceId, setVoiceId] = useState(VOICES[0].id);
   const [tier, setTier] = useState<"demo" | "studio">("demo");
+  const [offlineDemo, setOfflineDemo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const onImage = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,13 +89,25 @@ export default function TalkingAvatarPage() {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
         <h1 className="text-2xl font-bold gradient-text-static mb-2">Talking Avatar</h1>
         <p className="text-sm text-text-secondary mb-3">
-          图片 + 音频/文本 → 说话头像视频。对标 Yapper Talking Avatar（底层复用唇形同步链路）。
+          图片 + 音频/文本 → 说话头像视频（底层唇形同步）。请用清晰正面真人照 + 语音；卡通/蜂鸣音会「成功但不动嘴」。
         </p>
-        <CapabilityNotice feature="lipsync" className="mb-4" />
+        <CapabilityNotice feature="lipsync" className="mb-4" onDemoChange={setOfflineDemo} />
         <div className="grid grid-cols-2 gap-2 max-w-md">
           {([
-            { id: "demo" as const, label: "Demo", desc: "4 积分 · 标准" },
-            { id: "studio" as const, label: "Studio", desc: "10 积分 · Personal+" },
+            {
+              id: "demo" as const,
+              label: "Demo",
+              desc: offlineDemo
+                ? "4 积分 · 离线预览动效（非口型）"
+                : "4 积分 · Kling 口型 · 约 480p",
+            },
+            {
+              id: "studio" as const,
+              label: "Studio",
+              desc: offlineDemo
+                ? "10 积分 · 仍需模型 Key · Personal+"
+                : "10 积分 · 同模型 · 720p 意图 · Personal+",
+            },
           ]).map((t) => (
             <button
               key={t.id}

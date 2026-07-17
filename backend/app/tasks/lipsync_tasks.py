@@ -126,18 +126,25 @@ def process_lipsync(
             from app.adapters.demo_provider import render_demo_video
             v_url, thumb = render_demo_video(text or "talking avatar", "720x1280", 5, "portrait",
                                              _local_media_path(image_url) and image_url or None)
-            output = persist_results([{"type": "video", "url": v_url, "thumbnail": thumb,
-                                       "model": "demo-lipsync", "duration": 5}])
+            # Honest mode tag: Ken Burns is NOT lip-sync / digital human.
+            output = persist_results([{
+                "type": "video", "url": v_url, "thumbnail": thumb,
+                "model": "demo-lipsync", "duration": 5,
+                "mode": "ken_burns",
+                "honesty": "offline_preview_not_lipsync",
+            }])
         else:
             # Studio tier bills lipsync-studio; prefer a higher-res avatar path.
             # Explicit KIE ids (contain "/") are honored as-is.
             model_id = "kling/ai-avatar-pro"
             resolution = "480p"
+            product_tier = "demo"
             if model and "/" in model:
                 model_id = model
             elif model in ("lipsync-studio", "studio"):
                 model_id = "kling/ai-avatar-pro"
                 resolution = "720p"
+                product_tier = "studio"
             res = asyncio.run(KieAdapter().generate_lipsync(
                 image_url=image_public, audio_url=audio_public,
                 prompt="a person talking naturally to camera, accurate lip sync",
@@ -150,6 +157,9 @@ def process_lipsync(
                 "type": "video", "url": res.media_url,
                 "thumbnail": res.thumbnail_url or "", "model": res.model, "duration": 5,
                 "requested_model": model,
+                "mode": "kling_avatar",
+                "product_tier": product_tier,
+                "resolution_intent": resolution,
             }])
 
         _update_task(
