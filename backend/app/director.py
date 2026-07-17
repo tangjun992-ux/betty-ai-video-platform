@@ -220,6 +220,17 @@ def _shot_prompt(brief: str, beat_cn: str, camera_en: str, styles: list[str]) ->
     return f"{brief}｜{beat_cn}：{camera_en}，{sp}风格，电影级布光，高细节"
 
 
+def _series_subject_brief(brief: str) -> str:
+    """Strip '四张/一组/系列' count language so each still is a single frame, not a collage."""
+    cleaned = re.sub(
+        r"(一组|一套|系列|四张|4张|九宫格|多张|套图|四视图|四姿态)",
+        "",
+        brief or "",
+    )
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip(" ，,")
+    return cleaned or (brief or "").strip()
+
+
 def _n_shots(duration: int) -> int:
     """More screen time → more narrative shots (clamped for cost/latency)."""
     return max(1, min(round(duration / 5), 6))
@@ -458,13 +469,15 @@ class DirectorPlanner:
                 if hit:
                     img = hit
                     break
+            subject = _series_subject_brief(brief)
             for i, (title_cn, en) in enumerate(PORTRAIT_VARIATIONS):
                 steps.append(DirectorStep(
                     id=sid(), action="image", title=f"形象照 {i+1}/4 · {title_cn}",
                     model_id=img["id"], model_name=img["display_name"],
                     reason=f"职业写真套图 · {title_cn}（对标 HeadshotPro）",
-                    prompt=(f"{brief}｜{title_cn}：{en}，same person identity, matching wardrobe color grade, "
-                            "professional headshot, NOT product photography"),
+                    prompt=(f"{subject}｜{title_cn}：{en}，same person identity, matching wardrobe color grade, "
+                            "ONE single professional headshot photograph only, "
+                            "NOT a collage, NOT a grid, NOT multiple panels, NOT product photography"),
                     depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                     params={"aspect_ratio": "3:4"},
                 ))
@@ -475,12 +488,14 @@ class DirectorPlanner:
             intent = "image_series"
             scenario = scenario or "product_photo"
             img = _pick_model("image", ["product", "realistic"], "quality")
+            subject = _series_subject_brief(brief)
             for i, (title_cn, en) in enumerate(PRODUCT_PHOTO_VARIATIONS):
                 steps.append(DirectorStep(
                     id=sid(), action="image", title=f"产品摄影 {i+1}/4 · {title_cn}",
                     model_id=img["id"], model_name=img["display_name"],
                     reason=f"影棚套图 · {title_cn}（对标 Photoroom/Claid）",
-                    prompt=f"{brief}｜{title_cn}：{en}，consistent brand color and lighting",
+                    prompt=(f"{subject}｜{title_cn}：{en}，consistent brand color and lighting, "
+                            "ONE single product photo only, NOT a collage, NOT a contact sheet, NOT a grid"),
                     depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                     params={"aspect_ratio": "1:1"},
                 ))

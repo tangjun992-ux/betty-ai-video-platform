@@ -71,3 +71,23 @@ def test_infer_scenario_from_card_briefs():
 def test_portrait_variations_count():
     assert len(PORTRAIT_VARIATIONS) == 4
     assert len(UGC_BEATS) == 3
+
+
+def test_series_prompts_forbid_collage_and_strip_count():
+    plan = DirectorPlanner().plan(
+        "一组专业形象写真，正装，四张统一风格",
+        duration=5, minimal=True, scenario="ai_portrait",
+    )
+    for s in plan.steps:
+        if s.action != "image":
+            continue
+        assert "四张" not in s.prompt
+        assert "NOT a collage" in s.prompt or "single" in s.prompt.lower()
+    plan2 = DirectorPlanner().plan(
+        "影棚级产品摄影图，系列四张",
+        duration=5, minimal=True, scenario="product_photo",
+    )
+    for s in plan2.steps:
+        if s.action == "image":
+            assert "四张" not in s.prompt
+            assert "NOT a collage" in s.prompt

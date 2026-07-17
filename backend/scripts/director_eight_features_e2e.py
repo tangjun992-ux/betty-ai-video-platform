@@ -153,12 +153,19 @@ FEATURES = [
 ]
 
 
+def _safe_name(s: str, max_len: int = 60) -> str:
+    """Filenames must not contain '/' (Chinese titles like '形象照 1/4' break paths)."""
+    out = "".join(c if c.isalnum() or c in "-_." else "_" for c in (s or "x"))
+    return (out.strip("_") or "x")[:max_len]
+
+
 def _dl(url: str, dest: Path) -> bool:
     if not url:
         return False
     if url.startswith("/"):
         url = "http://127.0.0.1:8000" + url
     try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
         req = urllib.request.Request(url, headers={"User-Agent": "BettyEightFeatures/1.0"})
         with urllib.request.urlopen(req, timeout=180) as r:
             dest.write_bytes(r.read())
@@ -255,7 +262,7 @@ def run_one(c: httpx.Client, headers: dict, feature: dict, sample: dict, out_dir
         if a.get("final"):
             name = f"{tag}_FINAL{ext}"
         else:
-            name = f"{tag}_asset{i}_{a.get('step', 'x')[:20]}{ext}"
+            name = f"{tag}_asset{i}_{_safe_name(str(a.get('step', 'x')))}{ext}"
         dest = out_dir / name
         ok = _dl(url or "", dest)
         if ok:
