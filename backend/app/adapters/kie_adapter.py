@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -525,25 +526,50 @@ class KieAdapter(BaseModelAdapter):
                 },
             )
 
+        dur_val = _video_duration_for_kie(kie_id, duration)
         payload = {
             "model": kie_id,
             "prompt": prompt,
-            "duration": _video_duration_for_kie(kie_id, duration),
+            "duration": dur_val,
         }
 
         # Resolution mapping
         kie_res = _size_to_resolution(resolution)
-        is_kling_t2v = (kie_id.startswith("kling/") or kie_id.startswith("kling-")) and not _is_native_motion_control(kie_id)
+        is_kling = (kie_id.startswith("kling/") or kie_id.startswith("kling-")) and not _is_native_motion_control(kie_id)
+        # Kling Pro/Standard docs: duration must be string "5"|"10"; image_url required for Pro.
+        if is_kling and not isinstance(payload["duration"], str):
+            payload["duration"] = str(int(payload["duration"] or 5))
 
         # Single-image i2v (non-Omni)
         primary = image_url or (ref_images[0] if ref_images else None)
         if primary:
+            # Local / private URLs are invisible to KIE → upload bytes for a public URL.
+            if (
+                primary.startswith("/")
+                or "127.0.0.1" in primary
+                or "localhost" in primary
+                or primary.startswith("/api/")
+            ):
+                try:
+                    from app.adapters.demo_provider import _local_media_path
+                    local = _local_media_path(primary)
+                    if local and Path(local).is_file():
+                        primary = await self.upload_public_url(
+                            Path(local).read_bytes(),
+                            filename=Path(local).name or "frame.png",
+                            content_type="image/png",
+                        )
+                        logger.info("[KIE] uploaded local frame for i2v → %s…", primary[:80])
+                except Exception as up_err:
+                    logger.warning("[KIE] local image upload failed: %s", up_err)
+            # Docs use image_url; some SKUs also accept imageUrl — send both.
+            payload["image_url"] = primary
             payload["imageUrl"] = primary
 
         # Kling market ops are often keyed as Model_resolution_duration; many
         # turbo SKUs reject explicit resolution (Operation not found …_720p_5).
-        # Prefer duration-only (+ optional aspect_ratio) for Kling T2V.
-        if is_kling_t2v:
+        # Prefer duration-only (+ optional aspect_ratio) for Kling T2V/i2v.
+        if is_kling:
             payload["aspect_ratio"] = kwargs.get("aspect_ratio") or "16:9"
             payload["aspectRatio"] = payload["aspect_ratio"]
             attempts = [{}, {"resolution": "720p"}, {"resolution": "1080p"}]

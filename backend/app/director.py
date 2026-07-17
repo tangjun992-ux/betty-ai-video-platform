@@ -1102,11 +1102,23 @@ class DirectorExecutor:
             base_image_url = (step.params or {}).get("image_url")
             if media_type == "video" and not base_image_url:
                 results = getattr(self, "_results", {}) or {}
+
+                def _img_ref(r: dict) -> str | None:
+                    # Prefer public provider URL — KIE Kling Pro requires reachable image_url.
+                    return r.get("source_url") or r.get("media_url") or r.get("url")
+
                 for dep in step.depends_on:
                     r = results.get(dep)
-                    if isinstance(r, dict) and r.get("type") == "image" and (r.get("media_url") or r.get("url")):
-                        base_image_url = r.get("media_url") or r.get("url")
+                    if isinstance(r, dict) and r.get("type") == "image" and _img_ref(r):
+                        base_image_url = _img_ref(r)
                         break
+                # Multi-shot i2v: later shots often depend on prior *video*; still drive
+                # from the hero/keyframe image so Kling Pro (image_url required) works.
+                if not base_image_url:
+                    for r in results.values():
+                        if isinstance(r, dict) and r.get("type") == "image" and _img_ref(r):
+                            base_image_url = _img_ref(r)
+                            break
 
             # Preview (dry_run) or no-key → render viewable local media (Pillow /
             # ffmpeg) for free. Only an explicit real run (dry_run=False) with a
@@ -1171,6 +1183,7 @@ class DirectorExecutor:
                         duration=duration,
                         image_url=base_image_url,
                         resolution=_size_from_params(step.params, "1080p"),
+                        aspect_ratio=(sp.get("aspect_ratio") or "16:9"),
                         reference_images=sp.get("reference_images") or None,
                         reference_videos=sp.get("reference_videos") or None,
                         reference_audios=sp.get("reference_audios") or None,
