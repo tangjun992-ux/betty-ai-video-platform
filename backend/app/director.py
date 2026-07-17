@@ -706,16 +706,36 @@ class DirectorExecutor:
                         }
                     from app.adapters.kie_adapter import KieAdapter
                     from app.services.media_store import persist_results
-                    res = await KieAdapter().generate_speech(script, voice="Rachel")
-                    out = {"type": "audio", "url": res.media_url, "media_url": res.media_url,
-                           "model": res.model, "cost": res.cost, "narration": True}
-                    out = (await asyncio.to_thread(persist_results, [out]))[0]
-                    step.status = "done"
-                    return out
+                    # Talking briefs: keep narration concise — long Chinese briefs
+                    # increase ElevenLabs/KIE failure rate.
+                    narrate = script
+                    if len(narrate) > 180:
+                        narrate = narrate[:180].rstrip("，。；、 ") + "。"
+                    last_err: Exception | None = None
+                    for voice in ("Rachel", "Adam"):
+                        for attempt in range(2):
+                            try:
+                                res = await KieAdapter().generate_speech(narrate, voice=voice)
+                                out = {
+                                    "type": "audio", "url": res.media_url,
+                                    "media_url": res.media_url, "model": res.model,
+                                    "cost": res.cost, "narration": True, "voice": voice,
+                                }
+                                out = (await asyncio.to_thread(persist_results, [out]))[0]
+                                step.status = "done"
+                                return out
+                            except Exception as e:
+                                last_err = e
+                                logger.warning(
+                                    "[director] tts attempt voice=%s try=%d failed: %s",
+                                    voice, attempt + 1, e,
+                                )
+                                await asyncio.sleep(1.5)
+                    raise last_err or RuntimeError("tts failed")
                 except Exception as e:
                     logger.warning("[director] tts failed: %s", e)
-                    step.status = "done"
-                    return {"type": "audio", "ok": False, "note": f"配音失败: {e}"}
+                    step.status = "failed"
+                    return {"type": "audio", "error": f"配音失败: {e}", "ok": False}
 
             if step.action == "compose":
                 # Stitch all upstream shot videos into ONE final film (hero deliverable),
@@ -786,9 +806,8 @@ class DirectorExecutor:
                     use_demo_l = self.dry_run or demo_mode_active()
                 except Exception:
                     use_demo_l = self.dry_run
-                if use_demo_l or not (img_pub and aud_pub):
-                    # Demo: animate the avatar image (Ken Burns) as a stand-in.
-                    # Never claim Kling ran — tag honesty fields for the UI.
+                if use_demo_l:
+                    # Preview-only: Ken Burns stand-in. Never on real runs.
                     from app.adapters.demo_provider import render_demo_video
                     ls_seed = (step.params or {}).get("seed")
                     v_url, thumb = await asyncio.to_thread(
@@ -800,14 +819,28 @@ class DirectorExecutor:
                         "mode": "ken_burns", "honesty": "offline_preview_not_lipsync",
                         "cost": 0, "lipsync": False, "lipsync_preview": True,
                     }
+                if not (img_pub and aud_pub):
+                    # Real path must not silently fake lipsync when upstream failed.
+                    step.status = "failed"
+                    missing = []
+                    if not img_pub:
+                        missing.append("人像图")
+                    if not aud_pub:
+                        missing.append("配音")
+                    return {
+                        "type": "video",
+                        "error": f"唇形同步缺少上游资产：{'、'.join(missing)}（真实生成不会回退 Ken Burns）",
+                    }
                 try:
                     from app.adapters.kie_adapter import KieAdapter
                     from app.services.media_store import persist_results
                     res = await KieAdapter().generate_lipsync(
                         image_url=img_pub, audio_url=aud_pub, prompt=step.prompt)
-                    out = {"type": "video", "url": res.media_url, "media_url": res.media_url,
-                           "thumbnail": res.thumbnail_url or "", "model": res.model,
-                           "cost": res.cost, "lipsync": True}
+                    out = {
+                        "type": "video", "url": res.media_url, "media_url": res.media_url,
+                        "thumbnail": res.thumbnail_url or "", "model": res.model,
+                        "cost": res.cost, "lipsync": True, "mode": "kling_avatar",
+                    }
                     out = (await asyncio.to_thread(persist_results, [out]))[0]
                     step.status = "done"
                     return out

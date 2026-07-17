@@ -318,9 +318,16 @@ class KieAdapter(BaseModelAdapter):
         payload["aspect_ratio"] = ratio
 
         # Seed for reproducibility / variations (honored by models that support it).
+        # Director shared seeds are hex digests (e.g. sha1[:12]) — coerce safely.
         seed = kwargs.get("seed")
-        if seed is not None:
-            payload["seed"] = int(seed)
+        if seed is not None and seed != "":
+            try:
+                payload["seed"] = int(seed)
+            except (TypeError, ValueError):
+                try:
+                    payload["seed"] = int(str(seed), 16) % (2**31)
+                except ValueError:
+                    payload["seed"] = abs(hash(str(seed))) % (2**31)
 
         # Number of images (n varies by model)
         if count > 1:

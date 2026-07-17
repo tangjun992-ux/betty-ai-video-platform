@@ -17,6 +17,8 @@ app = Celery(
         "app.tasks.motion_tasks",
         "app.tasks.timeline_tasks",
         "app.tasks.health_tasks",
+        "app.tasks.face_swap_tasks",
+        "app.tasks.performance_tasks",
         "app.collector.tasks",
     ],
 )
@@ -38,6 +40,8 @@ app.conf.update(
         # Lipsync & motion are long video-style renders → share the video queue.
         "app.tasks.lipsync_tasks.*": {"queue": "video_q"},
         "app.tasks.motion_tasks.*": {"queue": "video_q"},
+        "app.tasks.face_swap_tasks.*": {"queue": "image_q"},
+        "app.tasks.performance_tasks.*": {"queue": "video_q"},
         # Timeline compose is a multi-asset orchestration → pipeline queue.
         "app.tasks.timeline_tasks.*": {"queue": "pipeline_q"},
         "app.tasks.health_tasks.*": {"queue": "pipeline_q"},
