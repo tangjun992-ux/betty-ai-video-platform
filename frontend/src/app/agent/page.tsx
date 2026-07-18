@@ -125,6 +125,12 @@ export default function AgentPage() {
   const [variantBatchId, setVariantBatchId] = useState<string | null>(null);
   const [variantRunning, setVariantRunning] = useState(false);
   const [pickedVariantId, setPickedVariantId] = useState<string | null>(null);
+  const [exportPlacement, setExportPlacement] = useState<string>("");
+  const [exportSpecs, setExportSpecs] = useState<{ id: string; label: string; aspect_ratio: string; duration_default: number }[]>([]);
+  const [briefTemplates, setBriefTemplates] = useState<{
+    id: string; scenario: string; label: string; brief: string;
+    duration: number; placement?: string; cta?: string;
+  }[]>([]);
 
   const maybePromptUpgrade = useCallback(async (force = false) => {
     if (!force && dryRunMode) return;
@@ -169,6 +175,28 @@ export default function AgentPage() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/director/export-specs`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (Array.isArray(d?.specs)) {
+          setExportSpecs(d.specs.map((s: any) => ({
+            id: s.id, label: s.label, aspect_ratio: s.aspect_ratio,
+            duration_default: s.duration_default,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const q = activeScenario ? `?scenario=${encodeURIComponent(activeScenario)}` : "";
+    fetch(`${API_BASE}/director/brief-templates${q}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setBriefTemplates(Array.isArray(d?.templates) ? d.templates : []))
+      .catch(() => setBriefTemplates([]));
+  }, [activeScenario]);
 
   // ── models catalog (active only, for per-step model swap) ──
   useEffect(() => {
@@ -251,36 +279,79 @@ export default function AgentPage() {
 
   const reset = () => { setPlan(null); setAssets([]); setPhase("idle"); setErr(null); setEditingId(null); };
 
-  const makePlan = async (text?: string, opts?: { duration?: number; scenario?: string | null }) => {
+  const makePlan = async (text?: string, opts?: {
+    duration?: number; scenario?: string | null; placement?: string; templateId?: string;
+  }) => {
     const b = (text ?? brief).trim();
-    if (!b) return;
+    if (!b && !opts?.templateId) return;
     const dur = opts?.duration ?? duration;
     const sc = opts?.scenario !== undefined ? opts.scenario : activeScenario;
-    setBrief(b); if (opts?.duration) setDuration(opts.duration);
+    const place = opts?.placement !== undefined ? opts.placement : exportPlacement;
+    if (b) setBrief(b);
+    if (opts?.duration) setDuration(opts.duration);
     if (opts?.scenario !== undefined) setActiveScenario(opts.scenario);
+    if (opts?.placement) setExportPlacement(opts.placement);
     reset(); setPhase("planning");
     try {
       const res = await fetch(`${API_BASE}/director/plan`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          brief: b,
+          brief: b || "投放成片",
           has_ref_image: refImage,
           duration: dur,
           ref_image_url: refImageUrl,
           minimal,
           scenario: sc || undefined,
           identity_lock: identityLock,
+          export_placement: place || undefined,
+          template_id: opts?.templateId,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Plan = await res.json();
       setPlan(data); setPhase("planned");
       if (data.scenario) setActiveScenario(data.scenario);
+      if (data.brief) setBrief(data.brief);
     } catch (e: any) { setErr(`无法连接导演引擎 (${e?.message}) — 请确认后端已启动`); setPhase("idle"); }
   };
 
-  const startScenario = (sc: Scenario) => {
+  const startScenario = async (sc: Scenario) => {
     if (sc.duration) setDuration(sc.duration);
+    setBrief(sc.brief);
+    setActiveScenario(sc.id);
+    // 广告场景：Advantage+ 模式 — 先扇出变体再选优出片
+    if (sc.id === "product_ad" || sc.id === "product_commercial") {
+      setPhase("idle");
+      setVariantCards([]);
+      setVariantGallery([]);
+      setComposerBusy("variants");
+      try {
+        const r = await fetch(`${API_BASE}/director/variants`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            brief: sc.brief,
+            scenario: sc.id,
+            duration: sc.duration || 15,
+            minimal: true,
+            n: 2,
+            identity_lock: identityLock,
+            export_placement: exportPlacement || (sc.id === "product_ad" ? "meta_feed" : "youtube_landscape"),
+          }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        setVariantCards(d.variants || []);
+        if (!exportPlacement) {
+          setExportPlacement(sc.id === "product_ad" ? "meta_feed" : "youtube_landscape");
+        }
+      } catch (e: any) {
+        setErr(`广告变体扇出失败 (${e?.message})，回退单计划`);
+        await makePlan(sc.brief, { duration: sc.duration, scenario: sc.id });
+      } finally {
+        setComposerBusy(null);
+      }
+      return;
+    }
     makePlan(sc.brief, { duration: sc.duration, scenario: sc.id });
   };
 
@@ -330,8 +401,9 @@ export default function AgentPage() {
           scenario: activeScenario || undefined,
           duration,
           minimal,
-          n: 3,
+          n: activeScenario === "product_ad" || activeScenario === "product_commercial" ? 2 : 3,
           identity_lock: identityLock,
+          export_placement: exportPlacement || undefined,
         }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -387,6 +459,7 @@ export default function AgentPage() {
           minimal,
           n: src.length,
           identity_lock: identityLock,
+          export_placement: exportPlacement || undefined,
           dry_run: dryRun,
           variants: src,
           session_uid: activeUid || undefined,
@@ -516,6 +589,7 @@ export default function AgentPage() {
           minimal,
           scenario: plan.scenario || activeScenario || undefined,
           identity_lock: identityLock,
+          export_placement: exportPlacement || undefined,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -794,6 +868,23 @@ export default function AgentPage() {
                     </button>
                   ))}
                 </div>
+                {exportSpecs.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5" data-testid="agent-export-placement">
+                    <span className="text-[11px] text-text-tertiary">投放位</span>
+                    {exportSpecs.map((sp) => (
+                      <button key={sp.id} type="button"
+                        onClick={() => {
+                          setExportPlacement(sp.id);
+                          if (sp.duration_default) setDuration(sp.duration_default);
+                        }}
+                        title={`${sp.label} · ${sp.aspect_ratio}`}
+                        className={cn("px-2 py-1 rounded-lg text-[11px] font-medium border transition-all",
+                          exportPlacement === sp.id ? "bg-brand/10 text-brand border-brand/30" : "border-cosmic-border text-text-secondary hover:text-text-primary")}>
+                        {sp.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <button onClick={() => makePlan()} disabled={!brief.trim() || phase === "planning"}
                 data-testid="agent-plan-btn"
@@ -806,6 +897,48 @@ export default function AgentPage() {
           </div>
 
           {err && <p className="text-center text-sm text-amber-500 py-3">{err}</p>}
+
+          {/* Brief templates — UGC / talking / ad hooks */}
+          {briefTemplates.length > 0 && phase === "idle" && (
+            <div className="mb-4" data-testid="agent-brief-templates">
+              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">
+                成片模板 · 钩子 / 时长 / CTA
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {briefTemplates.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => {
+                      setBrief(tpl.brief);
+                      setDuration(tpl.duration);
+                      setActiveScenario(tpl.scenario);
+                      if (tpl.placement) setExportPlacement(tpl.placement);
+                      // Ad templates → variants-first; others → plan
+                      if (tpl.scenario === "product_ad" || tpl.scenario === "product_commercial") {
+                        startScenario({
+                          id: tpl.scenario, icon: Clapperboard, cat: "视频",
+                          title: tpl.label, desc: "", brief: tpl.brief,
+                          duration: tpl.duration, color: "",
+                        });
+                      } else {
+                        makePlan(tpl.brief, {
+                          duration: tpl.duration,
+                          scenario: tpl.scenario,
+                          placement: tpl.placement,
+                          templateId: tpl.id,
+                        });
+                      }
+                    }}
+                    className="px-3 py-2 rounded-xl bg-cosmic-surface/50 border border-cosmic-border/50 hover:border-brand/40 transition-all text-left"
+                  >
+                    <span className="text-xs font-medium text-text-primary">{tpl.label}</span>
+                    {tpl.cta ? <span className="block text-[10px] text-text-tertiary mt-0.5">{tpl.cta}</span> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* VIS trend style chips */}
           {trendChips.length > 0 && phase === "idle" && (

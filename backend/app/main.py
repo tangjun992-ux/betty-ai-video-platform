@@ -47,6 +47,12 @@ async def lifespan(app: FastAPI):
 
     os.makedirs(settings.STORAGE_LOCAL_PATH, exist_ok=True)
     print(f"[LIFESPAN] Media storage: {settings.STORAGE_LOCAL_PATH}")
+    try:
+        from app.adapters.demo_provider import ensure_bgm_stock_installed
+        beds = ensure_bgm_stock_installed()
+        print(f"[LIFESPAN] Betty Stock BGM beds ready: {len(beds)}")
+    except Exception as e:
+        print(f"[LIFESPAN] BGM stock install skipped: {e}")
 
     try:
         await init_db()

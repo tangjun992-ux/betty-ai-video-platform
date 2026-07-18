@@ -65,6 +65,14 @@ class PlanRequest(BaseModel):
         default="edit",
         description="跨镜身份锁：off|hero|edit（edit=shot>1 先 edit_image 再 i2v）",
     )
+    export_placement: Optional[str] = Field(
+        default=None,
+        description="投放位：meta_feed|meta_stories|tiktok|reels|youtube_shorts|youtube_landscape",
+    )
+    template_id: Optional[str] = Field(
+        default=None,
+        description="brief 模板 id（见 GET /director/brief-templates）",
+    )
 
 
 class RunRequest(PlanRequest):
@@ -101,6 +109,7 @@ def _resolve_plan(req: RunRequest):
         minimal=bool(req.minimal),
         scenario=getattr(req, "scenario", None),
         identity_lock=getattr(req, "identity_lock", None) or "edit",
+        export_placement=getattr(req, "export_placement", None),
     )
 
 
@@ -126,17 +135,36 @@ async def _charge_director_plan(
 
 @router.post("/plan", summary="生成导演式创作计划")
 async def make_plan(req: PlanRequest):
-    _moderate_brief(req.brief)
+    brief = req.brief
+    duration = req.duration
+    scenario = req.scenario
+    placement = req.export_placement
+    if req.template_id:
+        from app.director_brief_templates import get_brief_template
+        tpl = get_brief_template(req.template_id)
+        if tpl:
+            brief = tpl.get("brief") or brief
+            duration = int(tpl.get("duration") or duration)
+            scenario = tpl.get("scenario") or scenario
+            placement = placement or tpl.get("placement")
+    _moderate_brief(brief)
     plan = planner.plan(
-        req.brief,
+        brief,
         has_ref_image=req.has_ref_image,
-        duration=req.duration,
+        duration=duration,
         ref_image_url=req.ref_image_url,
         minimal=bool(req.minimal),
-        scenario=req.scenario,
+        scenario=scenario,
         identity_lock=req.identity_lock or "edit",
+        export_placement=placement,
     )
-    return plan.to_dict()
+    body = plan.to_dict()
+    from app.export_specs import validate_plan_against_placement, resolve_placement
+    spec = resolve_placement(scenario, placement)
+    body["export_placement"] = spec.get("id")
+    body["export_spec"] = spec
+    body["placement_warnings"] = validate_plan_against_placement(body, spec.get("id"))
+    return body
 
 
 class StoryboardShot(BaseModel):
@@ -244,6 +272,35 @@ async def brain_modes():
     return {"modes": BRAIN_MODES}
 
 
+@router.get("/export-specs", summary="投放导出规格：Meta/TikTok/Reels/Shorts")
+async def export_specs_list():
+    from app.export_specs import list_export_specs, SCENARIO_DEFAULT_PLACEMENT
+    return {"specs": list_export_specs(), "scenario_defaults": SCENARIO_DEFAULT_PLACEMENT}
+
+
+@router.get("/brief-templates", summary="口播/UGC/广告 brief 模板库")
+async def brief_templates_list(scenario: Optional[str] = None):
+    from app.director_brief_templates import list_brief_templates
+    items = list_brief_templates(scenario)
+    return {"count": len(items), "templates": items}
+
+
+@router.get("/bgm-catalog", summary="可投放 BGM 床目录（Stock Beds + URL）")
+async def bgm_catalog():
+    from app.adapters.demo_provider import (
+        BGM_PRESETS, ensure_bgm_stock_installed, _bgm_url_for_preset,
+    )
+    installed = ensure_bgm_stock_installed()
+    beds = []
+    for preset in BGM_PRESETS:
+        beds.append({
+            "preset": preset,
+            "url": _bgm_url_for_preset(preset),
+            "installed": preset in installed,
+        })
+    return {"count": len(beds), "beds": beds}
+
+
 @router.post("/ideate", summary="帮我构思：从一句话发散多个创意方向")
 async def ideate(req: IdeateRequest):
     """Expand a rough idea into several distinct creative concepts to pick from
@@ -264,6 +321,7 @@ class VariantsRequest(BaseModel):
         description="变体轴：hook|cta|seed（默认三者全开）",
     )
     identity_lock: str = Field(default="edit", description="off|hero|edit")
+    export_placement: Optional[str] = Field(default=None)
 
 
 class VariantsRunRequest(VariantsRequest):
@@ -288,8 +346,12 @@ async def plan_variants(req: VariantsRequest):
         n=req.n,
         axes=req.axes,
         identity_lock=req.identity_lock or "edit",
+        export_placement=req.export_placement,
     )
-    return {"count": len(variants), "variants": variants, "scenario": req.scenario}
+    return {
+        "count": len(variants), "variants": variants,
+        "scenario": req.scenario, "export_placement": req.export_placement,
+    }
 
 
 @router.post("/variants/run", summary="并行执行 2–3 个创意变体出片")
@@ -312,6 +374,7 @@ async def run_variants(
             n=req.n,
             axes=req.axes,
             identity_lock=req.identity_lock or "edit",
+            export_placement=req.export_placement,
         )
     variants = variants[: max(1, min(int(req.n or 3), 5))]
     from app.tasks.director_tasks import run_director, write_progress

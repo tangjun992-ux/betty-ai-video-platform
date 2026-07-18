@@ -670,12 +670,16 @@ def _escape_drawtext(text: str) -> str:
     return t[:36]
 
 
-# Scenario → procedural BGM character (still not a licensed Creatify library)
+# Packaging BGM presets — Betty Stock Beds v1 (8 beds) + env URL override
 BGM_PRESETS: dict[str, dict] = {
     "soft": {"f1": 196.0, "f2": 293.66, "f3": 392.0, "lp": 1600, "vol": 0.12},
     "upbeat": {"f1": 261.63, "f2": 329.63, "f3": 392.0, "lp": 2400, "vol": 0.16},
     "cinematic": {"f1": 110.0, "f2": 164.81, "f3": 220.0, "lp": 1200, "vol": 0.14},
     "drama": {"f1": 98.0, "f2": 146.83, "f3": 196.0, "lp": 1400, "vol": 0.13},
+    "corporate": {"f1": 220.0, "f2": 277.18, "f3": 329.63, "lp": 2200, "vol": 0.14},
+    "energetic": {"f1": 293.66, "f2": 369.99, "f3": 440.0, "lp": 3200, "vol": 0.17},
+    "chill": {"f1": 174.61, "f2": 220.0, "f3": 261.63, "lp": 1600, "vol": 0.12},
+    "hype": {"f1": 311.13, "f2": 392.0, "f3": 466.16, "lp": 3600, "vol": 0.18},
 }
 
 
@@ -684,8 +688,47 @@ def _fixtures_music_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "fixtures" / "music"
 
 
+def ensure_bgm_stock_installed() -> list[str]:
+    """Copy Betty Stock Beds into ``STORAGE/bgm/`` so they are publicly fetchable."""
+    installed: list[str] = []
+    try:
+        from app.config import settings
+        dest_dir = Path(settings.STORAGE_LOCAL_PATH) / "bgm"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        src_dir = _fixtures_music_dir()
+        for preset in BGM_PRESETS:
+            src = src_dir / f"{preset}.wav"
+            if not src.is_file():
+                continue
+            dest = dest_dir / f"{preset}.wav"
+            if not dest.is_file() or dest.stat().st_size != src.stat().st_size:
+                dest.write_bytes(src.read_bytes())
+            installed.append(preset)
+    except Exception as e:
+        logger.warning("[demo] ensure_bgm_stock_installed: %s", e)
+    return installed
+
+
+def _bgm_public_stock_url(preset: str) -> str:
+    """Local stock bed served via /api/v1/media/bgm/{preset}.wav."""
+    try:
+        from app.config import settings
+        ensure_bgm_stock_installed()
+        bed = Path(settings.STORAGE_LOCAL_PATH) / "bgm" / f"{preset}.wav"
+        if not bed.is_file():
+            return ""
+        base = (getattr(settings, "PUBLIC_BASE_URL", None) or "http://127.0.0.1:8000").rstrip("/")
+        # Prefer CDN if set
+        cdn = (getattr(settings, "MEDIA_CDN_BASE_URL", None) or "").rstrip("/")
+        if cdn:
+            return f"{cdn}/bgm/{preset}.wav"
+        return f"{base}/api/v1/media/bgm/{preset}.wav"
+    except Exception:
+        return ""
+
+
 def _bgm_url_for_preset(preset: str) -> str:
-    """Resolve hosted/licensed BGM URL for a preset from env settings."""
+    """Resolve BGM URL: env override → Betty Stock Beds public media URL."""
     try:
         from app.config import settings
         raw = (getattr(settings, "BGM_URLS_JSON", None) or "").strip()
@@ -695,9 +738,12 @@ def _bgm_url_for_preset(preset: str) -> str:
             if isinstance(m, dict) and m.get(preset):
                 return str(m[preset]).strip()
         key = f"BGM_URL_{preset.upper()}"
-        return (getattr(settings, key, None) or "").strip()
+        env_url = (getattr(settings, key, None) or "").strip()
+        if env_url:
+            return env_url
     except Exception:
-        return ""
+        pass
+    return _bgm_public_stock_url(preset)
 
 
 def _cache_bgm_url(url: str, preset: str) -> Path | None:

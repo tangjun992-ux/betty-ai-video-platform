@@ -241,7 +241,8 @@ class DirectorPlanner:
     def plan(self, brief: str, has_ref_image: bool = False, duration: int = 5,
              ref_image_url: str | None = None, *, minimal: bool = False,
              scenario: str | None = None,
-             identity_lock: str = "edit") -> DirectorPlan:
+             identity_lock: str = "edit",
+             export_placement: str | None = None) -> DirectorPlan:
         """Plan a director workflow.
 
         ``scenario`` — stable Agent card id (product_ad / ugc / ai_portrait / …).
@@ -251,6 +252,7 @@ class DirectorPlanner:
           - ``off``  — no cross-shot identity anchoring
           - ``hero`` — reuse hero as i2v source only (no per-shot edit)
           - ``edit`` — shot>1 runs edit_image variant before i2v (default, strongest)
+        ``export_placement`` — Meta/TikTok/Reels/… placement id (see export_specs).
         """
         lock = (identity_lock or "edit").strip().lower()
         if lock not in ("off", "hero", "edit"):
@@ -262,6 +264,7 @@ class DirectorPlanner:
             infer_scenario, scenario_vertical, scenario_intent, scenario_aspect,
             scenario_cta_text, scenario_default_voice, SCENARIO_IDS,
         )
+        from app.export_specs import resolve_placement, clamp_duration
 
         brief = (brief or "").strip()
         has_ref_image = has_ref_image or bool(ref_image_url)
@@ -270,6 +273,10 @@ class DirectorPlanner:
             scenario = ""
         if not scenario:
             scenario = infer_scenario(brief)
+        # Placement policy (aspect / duration / packaging defaults)
+        placement = resolve_placement(scenario, export_placement)
+        placement_id = placement.get("id") or ""
+        duration = clamp_duration(int(duration or placement.get("duration_default") or 15), placement)
 
         # Brief keywords can force minimal / quick mode (对标 Yapper "just direct")
         if _has(brief, ["快速成片", "最短路径", "minimal", "quick direct", "只要视频", "不要配音"]):
@@ -279,12 +286,18 @@ class DirectorPlanner:
         dm = re.search(r"(\d{1,3})\s*(?:秒|s\b|sec|seconds?)", brief, re.I)
         if dm:
             duration = max(5, min(int(dm.group(1)), 60))
+        duration = clamp_duration(duration, placement)
         styles = _styles_from_brief(brief)
         vertical = _has(brief, ["竖屏", "抖音", "tiktok", "reels", "shorts", "手机", "9:16"])
         if scenario and scenario_vertical(scenario):
             vertical = True
         # Hard channel lock: ads/commercial/anime are landscape even if brief says 竖屏
         locked_aspect = scenario_aspect(scenario) if scenario else None
+        # Placement wins when set (Meta Stories / TikTok force 9:16 even for ads)
+        if placement.get("aspect_ratio") and (
+            export_placement or scenario in ("product_ad", "ugc", "talking_avatar", "micro_drama")
+        ):
+            locked_aspect = placement["aspect_ratio"]
         if locked_aspect == "16:9":
             vertical = False
         elif locked_aspect == "9:16":
@@ -623,18 +636,23 @@ class DirectorPlanner:
         need_pack = bool(scenario and scenario in PACKAGING_SCENARIOS)
         finish_aspect = locked_aspect or ("9:16" if vertical else "16:9")
         finish_preset = _ASPECT_TO_EXPORT.get(finish_aspect)
-        cta = scenario_cta_text(scenario, brief) if scenario else "了解更多"
-        # Packaging presets by scenario (Creatify-style finish ladder)
+        cta = (
+            placement.get("cta_hint")
+            or (scenario_cta_text(scenario, brief) if scenario else "了解更多")
+        )
+        # Packaging presets by scenario; placement overrides when present
         _SUB_STYLE = {
             "talking_avatar": "talking", "ugc": "feed", "product_ad": "impact",
             "product_commercial": "ad", "micro_drama": "drama", "anime": "neon",
         }
         _BGM_PRESET = {
-            "ugc": "upbeat", "product_ad": "upbeat", "product_commercial": "cinematic",
-            "micro_drama": "drama", "anime": "cinematic",
+            "ugc": "energetic", "product_ad": "upbeat", "product_commercial": "cinematic",
+            "micro_drama": "drama", "anime": "cinematic", "talking_avatar": "soft",
         }
-        sub_style = _SUB_STYLE.get(scenario or "", "feed")
-        bgm_preset = _BGM_PRESET.get(scenario or "", "soft")
+        sub_style = placement.get("subtitle_style") or _SUB_STYLE.get(scenario or "", "feed")
+        bgm_preset = placement.get("bgm_preset") or _BGM_PRESET.get(scenario or "", "soft")
+        finish_aspect = placement.get("aspect_ratio") or finish_aspect
+        finish_preset = placement.get("export_preset") or _ASPECT_TO_EXPORT.get(finish_aspect)
 
         if video_steps and (intent != "talking" or need_pack):
             if intent == "talking":
@@ -653,12 +671,13 @@ class DirectorPlanner:
                     reason="字幕 + 片尾 CTA 包装为可发布口播成片",
                     prompt=brief, depends_on=talk_ids + [s_sub.id], est_credits=0,
                     params={
-                        "aspect_ratio": "9:16",
-                        "export_preset": "portrait_9_16",
+                        "aspect_ratio": finish_aspect if finish_aspect == "9:16" else "9:16",
+                        "export_preset": finish_preset if "portrait" in str(finish_preset) else "portrait_9_16",
                         "bgm": False,
                         "cta_text": cta,
                         "keep_source_audio": True,
                         "subtitle_style": sub_style,
+                        "export_placement": placement_id,
                     },
                 )
                 steps += [s_sub, s_comp]
@@ -673,6 +692,7 @@ class DirectorPlanner:
                     "bgm_preset": bgm_preset,
                     "cta_text": cta,
                     "subtitle_style": sub_style,
+                    "export_placement": placement_id,
                 }
                 if not minimal:
                     voice_id = scenario_default_voice(brief, scenario)
@@ -783,6 +803,7 @@ class DirectorPlanner:
         n: int = 3,
         axes: list[str] | None = None,
         identity_lock: str = "edit",
+        export_placement: str | None = None,
     ) -> list[dict]:
         """Fan-out Advantage+/Creatify-style creative variants (plans only).
 
@@ -816,6 +837,7 @@ class DirectorPlanner:
             plan = self.plan(
                 brief, duration=duration, minimal=minimal, scenario=scenario,
                 identity_lock=identity_lock,
+                export_placement=export_placement,
             )
             applied: list[str] = []
             if "seed" in axes:
