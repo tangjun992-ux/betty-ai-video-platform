@@ -240,13 +240,21 @@ def _n_shots(duration: int) -> int:
 class DirectorPlanner:
     def plan(self, brief: str, has_ref_image: bool = False, duration: int = 5,
              ref_image_url: str | None = None, *, minimal: bool = False,
-             scenario: str | None = None) -> DirectorPlan:
+             scenario: str | None = None,
+             identity_lock: str = "edit") -> DirectorPlan:
         """Plan a director workflow.
 
         ``scenario`` — stable Agent card id (product_ad / ugc / ai_portrait / …).
         When set, uses scenario-specific beats/models/aspect (top-tier card parity).
         ``minimal=True`` skips TTS/subtitle; multi-shot scenarios still stitch compose.
+        ``identity_lock``:
+          - ``off``  — no cross-shot identity anchoring
+          - ``hero`` — reuse hero as i2v source only (no per-shot edit)
+          - ``edit`` — shot>1 runs edit_image variant before i2v (default, strongest)
         """
+        lock = (identity_lock or "edit").strip().lower()
+        if lock not in ("off", "hero", "edit"):
+            lock = "edit"
         from app.director_scenarios import (
             AD_BEATS, COMMERCIAL_BEATS, UGC_BEATS, DRAMA_BEATS, ANIME_BEATS,
             PRODUCT_PHOTO_VARIATIONS, PORTRAIT_VARIATIONS,
@@ -328,15 +336,18 @@ class DirectorPlanner:
             prev: str, beats: list, n: int, vid: dict, aspect: str,
             *, hero_id: str | None = None,
         ) -> list[str]:
-            """Chain shots; every shot keeps identity_from=hero for cross-shot lock."""
+            """Chain shots; identity behavior controlled by ``identity_lock``."""
             ids: list[str] = []
             identity = hero_id or prev
             for i in range(n):
                 beat_cn, beat_desc, cam_en = beats[i % len(beats)]
-                # Depend on previous shot for order; identity resolved from hero image at execute
                 deps = [prev]
-                if identity and identity not in deps:
+                if lock != "off" and identity and identity not in deps:
                     deps.append(identity)
+                id_prompt = (
+                    "，same subject identity locked to hero frame"
+                    if lock != "off" else ""
+                )
                 sv = DirectorStep(
                     id=sid(), action="video",
                     title=f"分镜 {i+1}/{n} · {beat_cn}",
@@ -344,13 +355,14 @@ class DirectorPlanner:
                     reason=f"{beat_desc}，选 {vid['display_name']}",
                     prompt=_shot_prompt(
                         brief, f"{beat_cn}·{beat_desc}", cam_en, styles,
-                    ) + "，same subject identity locked to hero frame",
+                    ) + id_prompt,
                     depends_on=deps, est_credits=_credits_of(vid, "video", 5),
                     params={
                         "aspect_ratio": aspect, "duration": 5, "shot": i + 1,
-                        "identity_from": identity,
-                        # Shot>1: edit hero into camera variant before i2v (stronger ID lock)
-                        "identity_variant": i > 0,
+                        "identity_from": (identity if lock != "off" else None),
+                        # edit lock: shot>1 edit_image before i2v; hero: reuse only
+                        "identity_variant": bool(lock == "edit" and i > 0),
+                        "identity_lock": lock,
                     },
                 )
                 steps.append(sv)
@@ -614,8 +626,8 @@ class DirectorPlanner:
         cta = scenario_cta_text(scenario, brief) if scenario else "了解更多"
         # Packaging presets by scenario (Creatify-style finish ladder)
         _SUB_STYLE = {
-            "talking_avatar": "talking", "ugc": "feed", "product_ad": "ad",
-            "product_commercial": "ad", "micro_drama": "drama", "anime": "drama",
+            "talking_avatar": "talking", "ugc": "feed", "product_ad": "impact",
+            "product_commercial": "ad", "micro_drama": "drama", "anime": "neon",
         }
         _BGM_PRESET = {
             "ugc": "upbeat", "product_ad": "upbeat", "product_commercial": "cinematic",
@@ -725,8 +737,17 @@ class DirectorPlanner:
                 s.params["seed"] = shared_seed
                 if ref_image_url and s.action in ("video", "lipsync"):
                     s.params["image_url"] = ref_image_url
-                if hero_step and s.action in ("video", "lipsync") and not s.params.get("identity_from"):
+                if (
+                    lock != "off"
+                    and hero_step
+                    and s.action in ("video", "lipsync")
+                    and not s.params.get("identity_from")
+                ):
                     s.params["identity_from"] = hero_step.id
+                if lock == "off" and s.action in ("video", "lipsync"):
+                    s.params["identity_from"] = None
+                    s.params["identity_variant"] = False
+                s.params["identity_lock"] = lock
             # Channel aspect lock (stills series keep their own ratios)
             if locked_aspect and s.action in ("video", "lipsync", "compose"):
                 s.params["aspect_ratio"] = locked_aspect
@@ -742,8 +763,11 @@ class DirectorPlanner:
         n_shots = len([s for s in steps if s.action == "video"])
         shot_note = f"，{n_shots} 个分镜" if n_shots > 1 else ""
         sc_note = f"，场景：{scenario}" if scenario else ""
+        lock_note = f"，身份锁：{lock}" if any(
+            s.action == "video" for s in steps
+        ) else ""
         summary = (f"已规划 {len(steps)} 步{shot_note}，将产出 {n_assets} 个资产，"
-                   f"预计消耗 {total} 积分。意图：{intent}{sc_note}")
+                   f"预计消耗 {total} 积分。意图：{intent}{sc_note}{lock_note}")
         return DirectorPlan(
             brief=brief, intent=intent, summary=summary, steps=steps,
             total_credits=total, scenario=scenario or "",
@@ -758,6 +782,7 @@ class DirectorPlanner:
         minimal: bool = True,
         n: int = 3,
         axes: list[str] | None = None,
+        identity_lock: str = "edit",
     ) -> list[dict]:
         """Fan-out Advantage+/Creatify-style creative variants (plans only).
 
@@ -790,6 +815,7 @@ class DirectorPlanner:
             tag = chr(ord("A") + i)
             plan = self.plan(
                 brief, duration=duration, minimal=minimal, scenario=scenario,
+                identity_lock=identity_lock,
             )
             applied: list[str] = []
             if "seed" in axes:
@@ -1227,7 +1253,7 @@ class DirectorExecutor:
                 # Talking lipsync already has speech in the clip — preserve it
                 narr_for_mux = None if keep_source_audio else narration_url
                 try:
-                    from app.adapters.demo_provider import compose_final_video
+                    from app.adapters.demo_provider import compose_final_video, build_identity_strip
                     final_url, poster = await asyncio.to_thread(
                         compose_final_video,
                         shot_urls,
@@ -1241,9 +1267,36 @@ class DirectorExecutor:
                         subtitle_style=subtitle_style,
                         cta_text=cta_text,
                         preserve_clip_audio=keep_source_audio,
+                        voice_duck=True,
                     )
+                    # Identity comparison strip for human QA (hero + shot posters)
+                    strip_url = None
+                    try:
+                        frame_urls: list[str] = []
+                        labels: list[str] = ["Hero"]
+                        for r in results.values():
+                            if isinstance(r, dict) and r.get("type") == "image":
+                                u = r.get("media_url") or r.get("url")
+                                if u:
+                                    frame_urls.append(u)
+                                    break
+                        for idx, su in enumerate(shot_urls[:4]):
+                            # Prefer video thumbnail if already persisted
+                            thumb = None
+                            for r in results.values():
+                                if isinstance(r, dict) and (r.get("media_url") or r.get("url")) == su:
+                                    thumb = r.get("thumbnail")
+                                    break
+                            frame_urls.append(thumb or su)
+                            labels.append(f"Shot {idx + 1}")
+                        if len(frame_urls) >= 2:
+                            strip_url, _ = await asyncio.to_thread(
+                                build_identity_strip, frame_urls, labels=labels,
+                            )
+                    except Exception as strip_err:
+                        logger.warning("[director] identity strip skipped: %s", strip_err)
                     step.status = "done"
-                    return {
+                    out = {
                         "type": "video", "media_url": final_url, "url": final_url,
                         "thumbnail": poster, "model": step.model_name, "cost": 0,
                         "final": True, "shot_count": len(shot_urls),
@@ -1252,7 +1305,11 @@ class DirectorExecutor:
                         "export_preset": export_preset,
                         "bgm": want_bgm and not keep_source_audio,
                         "cta": bool(cta_text),
+                        "voice_duck": bool(narr_for_mux) and want_bgm and not keep_source_audio,
                     }
+                    if strip_url:
+                        out["identity_strip"] = strip_url
+                    return out
                 except Exception as e:
                     logger.warning("[director] compose failed: %s", e)
                     step.status = "done"
@@ -1687,6 +1744,23 @@ class DirectorExecutor:
                 if s.action in ("image", "video", "lipsync") or (s.action == "compose" and r.get("type") == "video"):
                     asset = self._asset_from(s, r)
                     assets.append(asset)
+                    # Surface identity strip as its own QA asset for the gallery
+                    if s.action == "compose" and r.get("identity_strip"):
+                        strip_asset = {
+                            "type": "identity_strip",
+                            "media_url": r["identity_strip"],
+                            "url": r["identity_strip"],
+                            "thumbnail": r["identity_strip"],
+                            "step": "身份对比条 · 人眼验收",
+                            "step_id": f"{s.id}_strip",
+                            "model": "identity-strip",
+                            "final": False,
+                        }
+                        assets.append(strip_asset)
+                        yield {
+                            "type": "step_done", "id": strip_asset["step_id"],
+                            "asset": strip_asset, "elapsed_ms": 0,
+                        }
                 yield {"type": "step_done", "id": s.id, "step": s.to_dict(),
                        "asset": asset, "elapsed_ms": elapsed_ms}
 

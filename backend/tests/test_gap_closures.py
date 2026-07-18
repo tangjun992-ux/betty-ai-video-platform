@@ -43,7 +43,7 @@ def test_talking_closeup_and_reliable_kling_default():
 def test_packaging_presets_on_compose():
     plan = DirectorPlanner().plan("产品广告", duration=15, minimal=True, scenario="product_ad")
     comp = next(s for s in plan.steps if s.action == "compose")
-    assert comp.params.get("subtitle_style") == "ad"
+    assert comp.params.get("subtitle_style") == "impact"
     assert comp.params.get("bgm_preset") == "upbeat"
     assert "feed" in SUBTITLE_STYLES and "talking" in SUBTITLE_STYLES
     assert "upbeat" in BGM_PRESETS and "cinematic" in BGM_PRESETS

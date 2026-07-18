@@ -125,6 +125,17 @@ class Settings(BaseSettings):
     ALIPAY_PUBLIC_KEY_PATH: str = os.getenv("ALIPAY_PUBLIC_KEY_PATH", "")
     ALIPAY_SANDBOX: bool = os.getenv("ALIPAY_SANDBOX", "true").lower() == "true"
 
+    # Packaging BGM — optional licensed / hosted bed URLs (override fixtures/sine).
+    # Per-preset: BGM_URL_SOFT / BGM_URL_UPBEAT / BGM_URL_CINEMATIC / BGM_URL_DRAMA
+    # Or JSON map: BGM_URLS={"soft":"https://...","upbeat":"https://..."}
+    BGM_URL_SOFT: str = os.getenv("BGM_URL_SOFT", "")
+    BGM_URL_UPBEAT: str = os.getenv("BGM_URL_UPBEAT", "")
+    BGM_URL_CINEMATIC: str = os.getenv("BGM_URL_CINEMATIC", "")
+    BGM_URL_DRAMA: str = os.getenv("BGM_URL_DRAMA", "")
+    BGM_URLS_JSON: str = os.getenv("BGM_URLS", "")
+    # Sidechain ducking when muxing narration + BGM (Creatify-style voice priority)
+    BGM_VOICE_DUCK: bool = os.getenv("BGM_VOICE_DUCK", "true").lower() in ("1", "true", "yes", "on")
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

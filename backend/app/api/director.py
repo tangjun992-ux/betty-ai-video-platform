@@ -61,6 +61,10 @@ class PlanRequest(BaseModel):
         default=None,
         description="Agent 场景卡 id：product_ad|product_commercial|ugc|micro_drama|anime|product_photo|ai_portrait|talking_avatar",
     )
+    identity_lock: str = Field(
+        default="edit",
+        description="跨镜身份锁：off|hero|edit（edit=shot>1 先 edit_image 再 i2v）",
+    )
 
 
 class RunRequest(PlanRequest):
@@ -96,6 +100,7 @@ def _resolve_plan(req: RunRequest):
         ref_image_url=req.ref_image_url,
         minimal=bool(req.minimal),
         scenario=getattr(req, "scenario", None),
+        identity_lock=getattr(req, "identity_lock", None) or "edit",
     )
 
 
@@ -129,6 +134,7 @@ async def make_plan(req: PlanRequest):
         ref_image_url=req.ref_image_url,
         minimal=bool(req.minimal),
         scenario=req.scenario,
+        identity_lock=req.identity_lock or "edit",
     )
     return plan.to_dict()
 
@@ -257,13 +263,21 @@ class VariantsRequest(BaseModel):
         default=None,
         description="变体轴：hook|cta|seed（默认三者全开）",
     )
+    identity_lock: str = Field(default="edit", description="off|hero|edit")
+
+
+class VariantsRunRequest(VariantsRequest):
+    dry_run: bool | None = Field(default=None)
+    session_uid: Optional[str] = Field(default=None)
+    # Optional pre-built variants from POST /variants (skip re-plan)
+    variants: Optional[list[dict]] = Field(default=None)
 
 
 @router.post("/variants", summary="批量创意变体：钩子/CTA/seed 扇出多计划")
 async def plan_variants(req: VariantsRequest):
     """Advantage+/Creatify-style plan fan-out — returns N editable plans (not executed).
 
-    Client can then POST each ``plan`` to ``/director/run/async`` for parallel outings.
+    Client can then POST ``/director/variants/run`` for parallel outings, or run each plan.
     """
     _moderate_brief(req.brief)
     variants = DirectorPlanner().plan_variants(
@@ -273,8 +287,128 @@ async def plan_variants(req: VariantsRequest):
         minimal=bool(req.minimal),
         n=req.n,
         axes=req.axes,
+        identity_lock=req.identity_lock or "edit",
     )
     return {"count": len(variants), "variants": variants, "scenario": req.scenario}
+
+
+@router.post("/variants/run", summary="并行执行 2–3 个创意变体出片")
+async def run_variants(
+    req: VariantsRunRequest,
+    request: Request,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Enqueue N variant plans as parallel Celery jobs; poll ``/variants/progress/{batch_id}``."""
+    _moderate_brief(req.brief)
+    dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    variants = req.variants
+    if not variants:
+        variants = DirectorPlanner().plan_variants(
+            req.brief.strip(),
+            scenario=(req.scenario or "").strip(),
+            duration=req.duration,
+            minimal=bool(req.minimal),
+            n=req.n,
+            axes=req.axes,
+            identity_lock=req.identity_lock or "edit",
+        )
+    variants = variants[: max(1, min(int(req.n or 3), 5))]
+    from app.tasks.director_tasks import run_director, write_progress
+
+    jobs: list[dict] = []
+    total_cost = 0
+    for v in variants:
+        plan = plan_from_dict(v["plan"])
+        if not dry:
+            cost = sum(s.est_credits for s in plan.steps if not s.skip)
+            total_cost += cost
+            await _charge_director_plan(db, user_id, plan, team_id=resolve_team_id(request), dry_run=False)
+        job_id = uuid.uuid4().hex
+        write_progress(job_id, {
+            "job_id": job_id, "status": "queued", "done": False, "dry_run": dry,
+            "user_id": user_id,
+            "session_uid": req.session_uid,
+            "variant_id": v.get("variant_id"),
+            "plan": plan.to_dict(),
+            "steps": [
+                {"id": s.id, "status": "skipped" if s.skip else "pending",
+                 "title": s.title, "elapsed_ms": None}
+                for s in plan.steps
+            ],
+            "assets": [], "asset_count": 0, "total_ms": None,
+        })
+        run_director.delay(job_id, plan.to_dict(), dry, req.session_uid, user_id)
+        jobs.append({
+            "variant_id": v.get("variant_id"),
+            "label": v.get("label"),
+            "axes_applied": v.get("axes_applied") or [],
+            "job_id": job_id,
+        })
+
+    batch_id = uuid.uuid4().hex
+    write_progress(batch_id, {
+        "batch_id": batch_id, "type": "variants_batch",
+        "status": "running", "done": False,
+        "user_id": user_id, "dry_run": dry,
+        "jobs": jobs, "count": len(jobs), "total_credits": total_cost,
+    })
+    return {
+        "batch_id": batch_id, "count": len(jobs), "jobs": jobs,
+        "dry_run": dry, "total_credits": total_cost,
+    }
+
+
+@router.get("/variants/progress/{batch_id}", summary="查询变体批量出片进度")
+async def variants_progress(
+    batch_id: str,
+    user_id: int = Depends(resolve_user_id),
+):
+    from app.tasks.director_tasks import read_progress
+    from app.config import settings
+
+    batch = read_progress(batch_id)
+    if batch is None or batch.get("type") != "variants_batch":
+        raise HTTPException(status_code=404, detail="batch not found or expired")
+    owner = batch.get("user_id")
+    if owner is None and settings.is_production:
+        raise HTTPException(status_code=403, detail="无权查看此批次")
+    if owner is not None and int(owner) != user_id:
+        raise HTTPException(status_code=403, detail="无权查看此批次")
+
+    items: list[dict] = []
+    all_done = True
+    any_fail = False
+    for j in batch.get("jobs") or []:
+        st = read_progress(j["job_id"]) or {}
+        finals = [a for a in (st.get("assets") or []) if a.get("final")]
+        pick = finals[0] if finals else None
+        status = st.get("status") or "queued"
+        done = bool(st.get("done"))
+        if not done:
+            all_done = False
+        if status == "failed":
+            any_fail = True
+        items.append({
+            "variant_id": j.get("variant_id"),
+            "label": j.get("label"),
+            "axes_applied": j.get("axes_applied") or [],
+            "job_id": j["job_id"],
+            "status": status,
+            "done": done,
+            "asset_count": st.get("asset_count") or 0,
+            "final": pick,
+            "assets": st.get("assets") or [],
+            "error": st.get("error"),
+        })
+    return {
+        "batch_id": batch_id,
+        "done": all_done,
+        "status": "failed" if (all_done and any_fail and not any(i.get("final") for i in items))
+        else ("done" if all_done else "running"),
+        "count": len(items),
+        "variants": items,
+    }
 
 
 @router.post("/refine", summary="对话式导演：用自然语言迭代计划")

@@ -28,6 +28,12 @@ interface Asset {
   media_url?: string; url?: string; thumbnail?: string; shot?: number;
   final?: boolean; shot_count?: number;
   mode?: string; honesty?: string; planned_model_name?: string; planned_model?: string;
+  identity_strip?: string;
+}
+interface VariantGalleryItem {
+  variant_id: string; label: string; axes_applied: string[];
+  job_id?: string; status?: string; done?: boolean;
+  final?: Asset | null; error?: string; plan?: Plan;
 }
 interface Session { id: string; title: string; lastMessage: string; }
 interface ModelOpt { id: string; name: string; }
@@ -113,6 +119,12 @@ export default function AgentPage() {
   const [creditNeeded, setCreditNeeded] = useState(0);
   const [trendChips, setTrendChips] = useState<{ title: string; hint: string; duration?: number }[]>([]);
   const [activeScenario, setActiveScenario] = useState<string | null>(null);
+  /** Cross-shot identity lock: off | hero | edit */
+  const [identityLock, setIdentityLock] = useState<"off" | "hero" | "edit">("edit");
+  const [variantGallery, setVariantGallery] = useState<VariantGalleryItem[]>([]);
+  const [variantBatchId, setVariantBatchId] = useState<string | null>(null);
+  const [variantRunning, setVariantRunning] = useState(false);
+  const [pickedVariantId, setPickedVariantId] = useState<string | null>(null);
 
   const maybePromptUpgrade = useCallback(async (force = false) => {
     if (!force && dryRunMode) return;
@@ -257,6 +269,7 @@ export default function AgentPage() {
           ref_image_url: refImageUrl,
           minimal,
           scenario: sc || undefined,
+          identity_lock: identityLock,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -307,6 +320,8 @@ export default function AgentPage() {
     if (!brief.trim() || composerBusy) return;
     setComposerBusy("variants");
     setConcepts([]);
+    setVariantGallery([]);
+    setPickedVariantId(null);
     try {
       const r = await fetch(`${API_BASE}/director/variants`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -316,6 +331,7 @@ export default function AgentPage() {
           duration,
           minimal,
           n: 3,
+          identity_lock: identityLock,
         }),
       });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -332,6 +348,105 @@ export default function AgentPage() {
     setPhase("planned");
     setAssets([]);
     setVariantCards([]);
+    setErr(null);
+  };
+  /** Parallel run 2–3 variants → side-by-side gallery for pick */
+  const runVariantGallery = async (cards?: typeof variantCards, dryRun = false) => {
+    const src = cards && cards.length ? cards : variantCards;
+    if (!src.length || variantRunning) return;
+    setVariantRunning(true);
+    setErr(null);
+    setPickedVariantId(null);
+    setPhase("running");
+    try {
+      if (!dryRun) {
+        const needed = src.reduce((n, v) => n + (v.plan?.total_credits || 0), 0);
+        try {
+          const cr = await fetch(`${API_BASE}/models/pricing/user`);
+          if (cr.ok) {
+            const cd = await cr.json();
+            setUserCredits(cd.credits);
+            if (cd.credits < needed) {
+              setCreditNeeded(needed);
+              setCreditGateOpen(true);
+              setPayTarget({ kind: "plan", id: "personal", cycle: "monthly" });
+              setErr(`积分不足：并行变体约需 ${needed} 积分`);
+              setVariantRunning(false);
+              setPhase("idle");
+              return;
+            }
+          }
+        } catch { /* allow proceed */ }
+      }
+      const r = await fetch(`${API_BASE}/director/variants/run`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brief: brief.trim() || src[0]?.plan?.brief || "",
+          scenario: activeScenario || src[0]?.plan?.scenario || undefined,
+          duration,
+          minimal,
+          n: src.length,
+          identity_lock: identityLock,
+          dry_run: dryRun,
+          variants: src,
+          session_uid: activeUid || undefined,
+        }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setVariantBatchId(d.batch_id);
+      setVariantGallery((d.jobs || []).map((j: any) => ({
+        variant_id: j.variant_id,
+        label: j.label,
+        axes_applied: j.axes_applied || [],
+        job_id: j.job_id,
+        status: "queued",
+        done: false,
+        final: null,
+        plan: src.find((c) => c.variant_id === j.variant_id)?.plan,
+      })));
+      pollStop.current = false;
+      while (!pollStop.current) {
+        await new Promise((res) => setTimeout(res, 2000));
+        if (pollStop.current) break;
+        let st: any;
+        try {
+          st = await (await fetch(`${API_BASE}/director/variants/progress/${d.batch_id}`)).json();
+        } catch { continue; }
+        setVariantGallery((st.variants || []).map((v: any) => ({
+          variant_id: v.variant_id,
+          label: v.label,
+          axes_applied: v.axes_applied || [],
+          job_id: v.job_id,
+          status: v.status,
+          done: v.done,
+          final: v.final || null,
+          error: v.error,
+          plan: src.find((c) => c.variant_id === v.variant_id)?.plan,
+        })));
+        if (st.done) {
+          setPhase("done");
+          setDryRunMode(dryRun);
+          break;
+        }
+      }
+    } catch (e: any) {
+      setErr(`变体并行出片失败 (${e?.message})`);
+      setPhase("idle");
+    } finally {
+      setVariantRunning(false);
+    }
+  };
+  const pickVariantWinner = (v: VariantGalleryItem) => {
+    setPickedVariantId(v.variant_id);
+    if (v.plan) setPlan(v.plan);
+    if (v.final) {
+      setAssets([v.final as Asset]);
+      setPhase("done");
+    } else if (v.plan) {
+      setPhase("planned");
+      setAssets([]);
+    }
     setErr(null);
   };
 
@@ -400,6 +515,7 @@ export default function AgentPage() {
           session_uid: activeUid || undefined,
           minimal,
           scenario: plan.scenario || activeScenario || undefined,
+          identity_lock: identityLock,
         }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -663,6 +779,21 @@ export default function AgentPage() {
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40">
                   {composerBusy === "variants" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />} 创意变体
                 </button>
+                <div className="flex flex-wrap items-center gap-1.5" data-testid="agent-identity-lock">
+                  <span className="text-[11px] text-text-tertiary">身份锁</span>
+                  {([
+                    { id: "off" as const, label: "关闭" },
+                    { id: "hero" as const, label: "Hero" },
+                    { id: "edit" as const, label: "Edit" },
+                  ]).map((opt) => (
+                    <button key={opt.id} type="button" onClick={() => setIdentityLock(opt.id)}
+                      title={opt.id === "edit" ? "分镜>1 先 edit 再 i2v（最强）" : opt.id === "hero" ? "仅复用主视觉" : "不锁定身份"}
+                      className={cn("px-2 py-1 rounded-lg text-[11px] font-medium border transition-all",
+                        identityLock === opt.id ? "bg-brand/10 text-brand border-brand/30" : "border-cosmic-border text-text-secondary hover:text-text-primary")}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button onClick={() => makePlan()} disabled={!brief.trim() || phase === "planning"}
                 data-testid="agent-plan-btn"
@@ -722,12 +853,27 @@ export default function AgentPage() {
             </div>
           )}
 
-          {/* Creative variants — fan-out plans ready to execute */}
-          {variantCards.length > 0 && (phase === "idle" || phase === "planned") && (
+          {/* Creative variants — fan-out plans + parallel gallery */}
+          {variantCards.length > 0 && (phase === "idle" || phase === "planned") && !variantRunning && (
             <div className="mt-3" data-testid="agent-variant-cards">
-              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">
-                创意变体 · 钩子 / CTA / seed · 点击采用计划
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
+                  创意变体 · 钩子 / CTA / seed
+                </p>
+                <div className="flex gap-2">
+                  <button type="button" disabled={variantRunning}
+                    onClick={() => runVariantGallery(variantCards, true)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] border border-cosmic-border text-text-secondary hover:text-brand">
+                    预览并行出片
+                  </button>
+                  <button type="button" disabled={variantRunning}
+                    data-testid="agent-variants-run-btn"
+                    onClick={() => runVariantGallery(variantCards, false)}
+                    className="px-2.5 py-1 rounded-lg text-[11px] bg-brand text-white hover:bg-brand-strong">
+                    真实并行出片 · 画廊选优
+                  </button>
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {variantCards.map((v) => (
                   <button
@@ -745,6 +891,53 @@ export default function AgentPage() {
                     </span>
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Side-by-side variant gallery for pick-the-winner */}
+          {(variantGallery.length > 0 || variantRunning) && (
+            <div className="mt-5" data-testid="agent-variant-gallery">
+              <div className="flex items-center gap-2 mb-3">
+                {variantRunning ? <Loader2 className="w-4 h-4 text-brand animate-spin" /> : <Layers className="w-4 h-4 text-brand" />}
+                <h3 className="text-sm font-semibold">变体画廊 · 并排选优</h3>
+                {variantBatchId && <span className="text-[10px] text-text-tertiary">batch {variantBatchId.slice(0, 8)}</span>}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {variantGallery.map((v) => {
+                  const media = resolveMedia(v.final?.media_url || v.final?.url);
+                  const selected = pickedVariantId === v.variant_id;
+                  return (
+                    <div key={v.variant_id}
+                      className={cn(
+                        "rounded-xl border overflow-hidden bg-cosmic-surface/40 transition-all",
+                        selected ? "border-brand ring-1 ring-brand/40" : "border-cosmic-border/50",
+                      )}>
+                      <div className="aspect-video bg-black/40 flex items-center justify-center relative">
+                        {media ? (
+                          <video src={media} controls className="w-full h-full object-contain bg-black" />
+                        ) : (
+                          <span className="text-xs text-text-tertiary px-3 text-center">
+                            {v.done ? (v.error || "无成片") : (v.status || "排队中…")}
+                          </span>
+                        )}
+                        {!v.done && <Loader2 className="absolute top-2 right-2 w-4 h-4 text-white animate-spin" />}
+                      </div>
+                      <div className="p-3 space-y-2">
+                        <p className="text-xs font-semibold text-text-primary">{v.label || `变体 ${v.variant_id}`}</p>
+                        <p className="text-[11px] text-text-secondary line-clamp-2">{(v.axes_applied || []).join(" · ")}</p>
+                        <button type="button" disabled={!v.final && !v.plan}
+                          onClick={() => pickVariantWinner(v)}
+                          className={cn(
+                            "w-full py-1.5 rounded-lg text-xs font-medium transition-colors",
+                            selected ? "bg-brand text-white" : "border border-brand/40 text-brand hover:bg-brand/10",
+                          )}>
+                          {selected ? "已采用" : "采用此变体"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -988,10 +1181,24 @@ export default function AgentPage() {
           {/* Assets */}
           {assets.length > 0 && (() => {
             const finalAsset = assets.find((a) => a.final);
-            const shotAssets = assets.filter((a) => !a.final);
+            const stripAsset = assets.find((a) => a.type === "identity_strip")
+              || (finalAsset?.identity_strip ? { media_url: finalAsset.identity_strip, type: "identity_strip" } as Asset : null);
+            const shotAssets = assets.filter((a) => !a.final && a.type !== "identity_strip");
             const fMedia = resolveMedia(finalAsset?.media_url || finalAsset?.url);
+            const stripMedia = resolveMedia(stripAsset?.media_url || stripAsset?.url);
             return (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6">
+              {/* Identity comparison strip — human QA */}
+              {stripMedia && (
+                <div className="mb-4 rounded-2xl overflow-hidden border border-cosmic-border/50 bg-cosmic-surface/30" data-testid="agent-identity-strip">
+                  <div className="px-4 py-2.5 border-b border-cosmic-border/40 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-brand" />
+                    <span className="text-sm font-semibold">身份对比条 · 人眼验收</span>
+                    <span className="text-[11px] text-text-tertiary">Hero · Shot 帧并排（锁：{identityLock}）</span>
+                  </div>
+                  <img src={stripMedia} alt="identity strip" className="w-full max-h-56 object-contain bg-black" />
+                </div>
+              )}
               {/* Final film — hero deliverable */}
               {finalAsset && fMedia && (
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}

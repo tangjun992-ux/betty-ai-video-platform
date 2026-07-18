@@ -560,13 +560,14 @@ def _trim_video(src: Path, start: float, end: float, dest: Path) -> None:
 
 
 # CapCut/Creatify-style subtitle presets (ASS force_style). Not licensed fonts.
+# Target pack: 8–12 templates for feed / talking / ad / drama / impact variants.
 SUBTITLE_STYLES: dict[str, str] = {
-    # Default / feed: high-contrast bottom caption
+    # Default / feed: high-contrast bottom caption box
     "feed": (
         "FontSize=26,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,"
         "BorderStyle=3,Outline=3,Alignment=2,MarginV=48,Bold=1"
     ),
-    # Talking avatar: larger, slightly higher for face clearance
+    # Talking avatar: larger, higher for face clearance
     "talking": (
         "FontSize=28,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,"
         "BorderStyle=3,Outline=3,Alignment=2,MarginV=120,Bold=1"
@@ -576,10 +577,50 @@ SUBTITLE_STYLES: dict[str, str] = {
         "FontSize=24,PrimaryColour=&H00F0F0F0&,OutlineColour=&H00101010&,"
         "BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV=56"
     ),
-    # Drama: cinematic softer caption
+    # Drama: cinematic warmer caption
     "drama": (
         "FontSize=24,PrimaryColour=&H00FFF8E7&,OutlineColour=&H00202020&,"
         "BorderStyle=1,Outline=2,Alignment=2,MarginV=64"
+    ),
+    # Bold impact — large bottom type for hooks
+    "bold": (
+        "FontSize=34,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,"
+        "BorderStyle=3,Outline=4,Alignment=2,MarginV=40,Bold=1"
+    ),
+    # Neon — cyan outline for social feeds
+    "neon": (
+        "FontSize=26,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00FFCC00&,"
+        "BorderStyle=1,Outline=3,Shadow=0,Alignment=2,MarginV=52,Bold=1"
+    ),
+    # Minimal — thin white, low distraction
+    "minimal": (
+        "FontSize=20,PrimaryColour=&H00F5F5F5&,OutlineColour=&H00303030&,"
+        "BorderStyle=1,Outline=1,Shadow=0,Alignment=2,MarginV=44"
+    ),
+    # Karaoke / center punchline
+    "karaoke": (
+        "FontSize=32,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,"
+        "BorderStyle=3,Outline=4,Alignment=5,MarginV=0,Bold=1"
+    ),
+    # Top banner — news / ticker style
+    "top_banner": (
+        "FontSize=22,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00000000&,"
+        "BorderStyle=3,Outline=3,Alignment=8,MarginV=36,Bold=1"
+    ),
+    # Soft shadow — lifestyle / beauty
+    "soft_shadow": (
+        "FontSize=24,PrimaryColour=&H00FFFAF0&,OutlineColour=&H00404040&,"
+        "BorderStyle=1,Outline=1,Shadow=2,Alignment=2,MarginV=60"
+    ),
+    # Impact — high-contrast ad CTA captions
+    "impact": (
+        "FontSize=30,PrimaryColour=&H0000D4FF&,OutlineColour=&H00000000&,"
+        "BorderStyle=3,Outline=4,Alignment=2,MarginV=48,Bold=1"
+    ),
+    # Caption box — classic YouTube-style lower third
+    "caption_box": (
+        "FontSize=23,PrimaryColour=&H00FFFFFF&,OutlineColour=&H00181818&,"
+        "BorderStyle=3,Outline=2,Alignment=2,MarginV=72"
     ),
 }
 
@@ -639,31 +680,87 @@ BGM_PRESETS: dict[str, dict] = {
 
 
 def _fixtures_music_dir() -> Path:
-    # backend/fixtures/music — optional pre-rendered beds / env-overridable URLs later
+    # backend/fixtures/music — optional pre-rendered beds
     return Path(__file__).resolve().parents[2] / "fixtures" / "music"
 
 
-def _render_bgm_wav(duration: float, dest: Path, *, preset: str = "soft") -> Path:
-    """Multi-tone procedural bed (upbeat/cinematic/soft/drama). Not licensed music.
+def _bgm_url_for_preset(preset: str) -> str:
+    """Resolve hosted/licensed BGM URL for a preset from env settings."""
+    try:
+        from app.config import settings
+        raw = (getattr(settings, "BGM_URLS_JSON", None) or "").strip()
+        if raw:
+            import json as _json
+            m = _json.loads(raw)
+            if isinstance(m, dict) and m.get(preset):
+                return str(m[preset]).strip()
+        key = f"BGM_URL_{preset.upper()}"
+        return (getattr(settings, key, None) or "").strip()
+    except Exception:
+        return ""
 
-    If ``fixtures/music/{preset}.wav`` exists, loop/trim that file instead (allows
-    shipping better beds without code changes).
+
+def _cache_bgm_url(url: str, preset: str) -> Path | None:
+    """Download (or reuse) a remote BGM into fixtures cache. Returns local path."""
+    if not url or not (url.startswith("http://") or url.startswith("https://")):
+        return None
+    cache_dir = _fixtures_music_dir() / "_url_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    # Stable cache key from URL
+    import hashlib as _hashlib
+    digest = _hashlib.sha1(url.encode()).hexdigest()[:16]
+    ext = ".mp3" if ".mp3" in url.lower() else ".wav"
+    dest = cache_dir / f"{preset}_{digest}{ext}"
+    if dest.is_file() and dest.stat().st_size > 1000:
+        return dest
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, headers={"User-Agent": "BettyDirector/1.0"})
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            data = resp.read()
+        if len(data) < 1000:
+            return None
+        dest.write_bytes(data)
+        return dest
+    except Exception as e:
+        logger.warning("[demo] BGM URL fetch failed preset=%s: %s", preset, e)
+        return None
+
+
+def _loop_audio_to_wav(src: Path, dest: Path, *, duration: float, volume: float) -> Path:
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-stream_loop", "-1", "-i", str(src),
+            "-t", f"{duration:.2f}", "-ac", "2",
+            "-af", f"volume={volume:.3f}",
+            str(dest),
+        ],
+        check=True, capture_output=True, timeout=60,
+    )
+    return dest
+
+
+def _render_bgm_wav(duration: float, dest: Path, *, preset: str = "soft") -> Path:
+    """Build a BGM bed: env URL → fixtures/music → procedural sine.
+
+    Hosted URLs (``BGM_URL_*`` / ``BGM_URLS`` JSON) are the licensed-music path;
+    fixtures are engineering beds; sine is last-resort demo.
     """
     dur = max(1.0, min(float(duration), 120.0))
     preset = preset if preset in BGM_PRESETS else "soft"
+    vol = BGM_PRESETS[preset]["vol"] * 4
+
+    url = _bgm_url_for_preset(preset)
+    if url:
+        cached = _cache_bgm_url(url, preset)
+        if cached is not None:
+            return _loop_audio_to_wav(cached, dest, duration=dur, volume=vol)
+
     fixture = _fixtures_music_dir() / f"{preset}.wav"
     if fixture.is_file() and fixture.stat().st_size > 1000:
-        subprocess.run(
-            [
-                "ffmpeg", "-y", "-loglevel", "error",
-                "-stream_loop", "-1", "-i", str(fixture),
-                "-t", f"{dur:.2f}", "-ac", "2",
-                "-af", f"volume={BGM_PRESETS[preset]['vol'] * 4:.3f}",
-                str(dest),
-            ],
-            check=True, capture_output=True, timeout=60,
-        )
-        return dest
+        return _loop_audio_to_wav(fixture, dest, duration=dur, volume=vol)
+
     cfg = BGM_PRESETS[preset]
     subprocess.run(
         [
@@ -682,6 +779,105 @@ def _render_bgm_wav(duration: float, dest: Path, *, preset: str = "soft") -> Pat
         check=True, capture_output=True, timeout=60,
     )
     return dest
+
+
+def _load_still_for_strip(url: str) -> "PILImage.Image | None":
+    """Load an image URL/path, or extract a mid-frame still from a video."""
+    from PIL import Image as PILImage
+    from io import BytesIO
+
+    if not url:
+        return None
+    p = _local_media_path(url)
+    if not p and url.startswith("/") and not url.startswith("/api"):
+        # absolute local path
+        if Path(url).is_file():
+            p = url
+    if p and Path(p).is_file():
+        suf = Path(p).suffix.lower()
+        if suf in (".mp4", ".webm", ".mov", ".mkv"):
+            still = Path(p).with_name(f"{Path(p).stem}_idframe.jpg")
+            try:
+                subprocess.run(
+                    [
+                        "ffmpeg", "-y", "-loglevel", "error",
+                        "-ss", "0.4", "-i", str(p),
+                        "-frames:v", "1", "-q:v", "3", str(still),
+                    ],
+                    check=True, capture_output=True, timeout=60,
+                )
+                if still.is_file():
+                    return PILImage.open(still).convert("RGB")
+            except Exception:
+                return None
+        try:
+            return PILImage.open(p).convert("RGB")
+        except Exception:
+            return None
+    if url.startswith("http"):
+        try:
+            import urllib.request
+            with urllib.request.urlopen(url, timeout=30) as resp:
+                data = resp.read()
+            # Heuristic: try as image first
+            try:
+                return PILImage.open(BytesIO(data)).convert("RGB")
+            except Exception:
+                tmp = _generated_dir() / f"idfetch_{uuid.uuid4().hex[:8]}.bin"
+                tmp.write_bytes(data)
+                return _load_still_for_strip(str(tmp))
+        except Exception:
+            return None
+    return None
+
+
+def build_identity_strip(
+    image_urls: list[str],
+    *,
+    labels: list[str] | None = None,
+    tile_h: int = 320,
+) -> tuple[str, str]:
+    """Horizontal identity comparison strip (hero | shot2 | …) for human QA.
+
+    Returns ``(media_url, poster_url)`` — same URL twice (static image).
+    """
+    from PIL import Image as PILImage, ImageDraw, ImageFont
+
+    tiles: list[PILImage.Image] = []
+    labs = labels or []
+    for i, u in enumerate(image_urls[:6]):
+        im = _load_still_for_strip(u)
+        if im is None:
+            continue
+        ratio = tile_h / max(im.height, 1)
+        tw = max(80, int(im.width * ratio))
+        im = im.resize((tw, tile_h), PILImage.Resampling.LANCZOS)
+        # Label bar
+        bar_h = 28
+        canvas = PILImage.new("RGB", (tw, tile_h + bar_h), (18, 20, 28))
+        canvas.paste(im, (0, bar_h))
+        draw = ImageDraw.Draw(canvas)
+        lab = labs[i] if i < len(labs) else (f"Shot {i}" if i else "Hero")
+        try:
+            font = ImageFont.truetype(_FONT_BOLD, 14)
+        except Exception:
+            font = ImageFont.load_default()
+        draw.text((8, 6), lab[:18], fill=(240, 240, 245), font=font)
+        tiles.append(canvas)
+    if not tiles:
+        raise RuntimeError("identity strip: no frames")
+    gap = 6
+    total_w = sum(t.width for t in tiles) + gap * (len(tiles) - 1)
+    strip = PILImage.new("RGB", (total_w, tiles[0].height), (12, 14, 20))
+    x = 0
+    for t in tiles:
+        strip.paste(t, (x, 0))
+        x += t.width + gap
+    gen_dir = _generated_dir()
+    out = gen_dir / f"identity_strip_{uuid.uuid4().hex[:12]}.jpg"
+    strip.save(out, quality=88, optimize=True)
+    url = f"{MEDIA_URL_PREFIX}/{GENERATED_SUBDIR}/{out.name}"
+    return url, url
 
 
 def _append_cta_card(video_path: Path, cta_text: str, *, seconds: float = 2.4) -> Path:
@@ -772,7 +968,8 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
                         subtitle_style: Optional[str] = None,
                         cta_text: Optional[str] = None,
                         cta_seconds: float = 2.4,
-                        preserve_clip_audio: bool = False) -> tuple[str, str]:
+                        preserve_clip_audio: bool = False,
+                        voice_duck: bool | None = None) -> tuple[str, str]:
     """
     Stitch multiple shot videos into ONE final film (the Director Agent's hero
     deliverable). Scales/pads every shot to the export canvas, concatenates with
@@ -782,6 +979,7 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
     ``preserve_clip_audio=True`` keeps speech already baked into clips (口播 lipsync)
     instead of replacing with narration/BGM beds.
     ``subtitle_style`` / ``bgm_preset`` select packaging presets (feed/talking/ad/…).
+    ``voice_duck`` enables sidechain ducking when narration + BGM are both present.
     """
     paths = [p for p in (_local_media_path(u) for u in video_urls) if p]
     if not paths:
@@ -936,11 +1134,28 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
         filter_complex = ";".join(filters) + f";{concat_in}concat=n={n_vid}:v=1:a=0[outv]"
         if with_audio:
             if use_narr and use_bgm:
-                filter_complex += (
-                    f";[{n_vid}:a]volume=1.0[narr];"
-                    f"[{n_vid + 1}:a]volume=0.22[bed];"
-                    f"[narr][bed]amix=inputs=2:duration=first:dropout_transition=0[aud]"
-                )
+                # Creatify-style voice priority: sidechain duck BGM under narration
+                do_duck = voice_duck
+                if do_duck is None:
+                    try:
+                        from app.config import settings as _settings
+                        do_duck = bool(getattr(_settings, "BGM_VOICE_DUCK", True))
+                    except Exception:
+                        do_duck = True
+                if do_duck:
+                    # asplit voice: one branch drives sidechain, one mixes dry
+                    filter_complex += (
+                        f";[{n_vid}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0,asplit=2[vox][sc];"
+                        f"[{n_vid + 1}:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.38[bed];"
+                        f"[bed][sc]sidechaincompress=threshold=0.04:ratio=8:attack=25:release=280:makeup=1[ducked];"
+                        f"[vox][ducked]amix=inputs=2:duration=first:dropout_transition=2[aud]"
+                    )
+                else:
+                    filter_complex += (
+                        f";[{n_vid}:a]volume=1.0[narr];"
+                        f"[{n_vid + 1}:a]volume=0.22[bed];"
+                        f"[narr][bed]amix=inputs=2:duration=first:dropout_transition=0[aud]"
+                    )
             elif use_narr:
                 filter_complex += f";[{n_vid}:a]volume=1.0[aud]"
             elif use_bgm:
