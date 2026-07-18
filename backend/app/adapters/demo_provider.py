@@ -559,8 +559,38 @@ def _trim_video(src: Path, start: float, end: float, dest: Path) -> None:
     )
 
 
-def _burn_subtitles(video_path: Path, subtitle_track: list[dict]) -> Path:
-    """Burn SRT subtitles into the composed video (bottom-center)."""
+# CapCut/Creatify-style subtitle presets (ASS force_style). Not licensed fonts.
+SUBTITLE_STYLES: dict[str, str] = {
+    # Default / feed: high-contrast bottom caption
+    "feed": (
+        "FontSize=26,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,"
+        "BorderStyle=3,Outline=3,Alignment=2,MarginV=48,Bold=1"
+    ),
+    # Talking avatar: larger, slightly higher for face clearance
+    "talking": (
+        "FontSize=28,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,"
+        "BorderStyle=3,Outline=3,Alignment=2,MarginV=120,Bold=1"
+    ),
+    # Product ad: clean commercial caption
+    "ad": (
+        "FontSize=24,PrimaryColour=&H00F0F0F0&,OutlineColour=&H00101010&,"
+        "BorderStyle=1,Outline=2,Shadow=1,Alignment=2,MarginV=56"
+    ),
+    # Drama: cinematic softer caption
+    "drama": (
+        "FontSize=24,PrimaryColour=&H00FFF8E7&,OutlineColour=&H00202020&,"
+        "BorderStyle=1,Outline=2,Alignment=2,MarginV=64"
+    ),
+}
+
+
+def _burn_subtitles(
+    video_path: Path,
+    subtitle_track: list[dict],
+    *,
+    style: str | None = None,
+) -> Path:
+    """Burn SRT subtitles; ``style`` selects a SUBTITLE_STYLES preset."""
     if not subtitle_track:
         return video_path
     srt_path = video_path.with_suffix(".srt")
@@ -569,11 +599,8 @@ def _burn_subtitles(video_path: Path, subtitle_track: list[dict]) -> Path:
         return video_path
     out_path = video_path.with_name(f"{video_path.stem}_sub.mp4")
     srt_esc = str(srt_path).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
-    vf = (
-        f"subtitles=filename='{srt_esc}':"
-        "force_style='FontSize=22,PrimaryColour=&HFFFFFF&,"
-        "OutlineColour=&H000000&,BorderStyle=3,Outline=2,Alignment=2,MarginV=36'"
-    )
+    force = SUBTITLE_STYLES.get(style or "", SUBTITLE_STYLES["feed"])
+    vf = f"subtitles=filename='{srt_esc}':force_style='{force}'"
     subprocess.run(
         ["ffmpeg", "-y", "-loglevel", "error", "-i", str(video_path),
          "-vf", vf, "-c:a", "copy", str(out_path)],
@@ -602,18 +629,31 @@ def _escape_drawtext(text: str) -> str:
     return t[:36]
 
 
-def _render_bgm_wav(duration: float, dest: Path) -> Path:
-    """Soft dual-tone bed for finish packaging (not a licensed music library)."""
+# Scenario → procedural BGM character (still not a licensed Creatify library)
+BGM_PRESETS: dict[str, dict] = {
+    "soft": {"f1": 196.0, "f2": 293.66, "f3": 392.0, "lp": 1600, "vol": 0.12},
+    "upbeat": {"f1": 261.63, "f2": 329.63, "f3": 392.0, "lp": 2400, "vol": 0.16},
+    "cinematic": {"f1": 110.0, "f2": 164.81, "f3": 220.0, "lp": 1200, "vol": 0.14},
+    "drama": {"f1": 98.0, "f2": 146.83, "f3": 196.0, "lp": 1400, "vol": 0.13},
+}
+
+
+def _render_bgm_wav(duration: float, dest: Path, *, preset: str = "soft") -> Path:
+    """Multi-tone procedural bed (upbeat/cinematic/soft/drama). Not licensed music."""
     dur = max(1.0, min(float(duration), 120.0))
+    cfg = BGM_PRESETS.get(preset) or BGM_PRESETS["soft"]
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error",
             "-f", "lavfi", "-t", f"{dur:.2f}",
-            "-i", "sine=frequency=196:sample_rate=44100",
+            "-i", f"sine=frequency={cfg['f1']}:sample_rate=44100",
             "-f", "lavfi", "-t", f"{dur:.2f}",
-            "-i", "sine=frequency=293.66:sample_rate=44100",
+            "-i", f"sine=frequency={cfg['f2']}:sample_rate=44100",
+            "-f", "lavfi", "-t", f"{dur:.2f}",
+            "-i", f"sine=frequency={cfg['f3']}:sample_rate=44100",
             "-filter_complex",
-            "[0:a][1:a]amix=inputs=2:duration=longest,lowpass=f=1800,volume=0.14[a]",
+            f"[0:a][1:a][2:a]amix=inputs=3:duration=longest,"
+            f"lowpass=f={cfg['lp']},volume={cfg['vol']}[a]",
             "-map", "[a]", "-ac", "2", str(dest),
         ],
         check=True, capture_output=True, timeout=60,
@@ -705,6 +745,8 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
                         clip_trims: Optional[list[dict]] = None,
                         export_preset: Optional[str] = None,
                         bgm: bool = False,
+                        bgm_preset: Optional[str] = None,
+                        subtitle_style: Optional[str] = None,
                         cta_text: Optional[str] = None,
                         cta_seconds: float = 2.4,
                         preserve_clip_audio: bool = False) -> tuple[str, str]:
@@ -716,6 +758,7 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
 
     ``preserve_clip_audio=True`` keeps speech already baked into clips (口播 lipsync)
     instead of replacing with narration/BGM beds.
+    ``subtitle_style`` / ``bgm_preset`` select packaging presets (feed/talking/ad/…).
     """
     paths = [p for p in (_local_media_path(u) for u in video_urls) if p]
     if not paths:
@@ -830,7 +873,11 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
         bgm_path: Optional[Path] = None
         if with_audio and bgm and total_dur > 0:
             try:
-                bgm_path = _render_bgm_wav(total_dur, gen_dir / f"bgm_{uuid.uuid4().hex[:8]}.wav")
+                bgm_path = _render_bgm_wav(
+                    total_dur,
+                    gen_dir / f"bgm_{uuid.uuid4().hex[:8]}.wav",
+                    preset=(bgm_preset or "soft"),
+                )
             except Exception as e:
                 logger.warning("[demo] bgm render failed: %s", e)
                 bgm_path = None
@@ -894,7 +941,9 @@ def compose_final_video(video_urls: list[str], style: Optional[str] = None,
 
     if subtitle_track:
         try:
-            burned = _burn_subtitles(out_path, subtitle_track)
+            burned = _burn_subtitles(
+                out_path, subtitle_track, style=subtitle_style or style or "feed",
+            )
             if burned != out_path and burned.exists():
                 out_path = burned
                 out_name = out_path.name

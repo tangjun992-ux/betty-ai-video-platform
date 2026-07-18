@@ -247,6 +247,36 @@ async def ideate(req: IdeateRequest):
     return {"concepts": concepts, "brain": req.brain}
 
 
+class VariantsRequest(BaseModel):
+    brief: str = Field(..., min_length=1)
+    scenario: Optional[str] = Field(default=None)
+    duration: int = Field(default=15, ge=5, le=60)
+    minimal: bool = Field(default=True)
+    n: int = Field(default=3, ge=1, le=5, description="变体数量 1–5")
+    axes: Optional[list[str]] = Field(
+        default=None,
+        description="变体轴：hook|cta|seed（默认三者全开）",
+    )
+
+
+@router.post("/variants", summary="批量创意变体：钩子/CTA/seed 扇出多计划")
+async def plan_variants(req: VariantsRequest):
+    """Advantage+/Creatify-style plan fan-out — returns N editable plans (not executed).
+
+    Client can then POST each ``plan`` to ``/director/run/async`` for parallel outings.
+    """
+    _moderate_brief(req.brief)
+    variants = DirectorPlanner().plan_variants(
+        req.brief.strip(),
+        scenario=(req.scenario or "").strip(),
+        duration=req.duration,
+        minimal=bool(req.minimal),
+        n=req.n,
+        axes=req.axes,
+    )
+    return {"count": len(variants), "variants": variants, "scenario": req.scenario}
+
+
 @router.post("/refine", summary="对话式导演：用自然语言迭代计划")
 async def refine(req: RefineRequest):
     """LLM refine when a key is available; falls back to the rule engine."""

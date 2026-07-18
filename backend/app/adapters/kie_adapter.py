@@ -210,11 +210,13 @@ def _is_video_kie_model(kie_model_id: str) -> bool:
 # Handles both MediaSize enum values and raw size strings
 _SIZE_TO_RATIO = {
     "256x256": "1:1",
-    "512x512": "1:1", 
+    "512x512": "1:1",
     "1024x1024": "1:1",
     "1080x1080": "1:1",
     "1920x1080": "16:9",
+    "1280x720": "16:9",   # Director _RATIO_TO_SIZE["16:9"] — must not fall through to 1:1
     "1080x1920": "9:16",
+    "720x1280": "9:16",   # Director _RATIO_TO_SIZE["9:16"] — root cause of UGC square i2v
     "1024x768": "4:3",
     "3840x2160": "16:9",
     "768x1024": "3:4",
@@ -312,9 +314,13 @@ class KieAdapter(BaseModelAdapter):
             "prompt": prompt,
         }
 
-        # Aspect ratio — model families disagree on the key name, so send the
-        # verified-compatible superset (camel + snake). KIE ignores unknown keys.
-        ratio = _size_to_ratio(size)
+        # Aspect ratio — prefer explicit kwargs (Director channel lock), else size map.
+        # Model families disagree on the key name, so send camel + snake.
+        ratio = (
+            kwargs.get("aspect_ratio")
+            or kwargs.get("aspectRatio")
+            or _size_to_ratio(size)
+        )
         payload["aspectRatio"] = ratio
         payload["aspect_ratio"] = ratio
 

@@ -349,6 +349,8 @@ class DirectorPlanner:
                     params={
                         "aspect_ratio": aspect, "duration": 5, "shot": i + 1,
                         "identity_from": identity,
+                        # Shot>1: edit hero into camera variant before i2v (stronger ID lock)
+                        "identity_variant": i > 0,
                     },
                 )
                 steps.append(sv)
@@ -370,22 +372,31 @@ class DirectorPlanner:
             s_img = DirectorStep(id=sid(), action="image", title="生成数字人形象",
                 model_id=img["id"], model_name=img["display_name"],
                 reason=f"口播需要高保真人像，选 {img['display_name']}（人像/写实强）",
-                prompt=(f"{brief}｜digital human talking-head portrait, front-facing, "
-                        "chest-up, professional softbox, clean backdrop, natural skin, mouth slightly closed, "
-                        "vertical 9:16, identity locked"),
+                # Tight face crop improves Kling/InfiniTalk mouth tracking vs chest-up
+                prompt=(f"{brief}｜digital human talking-head, FRONT-FACING CLOSE-UP, "
+                        "head-and-shoulders only, eyes to camera, soft beauty-dish key, "
+                        "clean seamless backdrop, natural skin texture, mouth slightly closed, "
+                        "lips clearly visible, vertical 9:16, identity locked, NOT full body"),
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
                 params={"aspect_ratio": "9:16"})
             s_talk = DirectorStep(id=sid(), action="lipsync", title="唇形同步驱动 (数字人开口)",
                 model_id="kling-avatar", model_name="Kling AI Avatar",
-                reason="用旁白音频精准驱动人像口型，生成自然开口说话的数字人",
-                prompt=("close-up talking head, mouth shapes precisely match the speech audio, "
-                        "natural jaw and lip motion, clear articulation, keep facial identity, "
-                        "subtle head motion, no dubbing mismatch"),
+                reason="用旁白音频精准驱动人像口型；Studio 可选 InfiniTalk 更高质量路径",
+                prompt=(
+                    "extreme close-up talking head, mouth shapes PRECISELY match speech audio "
+                    "phoneme by phoneme, natural jaw and lip motion, clear articulation, "
+                    "subtle blinks and micro head motion, keep facial identity, "
+                    "no dubbing mismatch, no warping, no frozen face"
+                ),
                 depends_on=[s_img.id, s_voice.id], est_credits=6,
                 params={
                     "aspect_ratio": "9:16",
                     "identity_from": None,  # filled after ids known
                     "lipsync_model": "kling/ai-avatar-pro",
+                    # InfiniTalk-first measured: internal error + 240s timeout then Kling.
+                    # Default Kling (reliable ~3–5min); set prefer_infinitalk=True for Studio opt-in.
+                    "prefer_infinitalk": False,
+                    "talking_quality": "standard",
                 })
             s_talk.params["identity_from"] = s_img.id
             steps += [s_voice, s_img, s_talk]
@@ -601,6 +612,17 @@ class DirectorPlanner:
         finish_aspect = locked_aspect or ("9:16" if vertical else "16:9")
         finish_preset = _ASPECT_TO_EXPORT.get(finish_aspect)
         cta = scenario_cta_text(scenario, brief) if scenario else "了解更多"
+        # Packaging presets by scenario (Creatify-style finish ladder)
+        _SUB_STYLE = {
+            "talking_avatar": "talking", "ugc": "feed", "product_ad": "ad",
+            "product_commercial": "ad", "micro_drama": "drama", "anime": "drama",
+        }
+        _BGM_PRESET = {
+            "ugc": "upbeat", "product_ad": "upbeat", "product_commercial": "cinematic",
+            "micro_drama": "drama", "anime": "cinematic",
+        }
+        sub_style = _SUB_STYLE.get(scenario or "", "feed")
+        bgm_preset = _BGM_PRESET.get(scenario or "", "soft")
 
         if video_steps and (intent != "talking" or need_pack):
             if intent == "talking":
@@ -611,7 +633,7 @@ class DirectorPlanner:
                     model_id="subtitle-engine", model_name="Auto Caption",
                     reason="口播成片烧录字幕，社媒可直接试投",
                     prompt=brief, depends_on=[talk_ids[-1]], est_credits=1,
-                    params={"script": brief},
+                    params={"script": brief, "subtitle_style": sub_style},
                 )
                 s_comp = DirectorStep(
                     id=sid(), action="compose", title="口播成片包装",
@@ -624,6 +646,7 @@ class DirectorPlanner:
                         "bgm": False,
                         "cta_text": cta,
                         "keep_source_audio": True,
+                        "subtitle_style": sub_style,
                     },
                 )
                 steps += [s_sub, s_comp]
@@ -635,7 +658,9 @@ class DirectorPlanner:
                     "aspect_ratio": finish_aspect,
                     "export_preset": finish_preset,
                     "bgm": True,
+                    "bgm_preset": bgm_preset,
                     "cta_text": cta,
+                    "subtitle_style": sub_style,
                 }
                 if not minimal:
                     voice_id = scenario_default_voice(brief, scenario)
@@ -723,6 +748,81 @@ class DirectorPlanner:
             brief=brief, intent=intent, summary=summary, steps=steps,
             total_credits=total, scenario=scenario or "",
         )
+
+    def plan_variants(
+        self,
+        brief: str,
+        *,
+        scenario: str = "",
+        duration: int = 15,
+        minimal: bool = True,
+        n: int = 3,
+        axes: list[str] | None = None,
+    ) -> list[dict]:
+        """Fan-out Advantage+/Creatify-style creative variants (plans only).
+
+        Axes (default hook+cta+seed):
+          - hook: rewrite opening beat prompt emphasis
+          - cta: alternate end-card copy
+          - seed: distinct shared seed per variant
+        Returns list of {variant_id, label, axes_applied, plan}.
+        """
+        from app.director_scenarios import scenario_cta_text
+
+        n = max(1, min(int(n or 3), 5))
+        axes = axes or ["hook", "cta", "seed"]
+        cta_pool = [
+            scenario_cta_text(scenario, brief),
+            "立即了解 · 限时优惠",
+            "同款安利 · 评论区扣1",
+            "Discover More",
+            "下单立享 · 马上行动",
+        ]
+        hook_tags = [
+            ("痛点钩子", "open with sharp pain-point hook in first 2 seconds"),
+            ("反差钩子", "open with unexpected contrast or irony hook"),
+            ("利益钩子", "open with clear benefit / outcome promise hook"),
+            ("社交钩子", "open with social-proof / FOMO energy hook"),
+            ("场景钩子", "open with vivid lifestyle scene hook"),
+        ]
+        out: list[dict] = []
+        for i in range(n):
+            tag = chr(ord("A") + i)
+            plan = self.plan(
+                brief, duration=duration, minimal=minimal, scenario=scenario,
+            )
+            applied: list[str] = []
+            if "seed" in axes:
+                new_seed = hashlib.sha1(f"{brief}|v{i}|{tag}".encode()).hexdigest()[:12]
+                for s in plan.steps:
+                    if s.action in ("image", "video", "lipsync"):
+                        s.params = {**(s.params or {}), "seed": new_seed, "variant_id": tag}
+                applied.append(f"seed={new_seed}")
+            if "hook" in axes:
+                vids = [s for s in plan.steps if s.action == "video"]
+                if vids:
+                    ht, he = hook_tags[i % len(hook_tags)]
+                    vids[0].prompt = f"{vids[0].prompt}｜{ht}：{he}"
+                    vids[0].title = f"{vids[0].title} · {ht}"
+                    applied.append(ht)
+            if "cta" in axes:
+                cta = cta_pool[i % len(cta_pool)]
+                for s in plan.steps:
+                    if s.action == "compose":
+                        s.params = {**(s.params or {}), "cta_text": cta, "variant_id": tag}
+                applied.append(f"cta={cta}")
+            plan.summary = f"变体 {tag}（{' / '.join(applied)}）。{plan.summary}"
+            out.append({
+                "variant_id": tag,
+                "label": f"变体 {tag}",
+                "axes_applied": applied,
+                "plan": {
+                    "brief": plan.brief, "intent": plan.intent, "summary": plan.summary,
+                    "scenario": plan.scenario, "total_credits": plan.total_credits,
+                    "steps": [s.to_dict() for s in plan.steps],
+                },
+            })
+        return out
 
 
 def _catalog_lookup(directive: str, media_type: str):
@@ -906,8 +1006,10 @@ def plan_from_dict(data: dict) -> DirectorPlan:
 
 
 # ─────────────────────── aspect ratio → 渲染尺寸 ───────────────────────
+# Prefer sizes that KIE `_SIZE_TO_RATIO` maps correctly (1080x1920→9:16, 1920x1080→16:9).
+# Legacy 720x1280 previously fell through to 1:1 and produced square UGC heroes/i2v.
 _RATIO_TO_SIZE = {
-    "16:9": "1280x720", "9:16": "720x1280", "1:1": "1024x1024",
+    "16:9": "1920x1080", "9:16": "1080x1920", "1:1": "1024x1024",
     "3:4": "768x1024", "4:3": "1024x768", "21:9": "1280x548", "3:2": "1080x720",
 }
 
@@ -1118,6 +1220,8 @@ class DirectorExecutor:
                 export_preset = _export_preset_from_params(step.params)
                 want_bgm = bool((step.params or {}).get("bgm"))
                 cta_text = (step.params or {}).get("cta_text") or None
+                bgm_preset = (step.params or {}).get("bgm_preset") or "soft"
+                subtitle_style = (step.params or {}).get("subtitle_style") or "feed"
                 # Talking lipsync already has speech in the clip — preserve it
                 narr_for_mux = None if keep_source_audio else narration_url
                 try:
@@ -1131,6 +1235,8 @@ class DirectorExecutor:
                         subtitle_track=subtitle_track,
                         export_preset=export_preset,
                         bgm=want_bgm and not keep_source_audio,
+                        bgm_preset=bgm_preset,
+                        subtitle_style=subtitle_style,
                         cta_text=cta_text,
                         preserve_clip_audio=keep_source_audio,
                     )
@@ -1222,9 +1328,14 @@ class DirectorExecutor:
                         "subtle head motion, no dubbing mismatch"
                     )
                     ls_model = (step.params or {}).get("lipsync_model") or "kling/ai-avatar-pro"
+                    prefer_infini = bool((step.params or {}).get("prefer_infinitalk"))
+                    if prefer_infini and not (ls_model or "").startswith("infinitalk"):
+                        # Try InfiniTalk@720p first (timeout capped in adapter), then Kling
+                        ls_model = "infinitalk/from-audio"
                     res = await KieAdapter().generate_lipsync(
                         image_url=img_pub, audio_url=aud_pub, prompt=ls_prompt,
                         model_id=ls_model, resolution="720p",
+                        prefer_infinitalk=prefer_infini,
                     )
                     final_url = res.media_url
                     try:
@@ -1279,6 +1390,39 @@ class DirectorExecutor:
                         if isinstance(r, dict) and r.get("type") == "image" and _img_ref(r):
                             base_image_url = _img_ref(r)
                             break
+
+                # Stronger identity: per-shot edit_image from hero (same face/product, new camera)
+                if (
+                    base_image_url
+                    and (step.params or {}).get("identity_variant")
+                    and not self.dry_run
+                ):
+                    try:
+                        from app.adapters.kie_adapter import KieAdapter
+                        from app.adapters.demo_provider import demo_mode_active
+                        if not demo_mode_active():
+                            ar = (step.params or {}).get("aspect_ratio") or "16:9"
+                            edited = await KieAdapter().edit_image(
+                                image_urls=[base_image_url],
+                                prompt=(
+                                    f"{step.prompt}｜SAME subject identity locked, "
+                                    f"new camera angle only, consistent product/face, "
+                                    f"single frame, aspect {ar}"
+                                ),
+                                image_size=ar,
+                            )
+                            new_url = getattr(edited, "media_url", None) or getattr(edited, "url", None)
+                            if new_url:
+                                # Prefer public source if adapter attached one
+                                base_image_url = (
+                                    getattr(edited, "meta", {}) or {}
+                                ).get("source_url") or new_url
+                                logger.info(
+                                    "[director] identity_variant edit ok shot=%s",
+                                    (step.params or {}).get("shot"),
+                                )
+                    except Exception as id_err:
+                        logger.warning("[director] identity_variant skipped: %s", id_err)
 
             # Preview (dry_run) or no-key → render viewable local media (Pillow /
             # ffmpeg) for free. Only an explicit real run (dry_run=False) with a
@@ -1350,9 +1494,12 @@ class DirectorExecutor:
                         omni=bool(sp.get("omni")),
                         generate_audio=bool(sp.get("generate_audio")),
                     )
+                sp_img = step.params or {}
                 generated = await adapter.generate_image(
                     prompt=step.prompt, model_id=model_id,
-                    size=_size_from_params(step.params, "1024x1024"), seed=seed)
+                    size=_size_from_params(step.params, "1024x1024"), seed=seed,
+                    aspect_ratio=sp_img.get("aspect_ratio"),
+                )
                 return generated[0] if isinstance(generated, list) else generated
 
             selected_model = step.model_id
