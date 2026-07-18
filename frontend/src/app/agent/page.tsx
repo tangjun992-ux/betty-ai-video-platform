@@ -271,9 +271,12 @@ export default function AgentPage() {
     makePlan(sc.brief, { duration: sc.duration, scenario: sc.id });
   };
 
-  // ── composer modes (对标 yapper: Help Prompt / Help Ideate) ──
+  // ── composer modes (对标 yapper: Help Prompt / Help Ideate / Variants) ──
   const [concepts, setConcepts] = useState<{ title: string; brief: string }[]>([]);
-  const [composerBusy, setComposerBusy] = useState<"polish" | "ideate" | null>(null);
+  const [variantCards, setVariantCards] = useState<{
+    variant_id: string; label: string; axes_applied: string[]; plan: Plan;
+  }[]>([]);
+  const [composerBusy, setComposerBusy] = useState<"polish" | "ideate" | "variants" | null>(null);
   const polishBrief = async () => {
     if (!brief.trim() || composerBusy) return;
     setComposerBusy("polish");
@@ -289,6 +292,7 @@ export default function AgentPage() {
   const ideate = async () => {
     if (!brief.trim() || composerBusy) return;
     setComposerBusy("ideate");
+    setVariantCards([]);
     try {
       const r = await fetch(`${API_BASE}/director/ideate`, {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -297,6 +301,38 @@ export default function AgentPage() {
       const d = await r.json();
       setConcepts(d.concepts || []);
     } catch {} finally { setComposerBusy(null); }
+  };
+  /** Advantage+/Creatify-style plan fan-out — pick a variant → planned ready to run */
+  const fanoutVariants = async () => {
+    if (!brief.trim() || composerBusy) return;
+    setComposerBusy("variants");
+    setConcepts([]);
+    try {
+      const r = await fetch(`${API_BASE}/director/variants`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brief: brief.trim(),
+          scenario: activeScenario || undefined,
+          duration,
+          minimal,
+          n: 3,
+        }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setVariantCards(d.variants || []);
+    } catch (e: any) {
+      setErr(`创意变体失败 (${e?.message || "network"})`);
+    } finally {
+      setComposerBusy(null);
+    }
+  };
+  const adoptVariant = (v: { variant_id: string; plan: Plan }) => {
+    setPlan(v.plan);
+    setPhase("planned");
+    setAssets([]);
+    setVariantCards([]);
+    setErr(null);
   };
 
   // ── edit a step in place ──
@@ -621,6 +657,12 @@ export default function AgentPage() {
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40">
                   {composerBusy === "ideate" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lightbulb className="w-3.5 h-3.5" />} 帮我构思
                 </button>
+                <button onClick={fanoutVariants} disabled={!brief.trim() || !!composerBusy}
+                  data-testid="agent-variants-btn"
+                  title="按钩子/CTA/seed 扇出多套可执行计划"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40">
+                  {composerBusy === "variants" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />} 创意变体
+                </button>
               </div>
               <button onClick={() => makePlan()} disabled={!brief.trim() || phase === "planning"}
                 data-testid="agent-plan-btn"
@@ -674,6 +716,33 @@ export default function AgentPage() {
                     <Lightbulb className="w-3.5 h-3.5 text-brand flex-shrink-0" />
                     <span className="text-xs font-medium text-text-primary">{c.title}</span>
                     <span className="text-[11px] text-text-secondary truncate hidden sm:inline max-w-[220px]">· {c.brief.slice(c.brief.indexOf("，") + 1)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Creative variants — fan-out plans ready to execute */}
+          {variantCards.length > 0 && (phase === "idle" || phase === "planned") && (
+            <div className="mt-3" data-testid="agent-variant-cards">
+              <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mb-2">
+                创意变体 · 钩子 / CTA / seed · 点击采用计划
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {variantCards.map((v) => (
+                  <button
+                    key={v.variant_id}
+                    type="button"
+                    onClick={() => adoptVariant(v)}
+                    className="group flex flex-col items-start gap-1 px-3 py-2.5 rounded-xl bg-cosmic-surface/50 border border-cosmic-border/50 hover:border-brand/40 transition-all text-left max-w-full"
+                  >
+                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-text-primary">
+                      <Layers className="w-3.5 h-3.5 text-brand flex-shrink-0" />
+                      {v.label || `变体 ${v.variant_id}`}
+                    </span>
+                    <span className="text-[11px] text-text-secondary line-clamp-2">
+                      {(v.axes_applied || []).join(" · ")}
+                    </span>
                   </button>
                 ))}
               </div>

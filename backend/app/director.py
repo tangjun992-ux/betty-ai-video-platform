@@ -1146,8 +1146,10 @@ class DirectorExecutor:
                     # Prefer Edge Neural (stable Chinese); fall back to ElevenLabs.
                     try:
                         edge_voice = voice_id if is_azure_neural_voice(voice_id) else "zh-CN-XiaoxiaoNeural"
+                        # Talking: slower rate → clearer phonemes for lip-sync drive
+                        tts_rate = "-8%" if is_talking else "-5%"
                         wav_bytes, used_voice = await synthesize_speech_edge(
-                            narrate, edge_voice,
+                            narrate, edge_voice, rate=tts_rate,
                         )
                         url = await KieAdapter().upload_public_url(
                             wav_bytes,

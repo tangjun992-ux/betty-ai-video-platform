@@ -105,11 +105,14 @@ def main() -> int:
         scenario="talking_avatar",
     )
     lips = next(s for s in plan.steps if s.action == "lipsync")
+    img_prompt = next(s.prompt for s in plan.steps if s.action == "image")
+    # Live eval proved InfiniTalk-first → 240s timeout; default must be Kling.
     add(
-        "gap1_talking_plan_studio",
-        lips.params.get("prefer_infinitalk") is True
-        and ("CLOSE-UP" in next(s.prompt for s in plan.steps if s.action == "image")),
-        f"prefer_infinitalk={lips.params.get('prefer_infinitalk')}",
+        "gap1_talking_plan_kling_default",
+        lips.params.get("prefer_infinitalk") is False
+        and ("CLOSE-UP" in img_prompt or "close-up" in img_prompt.lower())
+        and lips.params.get("lipsync_model") == "kling/ai-avatar-pro",
+        f"prefer_infinitalk={lips.params.get('prefer_infinitalk')} model={lips.params.get('lipsync_model')}",
     )
 
     # Live talking via director async (real)

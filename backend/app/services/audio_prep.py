@@ -140,13 +140,18 @@ def boost_video_audio(url_or_path: str) -> Optional[str]:
         return None
 
 
-async def synthesize_speech_edge(text: str, voice_id: str) -> tuple[bytes, str]:
-    """Microsoft Edge Neural TTS (real Azure-style ids). Returns (wav_bytes, voice)."""
+async def synthesize_speech_edge(
+    text: str, voice_id: str, *, rate: str = "-5%",
+) -> tuple[bytes, str]:
+    """Microsoft Edge Neural TTS (real Azure-style ids). Returns (wav_bytes, voice).
+
+    ``rate``: Edge TTS rate string. Talking-avatar uses slower speech (-8%) for
+    clearer phonemes / lip-sync drive.
+    """
     import edge_tts
 
     voice = (voice_id or "zh-CN-XiaoxiaoNeural").strip()
-    # Slightly slower → clearer phonemes for lip sync
-    communicate = edge_tts.Communicate(text, voice, rate="-5%")
+    communicate = edge_tts.Communicate(text, voice, rate=rate or "-5%")
     td = Path(tempfile.mkdtemp(prefix="betty_tts_"))
     mp3 = td / "tts.mp3"
     await communicate.save(str(mp3))

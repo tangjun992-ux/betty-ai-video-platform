@@ -66,3 +66,21 @@ def test_plan_variants_fanout():
                 ctas.add((s.get("params") or {}).get("cta_text"))
     assert len(seeds) >= 2
     assert len(ctas) >= 2
+
+
+def test_tts_rate_param_and_bgm_fixture_hook():
+    from inspect import signature
+    from app.services.audio_prep import synthesize_speech_edge
+    from app.adapters.demo_provider import _fixtures_music_dir, _render_bgm_wav
+    import tempfile
+    from pathlib import Path
+
+    assert "rate" in signature(synthesize_speech_edge).parameters
+    music = _fixtures_music_dir()
+    assert music.name == "music"
+    # If fixtures shipped, render path must succeed for upbeat
+    upbeat = music / "upbeat.wav"
+    if upbeat.is_file():
+        dest = Path(tempfile.mkdtemp()) / "bed.wav"
+        out = _render_bgm_wav(3.0, dest, preset="upbeat")
+        assert out.is_file() and out.stat().st_size > 1000

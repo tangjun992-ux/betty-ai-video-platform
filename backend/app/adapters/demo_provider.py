@@ -638,10 +638,33 @@ BGM_PRESETS: dict[str, dict] = {
 }
 
 
+def _fixtures_music_dir() -> Path:
+    # backend/fixtures/music — optional pre-rendered beds / env-overridable URLs later
+    return Path(__file__).resolve().parents[2] / "fixtures" / "music"
+
+
 def _render_bgm_wav(duration: float, dest: Path, *, preset: str = "soft") -> Path:
-    """Multi-tone procedural bed (upbeat/cinematic/soft/drama). Not licensed music."""
+    """Multi-tone procedural bed (upbeat/cinematic/soft/drama). Not licensed music.
+
+    If ``fixtures/music/{preset}.wav`` exists, loop/trim that file instead (allows
+    shipping better beds without code changes).
+    """
     dur = max(1.0, min(float(duration), 120.0))
-    cfg = BGM_PRESETS.get(preset) or BGM_PRESETS["soft"]
+    preset = preset if preset in BGM_PRESETS else "soft"
+    fixture = _fixtures_music_dir() / f"{preset}.wav"
+    if fixture.is_file() and fixture.stat().st_size > 1000:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-stream_loop", "-1", "-i", str(fixture),
+                "-t", f"{dur:.2f}", "-ac", "2",
+                "-af", f"volume={BGM_PRESETS[preset]['vol'] * 4:.3f}",
+                str(dest),
+            ],
+            check=True, capture_output=True, timeout=60,
+        )
+        return dest
+    cfg = BGM_PRESETS[preset]
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error",
