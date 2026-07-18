@@ -103,30 +103,39 @@ def download_asset(url: str, dest: Path) -> Path:
 
 
 def strip_to_n_videos(plan: dict, n: int = 2) -> dict:
-    """Keep first N video steps; rewrite compose/subtitle deps."""
+    """Keep first N video steps; rewrite ALL packaging deps to surviving ids.
+
+    Critical: subtitle/audio often depend on the *last* original video id. If we
+    drop that shot without rewriting deps, run_stream marks subtitle+compose as
+    '依赖未满足，已跳过' and packaging never runs (false-negative gate).
+    """
     steps = list(plan.get("steps") or [])
     vids = [s for s in steps if s.get("action") == "video"]
-    keep_vids = vids[:n]
+    keep_vids = vids[: max(1, n)]
     keep_ids = {s["id"] for s in keep_vids}
-    other = [s for s in steps if s.get("action") != "video"]
-    # Drop video steps beyond N
+    last_vid = keep_vids[-1]["id"]
     new_steps = []
     for s in steps:
         if s.get("action") == "video" and s["id"] not in keep_ids:
             continue
         new_steps.append(s)
-    # Fix compose depends_on → remaining media
-    media_ids = [
-        s["id"] for s in new_steps
-        if s.get("action") in ("image", "video", "lipsync", "subtitle", "audio")
-    ]
+    vid_ids = [s["id"] for s in new_steps if s.get("action") == "video"]
     for s in new_steps:
-        if s.get("action") == "compose":
-            # Prefer video + subtitle deps
-            deps = [x["id"] for x in new_steps if x.get("action") in ("video", "lipsync", "subtitle")]
-            s["depends_on"] = deps or media_ids[-3:]
-    plan = {**plan, "steps": new_steps}
-    return plan
+        act = s.get("action")
+        deps = list(s.get("depends_on") or [])
+        # Drop refs to removed videos
+        deps = [d for d in deps if d in {x["id"] for x in new_steps} or d not in {v["id"] for v in vids}]
+        if act in ("subtitle", "audio"):
+            s["depends_on"] = [last_vid]
+        elif act == "compose":
+            sub_ids = [x["id"] for x in new_steps if x.get("action") == "subtitle"]
+            aud_ids = [x["id"] for x in new_steps if x.get("action") == "audio"]
+            s["depends_on"] = vid_ids + aud_ids + sub_ids
+        else:
+            # Keep only deps that still exist
+            alive = {x["id"] for x in new_steps}
+            s["depends_on"] = [d for d in deps if d in alive]
+    return {**plan, "steps": new_steps}
 
 
 def celery_log_blob() -> str:
@@ -299,7 +308,7 @@ def gap1_live_talking(c: httpx.Client, h: dict):
 
 
 def gap4_live_identity(c: httpx.Client, h: dict):
-    """2-shot UGC real run; require celery log 'identity_variant edit ok'."""
+    """2-shot UGC real run; require celery log 'identity_variant edit ok' + packaged final."""
     brief = "UGC种草：年轻女生竖屏自拍安利防晒霜，自然手持"
     marker = f"OPTGATE_ID_{uuid.uuid4().hex[:8]}"
     plan_r = c.post(
@@ -315,12 +324,12 @@ def gap4_live_identity(c: httpx.Client, h: dict):
     vids = [s for s in plan["steps"] if s.get("action") == "video"]
     assert len(vids) == 2
     assert vids[1]["params"].get("identity_variant") is True
+    has_compose = any(s.get("action") == "compose" for s in plan["steps"])
     add(
         "gap4_plan_identity_variant_flag",
         True,
-        f"shots={len(vids)} shot2_variant={vids[1]['params'].get('identity_variant')}",
+        f"shots={len(vids)} shot2_variant={vids[1]['params'].get('identity_variant')} compose={has_compose}",
     )
-    t_before = time.time()
     run = c.post(
         "/director/run/async", headers=h,
         json={
@@ -340,10 +349,13 @@ def gap4_live_identity(c: httpx.Client, h: dict):
         meta = ffprobe_json(path)
         w = next(s["width"] for s in meta["streams"] if s["codec_type"] == "video")
         hgt = next(s["height"] for s in meta["streams"] if s["codec_type"] == "video")
+        has_a = any(s.get("codec_type") == "audio" for s in meta["streams"])
+        # Require packaged final with BGM audio (proves compose ran after identity edit)
+        ok = hgt > w and path.stat().st_size > 50_000 and bool(finals) and has_a
         add(
             "gap4_live_multishot_final",
-            hgt > w and path.stat().st_size > 50_000,
-            f"{w}x{hgt} videos={len(videos)} final={bool(finals)} status={last.get('status')}",
+            ok,
+            f"{w}x{hgt} videos={len(videos)} final={bool(finals)} audio={has_a} status={last.get('status')}",
             path=str(path),
         )
     else:
@@ -353,7 +365,6 @@ def gap4_live_identity(c: httpx.Client, h: dict):
     time.sleep(2)
     blob = celery_log_blob()
     hit = "identity_variant edit ok" in blob
-    # Also accept skip with warning if edit failed — but mark FAIL for capability claim
     skipped = "identity_variant skipped" in blob
     add(
         "gap4_identity_variant_edit_logged",
@@ -404,11 +415,12 @@ def gap5_variants_and_execute(c: httpx.Client, h: dict):
     has_v = any(s.get("codec_type") == "video" for s in meta["streams"])
     has_a = any(s.get("codec_type") == "audio" for s in meta["streams"])
     dur = float(meta["format"]["duration"])
-    ok = has_v and path.stat().st_size > 50_000 and dur > 2
+    # Packaged variant outing must include BGM audio (compose after strip fix)
+    ok = has_v and has_a and bool(pick.get("final")) and path.stat().st_size > 50_000 and dur > 2
     add(
         "gap5_variant_executed",
         ok,
-        f"variant={v0.get('variant_id')} {dur:.1f}s audio={has_a} bytes={path.stat().st_size}",
+        f"variant={v0.get('variant_id')} {dur:.1f}s audio={has_a} final={bool(pick.get('final'))} bytes={path.stat().st_size}",
         path=str(path),
         axes=v0.get("axes_applied"),
     )
@@ -479,41 +491,66 @@ def write_capability_matrix():
     }
 
 
-def main() -> int:
+def main(only: set[str] | None = None) -> int:
     print("=== OPTIMIZE GATE VERIFY ===", flush=True)
+    only = only or set()
     mode = httpx.get(f"{BASE}/director/mode", timeout=10).json()
     if not mode.get("real_available"):
         print("ABORT: real generation not available", mode, flush=True)
         return 2
 
+    run_all = not only
+    c = h = None
+
     # Offline / local first
-    gap1_plan_and_tts_rate()
-    gap3_bgm_and_subtitles()
+    if run_all or "gap1" in only:
+        gap1_plan_and_tts_rate()
+    if run_all or "gap3" in only:
+        gap3_bgm_and_subtitles()
 
     # Live KIE
-    try:
-        asyncio.run(gap2_native_vertical())
-    except Exception as e:
-        add("gap2_native_9_16_image", False, f"error: {e}")
-        add("gap2_native_9_16_i2v", False, f"error: {e}")
+    if run_all or "gap2" in only:
+        try:
+            asyncio.run(gap2_native_vertical())
+        except Exception as e:
+            add("gap2_native_9_16_image", False, f"error: {e}")
+            add("gap2_native_9_16_i2v", False, f"error: {e}")
 
-    c, h = register_client()
-    try:
-        gap1_live_talking(c, h)
-    except Exception as e:
-        add("gap1_live_talking", False, f"error: {e}")
-    try:
-        gap4_live_identity(c, h)
-    except Exception as e:
-        add("gap4_live_multishot_final", False, f"error: {e}")
-        add("gap4_identity_variant_edit_logged", False, f"error: {e}")
-    try:
-        gap5_variants_and_execute(c, h)
-    except Exception as e:
-        add("gap5_variant_executed", False, f"error: {e}")
+    need_client = run_all or bool(only & {"gap1", "gap4", "gap5"})
+    if need_client:
+        c, h = register_client()
+    if run_all or "gap1" in only:
+        try:
+            gap1_live_talking(c, h)
+        except Exception as e:
+            add("gap1_live_talking", False, f"error: {e}")
+    if run_all or "gap4" in only:
+        try:
+            gap4_live_identity(c, h)
+        except Exception as e:
+            add("gap4_live_multishot_final", False, f"error: {e}")
+            add("gap4_identity_variant_edit_logged", False, f"error: {e}")
+    if run_all or "gap5" in only:
+        try:
+            gap5_variants_and_execute(c, h)
+        except Exception as e:
+            add("gap5_variant_executed", False, f"error: {e}")
 
     write_capability_matrix()
-    (OUT / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Merge prior full-run evidence when doing a partial re-gate
+    report_path = OUT / "report.json"
+    if only and report_path.is_file():
+        try:
+            prev = json.loads(report_path.read_text(encoding="utf-8"))
+            prev_by = {t["name"]: t for t in prev.get("tests") or []}
+            cur_names = {t["name"] for t in report["tests"]}
+            for name, row in prev_by.items():
+                if name not in cur_names:
+                    report["tests"].append(row)
+            write_capability_matrix()
+        except Exception as merge_err:
+            print("merge prior report skipped:", merge_err, flush=True)
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     caps = report["capability_claims_vs_evidence"]
     cap_ok = sum(1 for v in caps.values() if v.get("verified"))
     ok = sum(1 for t in report["tests"] if t["pass"])
@@ -521,8 +558,7 @@ def main() -> int:
     print(f"SUMMARY tests {ok}/{total} | capabilities {cap_ok}/{len(caps)}", flush=True)
     for k, v in caps.items():
         print(f"  CAP {'PASS' if v['verified'] else 'FAIL'} {k}", flush=True)
-    print("REPORT", OUT / "report.json", flush=True)
-    # Zip artifacts
+    print("REPORT", report_path, flush=True)
     subprocess.run(
         ["zip", "-qr", "/opt/cursor/artifacts/optimize_gate_verify.zip", "."],
         cwd=str(OUT), check=False,
@@ -531,4 +567,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    import sys
+    only_arg = set()
+    for a in sys.argv[1:]:
+        if a.startswith("--only="):
+            only_arg = {x.strip() for x in a.split("=", 1)[1].split(",") if x.strip()}
+    raise SystemExit(main(only_arg or None))

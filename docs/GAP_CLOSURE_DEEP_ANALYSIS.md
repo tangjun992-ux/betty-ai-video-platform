@@ -1,9 +1,10 @@
 # 五大差距 · 细粒度分析 / 最优可行方案 / 真实评估
 
 **日期：** 2026-07-18  
-**提交基线：** gap-closure 实现轮  
-**真实探针产物：** `/opt/cursor/artifacts/gap_closure_eval.zip`  
-**探针报告：** `gap_closure_eval/report.json` → **8/8 PASS**
+**提交基线：** gap-closure 实现轮 + 优化门禁轮  
+**真实探针产物：** `/opt/cursor/artifacts/gap_closure_eval.zip`（初轮）  
+**正式门禁：** `/opt/cursor/artifacts/optimize_gate_verify.zip` → **15/15 · 5/5 CAP PASS**  
+**门禁报告：** `docs/OPTIMIZE_GATE_VERIFICATION.md`（评估 ∩ 验证后才算正式应用）
 
 ---
 
@@ -116,7 +117,7 @@ Director: aspect_ratio="9:16"
 ### 真实评估
 
 - 单元：UGC plan 验证 shot1 `identity_variant=False`、shot2 `True`  
-- 完整多镜付费对比未在本探针重复（控成本）；机制已接通  
+- **正式门禁 live：** 2 镜 UGC · celery `[director] identity_variant edit ok shot=2` · 成片 **1080×1920 final+audio**  
 - **结论：约弥补 35%。** 身份稳定性会好于「同帧硬拉运镜」，但仍非 HeyGen/Midjourney 角色库级。
 
 ---
@@ -141,7 +142,10 @@ Director: aspect_ratio="9:16"
 {"count": 3, "axes": ["seed=…", "痛点钩子", "cta=了解更多 · 立即选购"]}
 ```
 
-**结论：编排层约弥补 50%。** 仍缺：FE 多成片画廊、投放数据回流、自动选优。
+- **正式门禁：** 变体 A 真实 `/director/run/async` → **7.5s final+audio**  
+- **FE：** Agent「创意变体」已接入  
+
+**结论：编排层约弥补 50%。** 仍缺：多成片画廊对比、投放数据回流、自动选优。
 
 ---
 
@@ -162,16 +166,15 @@ Director: aspect_ratio="9:16"
 
 ## 建议下一刀（ROI）
 
-1. **FE 接入 `/director/variants` 多成片对比 UI**（Gap5 后半）  
-2. **口播：InfiniTalk 仅 Studio 手动触发**（避免默认 240s 空等；本次日志已证明易超时）  
-3. **引入 1–2 条可商用 BGM URL 配置**（环境变量），替换程序化床  
+1. **FE 多成片变体画廊对比**（Gap5 后半深化）  
+2. **口播：InfiniTalk 仅 Studio 手动触发**（已默认 Kling；勿再默认 InfiniTalk）  
+3. **可商用 BGM URL 配置**（环境变量），在 fixtures 之上接授权曲库  
 4. **Gap4 A/B 真人眼对比**：同 brief 开关 `identity_variant` 各出一条  
 
 ---
 
 ## 产物下载
 
-- 评估包：`/opt/cursor/artifacts/gap_closure_eval.zip`  
-  - `gap2_ugc_hero_*.png` / `gap2_ugc_i2v.mp4`（原生竖屏铁证）  
-  - `gap1_talking_final.mp4`  
-  - `gap3_substyle_*.mp4`  
+- 正式门禁包：`/opt/cursor/artifacts/optimize_gate_verify.zip`  
+- 初轮评估包：`/opt/cursor/artifacts/gap_closure_eval.zip`  
+  - `gap2_*` / `gap1_talking_final.mp4` / `gap3_*` / `gap4_identity_final.mp4` / `gap5_variant_A_final.mp4`  

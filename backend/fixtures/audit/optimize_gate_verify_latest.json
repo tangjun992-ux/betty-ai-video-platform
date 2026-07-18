@@ -1,0 +1,229 @@
+{
+  "generated_at": "2026-07-18T01:27Z",
+  "tests": [
+    {
+      "name": "gap4_plan_identity_variant_flag",
+      "pass": true,
+      "detail": "shots=2 shot2_variant=True compose=True"
+    },
+    {
+      "name": "gap4_live_multishot_final",
+      "pass": true,
+      "detail": "1080x1920 videos=3 final=True audio=True status=done",
+      "path": "/opt/cursor/artifacts/optimize_gate_verify/gap4_identity_final.mp4"
+    },
+    {
+      "name": "gap4_identity_variant_edit_logged",
+      "pass": true,
+      "detail": "edit_ok=True skipped=False (must see edit ok for PASS)",
+      "log_hit": true,
+      "log_skipped": false
+    },
+    {
+      "name": "gap5_variants_api",
+      "pass": true,
+      "detail": "count=3 axes0=['seed=4659c4f5368e', '痛点钩子', 'cta=了解更多 · 立即选购']",
+      "axes": [
+        "seed=4659c4f5368e",
+        "痛点钩子",
+        "cta=了解更多 · 立即选购"
+      ]
+    },
+    {
+      "name": "gap5_variant_executed",
+      "pass": true,
+      "detail": "variant=A 7.5s audio=True final=True bytes=2754293",
+      "path": "/opt/cursor/artifacts/optimize_gate_verify/gap5_variant_A_final.mp4",
+      "axes": [
+        "seed=4659c4f5368e",
+        "痛点钩子",
+        "cta=了解更多 · 立即选购"
+      ]
+    },
+    {
+      "name": "gap1_talking_plan_closeup_kling",
+      "pass": true,
+      "detail": "prefer_infinitalk=False model=kling/ai-avatar-pro"
+    },
+    {
+      "name": "gap1_tts_rate_param",
+      "pass": true,
+      "detail": "params=['text', 'voice_id', 'rate']"
+    },
+    {
+      "name": "gap3_fixture_bgm_present",
+      "pass": true,
+      "detail": "/workspace/backend/fixtures/music/upbeat.wav size=1764078"
+    },
+    {
+      "name": "gap3_compose_ad_has_av",
+      "pass": true,
+      "detail": "audio=True video=True bytes=956071",
+      "path": "/opt/cursor/artifacts/optimize_gate_verify/gap3_ad_upbeat.mp4"
+    },
+    {
+      "name": "gap3_compose_feed_has_av",
+      "pass": true,
+      "detail": "audio=True video=True bytes=946504",
+      "path": "/opt/cursor/artifacts/optimize_gate_verify/gap3_feed_soft.mp4"
+    },
+    {
+      "name": "gap3_compose_talking_has_av",
+      "pass": true,
+      "detail": "audio=True video=True bytes=943067",
+      "path": "/opt/cursor/artifacts/optimize_gate_verify/gap3_talking_soft.mp4"
+    },
+    {
+      "name": "gap2_size_mapping",
+      "pass": true,
+      "detail": "size=1080x1920"
+    },
+    {
+      "name": "gap2_native_9_16_image",
+      "pass": true,
+      "detail": "941x1672 ratio=1.777",
+      "path": "/opt/cursor/artifacts/optimize_gate_verify/gap2_hero_941x1672.png"
+    },
+    {
+      "name": "gap2_native_9_16_i2v",
+      "pass": true,
+      "detail": "1080x1916",
+      "path": "/opt/cursor/artifacts/optimize_gate_verify/gap2_i2v.mp4"
+    },
+    {
+      "name": "gap1_live_talking",
+      "pass": true,
+      "detail": "1080x1920 10.7s audio=True final=True",
+      "path": "/opt/cursor/artifacts/optimize_gate_verify/gap1_talking_final.mp4",
+      "model": "FFmpeg Compose"
+    }
+  ],
+  "capability_claims_vs_evidence": {
+    "gap1_talking_closeup_kling_tts": {
+      "claim": "CLOSE-UP + Kling default + slower TTS rate; live talking final",
+      "verified": true,
+      "tests": [
+        {
+          "name": "gap1_talking_plan_closeup_kling",
+          "pass": true,
+          "detail": "prefer_infinitalk=False model=kling/ai-avatar-pro"
+        },
+        {
+          "name": "gap1_tts_rate_param",
+          "pass": true,
+          "detail": "params=['text', 'voice_id', 'rate']"
+        },
+        {
+          "name": "gap1_live_talking",
+          "pass": true,
+          "detail": "1080x1920 10.7s audio=True final=True",
+          "path": "/opt/cursor/artifacts/optimize_gate_verify/gap1_talking_final.mp4",
+          "model": "FFmpeg Compose"
+        }
+      ]
+    },
+    "gap2_native_9_16_i2v": {
+      "claim": "Native portrait image + i2v (not square padded)",
+      "verified": true,
+      "tests": [
+        {
+          "name": "gap2_size_mapping",
+          "pass": true,
+          "detail": "size=1080x1920"
+        },
+        {
+          "name": "gap2_native_9_16_image",
+          "pass": true,
+          "detail": "941x1672 ratio=1.777",
+          "path": "/opt/cursor/artifacts/optimize_gate_verify/gap2_hero_941x1672.png"
+        },
+        {
+          "name": "gap2_native_9_16_i2v",
+          "pass": true,
+          "detail": "1080x1916",
+          "path": "/opt/cursor/artifacts/optimize_gate_verify/gap2_i2v.mp4"
+        }
+      ]
+    },
+    "gap3_bgm_subtitle_packaging": {
+      "claim": "Fixture BGM beds + subtitle styles produce A/V packaged films",
+      "verified": true,
+      "tests": [
+        {
+          "name": "gap3_fixture_bgm_present",
+          "pass": true,
+          "detail": "/workspace/backend/fixtures/music/upbeat.wav size=1764078"
+        },
+        {
+          "name": "gap3_compose_ad_has_av",
+          "pass": true,
+          "detail": "audio=True video=True bytes=956071",
+          "path": "/opt/cursor/artifacts/optimize_gate_verify/gap3_ad_upbeat.mp4"
+        },
+        {
+          "name": "gap3_compose_feed_has_av",
+          "pass": true,
+          "detail": "audio=True video=True bytes=946504",
+          "path": "/opt/cursor/artifacts/optimize_gate_verify/gap3_feed_soft.mp4"
+        },
+        {
+          "name": "gap3_compose_talking_has_av",
+          "pass": true,
+          "detail": "audio=True video=True bytes=943067",
+          "path": "/opt/cursor/artifacts/optimize_gate_verify/gap3_talking_soft.mp4"
+        }
+      ]
+    },
+    "gap4_identity_variant_live": {
+      "claim": "shot>1 runs edit_image identity_variant then i2v (log evidence)",
+      "verified": true,
+      "tests": [
+        {
+          "name": "gap4_plan_identity_variant_flag",
+          "pass": true,
+          "detail": "shots=2 shot2_variant=True compose=True"
+        },
+        {
+          "name": "gap4_live_multishot_final",
+          "pass": true,
+          "detail": "1080x1920 videos=3 final=True audio=True status=done",
+          "path": "/opt/cursor/artifacts/optimize_gate_verify/gap4_identity_final.mp4"
+        },
+        {
+          "name": "gap4_identity_variant_edit_logged",
+          "pass": true,
+          "detail": "edit_ok=True skipped=False (must see edit ok for PASS)",
+          "log_hit": true,
+          "log_skipped": false
+        }
+      ]
+    },
+    "gap5_variants_execute": {
+      "claim": "variants API fans out plans AND at least one variant executes to film",
+      "verified": true,
+      "tests": [
+        {
+          "name": "gap5_variants_api",
+          "pass": true,
+          "detail": "count=3 axes0=['seed=4659c4f5368e', '痛点钩子', 'cta=了解更多 · 立即选购']",
+          "axes": [
+            "seed=4659c4f5368e",
+            "痛点钩子",
+            "cta=了解更多 · 立即选购"
+          ]
+        },
+        {
+          "name": "gap5_variant_executed",
+          "pass": true,
+          "detail": "variant=A 7.5s audio=True final=True bytes=2754293",
+          "path": "/opt/cursor/artifacts/optimize_gate_verify/gap5_variant_A_final.mp4",
+          "axes": [
+            "seed=4659c4f5368e",
+            "痛点钩子",
+            "cta=了解更多 · 立即选购"
+          ]
+        }
+      ]
+    }
+  }
+}
