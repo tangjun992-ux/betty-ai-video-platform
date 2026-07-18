@@ -1,7 +1,7 @@
 # 主线 B · 投放完成度 · 真实验证与效果评估
 
 **日期：** 2026-07-18  
-**提交：** `c8f9126` / `a58fd4c`  
+**提交：** `c8f9126` / `a58fd4c` / `315e4ff`  
 **门禁：** `backend/scripts/mainline_b_verify.py` → **15/15 PASS**  
 **产物：** `/opt/cursor/artifacts/mainline_b_verify.zip`  
 **单元：** `tests/test_mainline_b.py` + 相关 → **20 passed**
