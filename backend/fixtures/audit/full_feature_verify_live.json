@@ -1,0 +1,303 @@
+{
+  "generated_at": "2026-07-17T16:13:36Z",
+  "artifact_dir": "/opt/cursor/artifacts/full_feature_verify_live",
+  "workspace_copy": "/workspace/artifacts/full_feature_verify_live",
+  "results": [
+    {
+      "scenario": "product_ad",
+      "title": "产品广告",
+      "tag": "A",
+      "brief": "为「Aurora 降噪耳机」制作15秒高转化投放广告：通勤地铁场景开场，突出主动降噪与30小时续航，电影级产品质感，适合信息流测试",
+      "status": "done",
+      "error": null,
+      "credits": 33,
+      "intent": "campaign",
+      "elapsed_s": 648,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/A_asset0_产品主视觉__Hero_Shot.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/A_asset1_分镜_1_3___3秒钩子.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/A_asset2_分镜_2_3___卖点特写.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/A_asset3_分镜_3_3___转化收束.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/A_FINAL.mp4"
+      ],
+      "asset_count": 5
+    },
+    {
+      "scenario": "product_ad",
+      "title": "产品广告",
+      "tag": "B",
+      "brief": "为「Nimbus 便携咖啡机」制作15秒产品广告：清晨厨房钩子，30秒出杯与奶泡质感特写，转化收束适合社媒投放",
+      "status": "done",
+      "error": null,
+      "credits": 33,
+      "intent": "campaign",
+      "elapsed_s": 708,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/B_asset0_产品主视觉__Hero_Shot.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/B_asset1_分镜_1_3___3秒钩子.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/B_asset2_分镜_2_3___卖点特写.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/B_asset3_分镜_3_3___转化收束.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_ad/B_FINAL.mp4"
+      ],
+      "asset_count": 5
+    },
+    {
+      "scenario": "ugc",
+      "title": "UGC 种草",
+      "tag": "A",
+      "brief": "竖屏UGC种草：女生手持夏日防晒霜真实开箱试用，口语安利不闷痘、清爽，手机自拍感，生活卧室场景",
+      "status": "done",
+      "error": null,
+      "credits": 27,
+      "intent": "campaign",
+      "elapsed_s": 378,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/A_asset0_产品主视觉__Hero_Shot.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/A_asset1_分镜_1_3___自拍开场.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/A_asset2_分镜_2_3___展示种草.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/A_asset3_分镜_3_3___口语安利.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/A_FINAL.mp4"
+      ],
+      "asset_count": 5
+    },
+    {
+      "scenario": "ugc",
+      "title": "UGC 种草",
+      "tag": "B",
+      "brief": "竖屏UGC种草：男生宿舍测评磁吸充电宝，真实手持展示接口与容量，口语推荐通勤党，原生信息流节奏",
+      "status": "done",
+      "error": null,
+      "credits": 27,
+      "intent": "campaign",
+      "elapsed_s": 378,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/B_asset0_产品主视觉__Hero_Shot.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/B_asset1_分镜_1_3___自拍开场.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/B_asset2_分镜_2_3___展示种草.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/B_asset3_分镜_3_3___口语安利.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/ugc/B_FINAL.mp4"
+      ],
+      "asset_count": 5
+    },
+    {
+      "scenario": "anime",
+      "title": "动漫生成",
+      "tag": "A",
+      "brief": "电影级动漫短片：少女站在雨后黄昏车站，新海诚式晚霞与积水倒影，发丝与云层细腻运动",
+      "status": "done",
+      "error": null,
+      "credits": 11,
+      "intent": "video_from_text",
+      "elapsed_s": 684,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/anime/A_asset0_动漫关键帧.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/anime/A_asset1_分镜_1_2___世界观开场.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/anime/A_asset2_分镜_2_2___角色登场.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/anime/A_FINAL.mp4"
+      ],
+      "asset_count": 4
+    },
+    {
+      "scenario": "anime",
+      "title": "动漫生成",
+      "tag": "B",
+      "brief": "电影级动漫短片：少年骑车穿过夏日乡间公路，强烈阳光丁达尔光柱，二次元角色与流动风景",
+      "status": "done",
+      "error": null,
+      "credits": 11,
+      "intent": "video_from_text",
+      "elapsed_s": 336,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/anime/B_asset0_动漫关键帧.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/anime/B_asset1_分镜_1_2___世界观开场.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/anime/B_asset2_分镜_2_2___角色登场.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/anime/B_FINAL.mp4"
+      ],
+      "asset_count": 4
+    },
+    {
+      "scenario": "ai_portrait",
+      "title": "AI 写真",
+      "tag": "A",
+      "brief": "一组专业形象写真：25岁亚洲女性，深色西装外套，柔和棚拍布光，自然自信表情，领英/简历四张统一风格",
+      "status": "done",
+      "error": null,
+      "credits": 20,
+      "intent": "image_series",
+      "elapsed_s": 156,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/ai_portrait/A_asset0_形象照_1_4___正面职业头像.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/ai_portrait/A_asset1_形象照_4_4___名片裁切感.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/ai_portrait/A_asset2_形象照_3_4___自然微笑胸像.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/ai_portrait/A_asset3_形象照_2_4___四分之三侧脸.png"
+      ],
+      "asset_count": 4
+    },
+    {
+      "scenario": "ai_portrait",
+      "title": "AI 写真",
+      "tag": "B",
+      "brief": "一组专业形象写真：30岁亚洲男性，浅灰商务衬衫，柔光箱，沉稳微笑，名片与社媒头像四张统一身份",
+      "status": "done",
+      "error": null,
+      "credits": 20,
+      "intent": "image_series",
+      "elapsed_s": 90,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/ai_portrait/B_asset0_形象照_3_4___自然微笑胸像.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/ai_portrait/B_asset1_形象照_4_4___名片裁切感.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/ai_portrait/B_asset2_形象照_2_4___四分之三侧脸.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/ai_portrait/B_asset3_形象照_1_4___正面职业头像.png"
+      ],
+      "asset_count": 4
+    },
+    {
+      "scenario": "product_commercial",
+      "title": "产品商业片",
+      "tag": "A",
+      "brief": "电影级产品商业片：高端护肤精华，玻璃瓶与晨光，精致布光多镜头叙事，奢侈品牌campaign质感",
+      "status": "done",
+      "error": null,
+      "credits": 42,
+      "intent": "campaign",
+      "elapsed_s": 973,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/A_asset0_产品主视觉__Hero_Shot.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/A_asset1_分镜_1_4___建立镜头.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/A_asset2_分镜_2_4___主体特写.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/A_asset3_分镜_3_4___动态运镜.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/A_asset4_分镜_4_4___情绪高潮.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/A_FINAL.mp4"
+      ],
+      "asset_count": 6
+    },
+    {
+      "scenario": "product_commercial",
+      "title": "产品商业片",
+      "tag": "B",
+      "brief": "电影级产品商业片：钛合金机械腕表，暗调金属反光与运镜，高级品牌发布大片",
+      "status": "done",
+      "error": null,
+      "credits": 42,
+      "intent": "campaign",
+      "elapsed_s": 877,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/B_asset0_产品主视觉__Hero_Shot.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/B_asset1_分镜_1_4___建立镜头.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/B_asset2_分镜_2_4___主体特写.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/B_asset3_分镜_3_4___动态运镜.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/B_asset4_分镜_4_4___情绪高潮.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_commercial/B_FINAL.mp4"
+      ],
+      "asset_count": 6
+    },
+    {
+      "scenario": "micro_drama",
+      "title": "微短剧",
+      "tag": "A",
+      "brief": "竖屏微短剧：相亲局上发现对方竟是前同事，强钩子开场，情绪对峙与反转，人物张力，电影级竖屏叙事",
+      "status": "done",
+      "error": null,
+      "credits": 13,
+      "intent": "video_from_text",
+      "elapsed_s": 534,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/micro_drama/A_asset0_短剧首帧___人物情绪.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/micro_drama/A_asset1_分镜_1_2___强钩子.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/micro_drama/A_asset2_分镜_2_2___冲突升温.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/micro_drama/A_FINAL.mp4"
+      ],
+      "asset_count": 4
+    },
+    {
+      "scenario": "micro_drama",
+      "title": "微短剧",
+      "tag": "B",
+      "brief": "竖屏微短剧：加班夜电梯里撞见老板拿着自己设计的原型，误会与澄清反转，人物情绪张力",
+      "status": "done",
+      "error": null,
+      "credits": 13,
+      "intent": "video_from_text",
+      "elapsed_s": 648,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/micro_drama/B_asset0_短剧首帧___人物情绪.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/micro_drama/B_asset1_分镜_1_2___强钩子.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/micro_drama/B_asset2_分镜_2_2___冲突升温.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/micro_drama/B_FINAL.mp4"
+      ],
+      "asset_count": 4
+    },
+    {
+      "scenario": "product_photo",
+      "title": "产品摄影",
+      "tag": "A",
+      "brief": "影棚级产品摄影：哑光黑陶瓷咖啡杯，柔光箱，纯净背景，反射高光，商业套图四张",
+      "status": "done",
+      "error": null,
+      "credits": 20,
+      "intent": "image_series",
+      "elapsed_s": 108,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/product_photo/A_asset0_产品摄影_4_4___场景置景.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_photo/A_asset1_产品摄影_1_4___正面主视觉.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_photo/A_asset2_产品摄影_3_4___材质特写.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_photo/A_asset3_产品摄影_2_4___侧面_45.png"
+      ],
+      "asset_count": 4
+    },
+    {
+      "scenario": "product_photo",
+      "title": "产品摄影",
+      "tag": "B",
+      "brief": "影棚级产品摄影：极简白色无线耳机充电盒，柔光与材质特写，电商主图级四张套图",
+      "status": "done",
+      "error": null,
+      "credits": 20,
+      "intent": "image_series",
+      "elapsed_s": 150,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/product_photo/B_asset0_产品摄影_4_4___场景置景.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_photo/B_asset1_产品摄影_2_4___侧面_45.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_photo/B_asset2_产品摄影_1_4___正面主视觉.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/product_photo/B_asset3_产品摄影_3_4___材质特写.png"
+      ],
+      "asset_count": 4
+    },
+    {
+      "scenario": "talking_avatar",
+      "title": "数字人口播",
+      "tag": "A",
+      "brief": "竖屏数字人口播：年轻女主播正面棚拍，讲解智能手表续航与健康监测卖点，自然口型同步",
+      "status": "done",
+      "error": null,
+      "credits": 11,
+      "intent": "talking",
+      "elapsed_s": 336,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/talking_avatar/A_asset0_生成数字人形象.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/talking_avatar/A_asset1_唇形同步驱动__数字人开口.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/talking_avatar/A_FINAL.mp4"
+      ],
+      "asset_count": 3
+    },
+    {
+      "scenario": "talking_avatar",
+      "title": "数字人口播",
+      "tag": "B",
+      "brief": "竖屏数字人口播：专业男主播正面棚拍，讲解护肤精华成分与吸收感，自然口型同步",
+      "status": "done",
+      "error": null,
+      "credits": 11,
+      "intent": "talking",
+      "elapsed_s": 354,
+      "assets": [
+        "/opt/cursor/artifacts/full_feature_verify_live/talking_avatar/B_asset0_生成数字人形象.png",
+        "/opt/cursor/artifacts/full_feature_verify_live/talking_avatar/B_asset1_唇形同步驱动__数字人开口.mp4",
+        "/opt/cursor/artifacts/full_feature_verify_live/talking_avatar/B_FINAL.mp4"
+      ],
+      "asset_count": 3
+    }
+  ],
+  "ok": 16,
+  "total": 16
+}
