@@ -2,7 +2,7 @@
 Authentication API — register, login, profile.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, timezone
@@ -14,20 +14,21 @@ from app.auth import (
     get_password_hash, verify_password, create_access_token,
     get_current_user, get_optional_user,
 )
+from app.rate_limiter import rate_limit
 
 router = APIRouter()
 
 
 class RegisterRequest(BaseModel):
-    username: str
-    email: str
-    password: str
-    display_name: str = ""
+    username: str = Field(..., min_length=3, max_length=64)
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., min_length=8, max_length=128)
+    display_name: str = Field("", max_length=120)
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., max_length=64)
+    password: str = Field(..., max_length=128)
 
 
 class AuthResponse(BaseModel):
@@ -36,7 +37,8 @@ class AuthResponse(BaseModel):
     user: dict
 
 
-@router.post("/register", summary="注册")
+@router.post("/register", summary="注册",
+             dependencies=[Depends(rate_limit("register", rpm=5, rph=20))])
 async def register(
     req: RegisterRequest,
     db: AsyncSession = Depends(get_db),
@@ -79,7 +81,8 @@ async def register(
     )
 
 
-@router.post("/login", summary="登录")
+@router.post("/login", summary="登录",
+             dependencies=[Depends(rate_limit("login", rpm=10, rph=60))])
 async def login(
     req: LoginRequest,
     db: AsyncSession = Depends(get_db),

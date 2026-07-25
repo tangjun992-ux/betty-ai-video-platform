@@ -57,9 +57,8 @@ class RateLimiter:
     @property
     def client(self) -> redis.Redis:
         if self._client is None:
-            self._client = redis.Redis(
-                host="localhost", port=6379, db=3,
-                decode_responses=True, socket_timeout=2,
+            self._client = redis.Redis.from_url(
+                settings.REDIS_URL, decode_responses=True, socket_timeout=2,
             )
         return self._client
 

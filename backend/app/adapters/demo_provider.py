@@ -322,9 +322,12 @@ def _local_media_path(url: str) -> Optional[str]:
     idx = url.find(prefix)
     if idx < 0:
         return None
-    rel = url[idx + len(prefix):].split("?", 1)[0]
-    p = Path(settings.STORAGE_LOCAL_PATH) / rel
-    return str(p) if p.exists() else None
+    rel = url[idx + len(prefix):].split("?", 1)[0].lstrip("/")
+    root = Path(settings.STORAGE_LOCAL_PATH).resolve()
+    p = (root / rel).resolve()
+    if root not in p.parents or not p.exists():
+        return None
+    return str(p)
 
 
 def _probe_size(path: str) -> tuple[int, int]:

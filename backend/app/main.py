@@ -34,6 +34,7 @@ async def lifespan(app: FastAPI):
     from app.observability import configure_logging, init_sentry
     configure_logging()
     init_sentry()
+    settings.validate_production()
     print(f"[LIFESPAN] Starting AI Video Platform v{settings.APP_VERSION}")
     print(f"[LIFESPAN] Environment: {settings.ENV}")
 
@@ -73,7 +74,7 @@ app.add_middleware(RequestContextMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=_settings.cors_allows_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

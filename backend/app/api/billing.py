@@ -255,7 +255,11 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
             logger.error("stripe checkout failed: %s", e)
             raise HTTPException(status_code=502, detail=f"支付网关错误: {e}")
 
-    # Dev-grant mode — credit immediately + record a real transaction.
+    # Dev-grant mode — credit immediately + record a real transaction. Never
+    # available in production: it would hand out paid credits for free.
+    if settings.is_production:
+        raise HTTPException(status_code=503, detail="支付网关未配置，暂时无法结算")
+
     bal = await _get_balance(db, user_id)
     before = bal.credits + bal.daily_credits
     bal.credits += credits
@@ -315,6 +319,8 @@ async def pay_create(req: PayCreateRequest, db: AsyncSession = Depends(get_db),
     from app.services import payments
     if req.method not in ("wechat", "alipay"):
         raise HTTPException(status_code=400, detail="method 必须是 wechat 或 alipay")
+    if settings.is_production and not getattr(payments, f"{req.method}_live")():
+        raise HTTPException(status_code=503, detail="支付方式未配置，暂时无法下单")
     credits, price_usd, label = _resolve_purchase(req)
     amount_cny = round(price_usd * settings.USD_TO_CNY, 2)
     order_no = "BT" + uuid.uuid4().hex[:22]
@@ -342,8 +348,10 @@ async def pay_create(req: PayCreateRequest, db: AsyncSession = Depends(get_db),
 
 
 @router.get("/pay/status/{order_no}", summary="查询支付订单状态")
-async def pay_status(order_no: str, db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
+async def pay_status(order_no: str, db: AsyncSession = Depends(get_db),
+                     user_id: int = Depends(resolve_user_id)):
+    res = await db.execute(select(PaymentOrder).where(
+        PaymentOrder.order_no == order_no, PaymentOrder.user_id == user_id))
     order = res.scalar_one_or_none()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
@@ -364,7 +372,10 @@ async def pay_status(order_no: str, db: AsyncSession = Depends(get_db)):
 @router.api_route("/pay/mock-confirm/{order_no}", methods=["GET", "POST"], summary="沙箱：模拟支付成功")
 async def pay_mock_confirm(order_no: str, db: AsyncSession = Depends(get_db)):
     """Sandbox-only: simulate the user completing the scan-to-pay. Rejected for
-    live provider orders (real payment must come through the gateway notify)."""
+    live provider orders (real payment must come through the gateway notify)
+    and disabled entirely in production."""
+    if settings.is_production:
+        raise HTTPException(status_code=404, detail="Not Found")
     res = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
     order = res.scalar_one_or_none()
     if not order:
@@ -381,30 +392,40 @@ async def pay_mock_confirm(order_no: str, db: AsyncSession = Depends(get_db)):
 @router.post("/pay/notify/{provider}", summary="支付异步回调（微信/支付宝）")
 async def pay_notify(provider: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Async payment notification from WeChat/Alipay. In production this endpoint
-    must be public HTTPS. Signature verification is performed via the SDK; on
-    success the order is marked paid and credits granted idempotently."""
+    must be public HTTPS. The provider signature is verified before anything is
+    trusted — an unverified callback never grants credits. On success the order
+    is marked paid and credits granted idempotently."""
+    from app.services import payments
     order_no = None
     try:
         if provider == "alipay":
             form = dict((await request.form()))
+            if not payments.verify_alipay_notify(form):
+                logger.warning("rejected unverified alipay notify for %s", form.get("out_trade_no"))
+                raise HTTPException(status_code=400, detail="invalid signature")
             order_no = form.get("out_trade_no")
-            trade_status = form.get("trade_status")
-            paid = trade_status in ("TRADE_SUCCESS", "TRADE_FINISHED")
-            # NOTE: verify form signature with AliPay.verify(...) before trusting.
-        else:  # wechat v3 — JSON body, resource is AES-GCM encrypted
-            body = await request.json()
-            res = (body.get("resource") or {})
-            order_no = body.get("out_trade_no")  # after decrypt in prod
-            paid = body.get("event_type", "").endswith("SUCCESS")
+            paid = form.get("trade_status") in ("TRADE_SUCCESS", "TRADE_FINISHED")
+        elif provider == "wechat":  # v3 — signed headers, AES-GCM encrypted resource
+            resource = payments.verify_wechat_notify(dict(request.headers), await request.body())
+            if resource is None:
+                logger.warning("rejected unverified wechat notify")
+                raise HTTPException(status_code=400, detail="invalid signature")
+            order_no = resource.get("out_trade_no")
+            paid = resource.get("trade_state") == "SUCCESS"
+        else:
+            raise HTTPException(status_code=404, detail="unknown provider")
         if not order_no:
             return {"code": "FAIL", "message": "missing out_trade_no"}
-        r = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
+        r = await db.execute(select(PaymentOrder).where(
+            PaymentOrder.order_no == order_no, PaymentOrder.provider == provider))
         order = r.scalar_one_or_none()
         if order and paid:
             order.status = "paid"
             await db.commit()
             await _grant_order(db, order)
         return {"code": "SUCCESS", "message": "OK"}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("pay notify(%s) error: %s", provider, e)
         return {"code": "FAIL", "message": str(e)}

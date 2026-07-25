@@ -14,6 +14,7 @@ import base64
 import io
 import logging
 import os
+from typing import Optional
 
 from app.config import settings
 
@@ -119,6 +120,56 @@ def create_alipay_precreate(order_no: str, amount_cny: float, subject: str, noti
     except Exception as e:
         logger.error("alipay precreate failed: %s", e)
         raise
+
+
+# ── Async notification verification ──────────────────────
+def verify_wechat_notify(headers: dict, body: bytes) -> Optional[dict]:
+    """Verify a WeChat Pay v3 callback signature and decrypt the resource.
+    Returns the decrypted payload, or None when the callback can't be trusted."""
+    if not wechat_live():
+        return None
+    try:
+        from wechatpayv3 import WeChatPay, WeChatPayType
+        with open(settings.WECHAT_PRIVATE_KEY_PATH) as f:
+            private_key = f.read()
+        wxpay = WeChatPay(
+            wechatpay_type=WeChatPayType.NATIVE, mchid=settings.WECHAT_MCHID,
+            private_key=private_key, cert_serial_no=settings.WECHAT_CERT_SERIAL_NO,
+            apiv3_key=settings.WECHAT_API_V3_KEY, appid=settings.WECHAT_APPID,
+            notify_url=settings.PUBLIC_BASE_URL,
+        )
+        result = wxpay.callback(headers, body)
+        if not result or result.get("event_type") != "TRANSACTION.SUCCESS":
+            return None
+        return result.get("resource") or {}
+    except Exception as e:
+        logger.warning("wechat notify verification failed: %s", e)
+        return None
+
+
+def verify_alipay_notify(form: dict) -> bool:
+    """Verify an Alipay async notification signature (RSA2)."""
+    if not alipay_live():
+        return False
+    try:
+        from alipay import AliPay
+        with open(settings.ALIPAY_APP_PRIVATE_KEY_PATH) as f:
+            app_private_key = f.read()
+        with open(settings.ALIPAY_PUBLIC_KEY_PATH) as f:
+            alipay_public_key = f.read()
+        client = AliPay(appid=settings.ALIPAY_APP_ID, app_notify_url=settings.PUBLIC_BASE_URL,
+                        app_private_key_string=app_private_key,
+                        alipay_public_key_string=alipay_public_key,
+                        sign_type="RSA2", debug=settings.ALIPAY_SANDBOX)
+        data = dict(form)
+        signature = data.pop("sign", None)
+        data.pop("sign_type", None)
+        if not signature:
+            return False
+        return bool(client.verify(data, signature))
+    except Exception as e:
+        logger.warning("alipay notify verification failed: %s", e)
+        return False
 
 
 def _sandbox_qr(provider: str, order_no: str) -> str:

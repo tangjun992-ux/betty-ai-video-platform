@@ -7,9 +7,28 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.db import get_db
+from app.auth import resolve_user_id
 from app.models.task import Task, TaskStatus
 
 router = APIRouter()
+
+
+def _owned(user_id: int):
+    """Ownership filter: the guest account (0) also owns legacy NULL rows."""
+    if user_id == 0:
+        return (Task.user_id == 0) | (Task.user_id.is_(None))
+    return Task.user_id == user_id
+
+
+async def _own_task(db: AsyncSession, task_id: str, user_id: int) -> Task:
+    """Load a task belonging to the caller's account, or 404."""
+    result = await db.execute(
+        select(Task).where(Task.task_id == task_id, _owned(user_id))
+    )
+    task = result.scalar_one_or_none()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return task
 
 class TaskStatusResponse(BaseModel):
     task_id: str
@@ -36,14 +55,9 @@ class TaskResultResponse(BaseModel):
 async def get_task_status(
     task_id: str,
     db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
 ):
-    from sqlalchemy import select
-    stmt = select(Task).where(Task.task_id == task_id)
-    result = await db.execute(stmt)
-    task = result.scalar_one_or_none()
-
-    if not task:
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    task = await _own_task(db, task_id, user_id)
 
     if task.status in ("completed", "failed", "cancelled"):
         return TaskResultResponse(
@@ -72,9 +86,10 @@ async def list_tasks(
     limit: int = Query(default=50, le=100),
     offset: int = Query(default=0),
     db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
 ):
-    from app.models.task import Task
-    stmt = select(Task).order_by(Task.created_at.desc()).limit(limit).offset(offset)
+    stmt = (select(Task).where(_owned(user_id))
+            .order_by(Task.created_at.desc()).limit(limit).offset(offset))
     if status_filter:
         stmt = stmt.where(Task.status == status_filter)
     result = await db.execute(stmt)
@@ -104,13 +119,9 @@ async def list_tasks(
 
 
 @router.post("/{task_id}/cancel", summary="取消任务")
-async def cancel_task(task_id: str, db: AsyncSession = Depends(get_db)):
-    from sqlalchemy import select
-    stmt = select(Task).where(Task.task_id == task_id)
-    result = await db.execute(stmt)
-    task = result.scalar_one_or_none()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+async def cancel_task(task_id: str, db: AsyncSession = Depends(get_db),
+                      user_id: int = Depends(resolve_user_id)):
+    task = await _own_task(db, task_id, user_id)
     if task.status in ("completed", "failed", "cancelled"):
         raise HTTPException(status_code=400, detail=f"Cannot cancel task in status: {task.status}")
 

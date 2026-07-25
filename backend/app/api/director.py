@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.director import planner, DirectorExecutor, DirectorPlanner, plan_from_dict, refine_plan, DirectorStep
+from app.auth import resolve_user_id
 from app.db import get_db
 from app.models.director_session import DirectorSession
 
@@ -186,7 +187,6 @@ async def rerun_step(req: StepRerunRequest):
 class SessionCreate(BaseModel):
     title: str | None = None
     brief: str | None = None
-    user_id: int = 0
 
 
 class SessionUpdate(BaseModel):
@@ -199,7 +199,8 @@ class SessionUpdate(BaseModel):
 
 
 @router.get("/sessions", summary="列出导演会话")
-async def list_sessions(user_id: int = 0, db: AsyncSession = Depends(get_db)):
+async def list_sessions(db: AsyncSession = Depends(get_db),
+                        user_id: int = Depends(resolve_user_id)):
     rows = (await db.execute(
         select(DirectorSession).where(DirectorSession.user_id == user_id)
         .order_by(DirectorSession.updated_at.desc()).limit(100)
@@ -208,9 +209,10 @@ async def list_sessions(user_id: int = 0, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/sessions", summary="创建导演会话")
-async def create_session(req: SessionCreate, db: AsyncSession = Depends(get_db)):
+async def create_session(req: SessionCreate, db: AsyncSession = Depends(get_db),
+                         user_id: int = Depends(resolve_user_id)):
     s = DirectorSession(
-        session_uid=uuid.uuid4().hex, user_id=req.user_id,
+        session_uid=uuid.uuid4().hex, user_id=user_id,
         title=req.title or "新导演会话", brief=req.brief, status="draft",
     )
     db.add(s)
@@ -218,19 +220,26 @@ async def create_session(req: SessionCreate, db: AsyncSession = Depends(get_db))
     return s.to_dict()
 
 
-@router.get("/sessions/{uid}", summary="获取会话详情")
-async def get_session(uid: str, db: AsyncSession = Depends(get_db)):
-    s = (await db.execute(select(DirectorSession).where(DirectorSession.session_uid == uid))).scalar_one_or_none()
+async def _own_session(db: AsyncSession, uid: str, user_id: int) -> DirectorSession:
+    s = (await db.execute(select(DirectorSession).where(
+        DirectorSession.session_uid == uid,
+        DirectorSession.user_id == user_id,
+    ))).scalar_one_or_none()
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
-    return s.to_dict()
+    return s
+
+
+@router.get("/sessions/{uid}", summary="获取会话详情")
+async def get_session(uid: str, db: AsyncSession = Depends(get_db),
+                      user_id: int = Depends(resolve_user_id)):
+    return (await _own_session(db, uid, user_id)).to_dict()
 
 
 @router.patch("/sessions/{uid}", summary="更新会话(保存计划/资产)")
-async def update_session(uid: str, req: SessionUpdate, db: AsyncSession = Depends(get_db)):
-    s = (await db.execute(select(DirectorSession).where(DirectorSession.session_uid == uid))).scalar_one_or_none()
-    if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+async def update_session(uid: str, req: SessionUpdate, db: AsyncSession = Depends(get_db),
+                         user_id: int = Depends(resolve_user_id)):
+    s = await _own_session(db, uid, user_id)
     for k, v in req.model_dump(exclude_none=True).items():
         setattr(s, k, v)
     await db.flush()
@@ -238,8 +247,8 @@ async def update_session(uid: str, req: SessionUpdate, db: AsyncSession = Depend
 
 
 @router.delete("/sessions/{uid}", summary="删除会话")
-async def delete_session(uid: str, db: AsyncSession = Depends(get_db)):
-    s = (await db.execute(select(DirectorSession).where(DirectorSession.session_uid == uid))).scalar_one_or_none()
-    if s:
-        await db.delete(s)
-    return {"deleted": bool(s)}
+async def delete_session(uid: str, db: AsyncSession = Depends(get_db),
+                         user_id: int = Depends(resolve_user_id)):
+    s = await _own_session(db, uid, user_id)
+    await db.delete(s)
+    return {"deleted": True}

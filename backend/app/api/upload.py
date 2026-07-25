@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.auth import resolve_user_id
+from app.rate_limiter import rate_limit
 from app.services.media_store import store_upload
 
 router = APIRouter()
@@ -15,9 +17,12 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 
-@router.post("", summary="上传图片")
-@router.post("/", include_in_schema=False)
-async def upload_image(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
+@router.post("", summary="上传图片",
+             dependencies=[Depends(rate_limit("upload", rpm=10, rph=100))])
+@router.post("/", include_in_schema=False,
+             dependencies=[Depends(rate_limit("upload", rpm=10, rph=100))])
+async def upload_image(file: UploadFile = File(...), db: AsyncSession = Depends(get_db),
+                       user_id: int = Depends(resolve_user_id)):
     """Upload an image for use as reference in image-to-video generation."""
     # Validate extension
     ext = os.path.splitext(file.filename or "")[1].lower()
@@ -35,7 +40,7 @@ async def upload_image(file: UploadFile = File(...), db: AsyncSession = Depends(
             detail=f"File too large: {len(content)} bytes. Max: {MAX_FILE_SIZE}",
         )
 
-    asset = await store_upload(db, file.filename or "", content, file.content_type)
+    asset = await store_upload(db, file.filename or "", content, file.content_type, user_id=user_id)
 
     return {
         "url": asset.url,

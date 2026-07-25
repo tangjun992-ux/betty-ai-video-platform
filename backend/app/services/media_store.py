@@ -6,9 +6,11 @@ or may be unreachable from the user's network. Every completed generation is
 therefore downloaded into STORAGE_LOCAL_PATH/generated and its URL rewritten
 to the stable /api/v1/media/generated/... path served by the backend.
 """
+import ipaddress
 import logging
 import mimetypes
 import os
+import socket
 import subprocess
 import uuid
 from pathlib import Path
@@ -44,6 +46,43 @@ def _is_external(url: str) -> bool:
     return f"{MEDIA_URL_PREFIX}/" not in url
 
 
+def is_safe_remote_url(url: str) -> bool:
+    """SSRF guard: only plain http(s) URLs that resolve to public addresses may
+    be fetched server-side, so provider/user supplied URLs can't reach loopback,
+    private networks or the cloud metadata service."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80),
+                                   proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                or ip.is_multicast or ip.is_unspecified):
+            return False
+    return bool(infos)
+
+
+def _get_checked(client: httpx.Client, url: str, max_redirects: int = 5) -> httpx.Response:
+    """GET following redirects manually so every hop is SSRF-checked."""
+    for _ in range(max_redirects + 1):
+        if not is_safe_remote_url(url):
+            raise ValueError(f"refusing to fetch non-public URL: {url[:120]}")
+        resp = client.get(url)
+        if resp.is_redirect and resp.headers.get("location"):
+            url = str(resp.next_request.url) if resp.next_request else resp.headers["location"]
+            continue
+        resp.raise_for_status()
+        return resp
+    raise ValueError("too many redirects")
+
+
 def _guess_ext(url: str, content_type: Optional[str]) -> str:
     path_ext = os.path.splitext(urlparse(url).path)[1].lower()
     if path_ext in _KNOWN_EXTS:
@@ -63,9 +102,8 @@ def localize_media_url(url: str, media_hint: str = "") -> Optional[str]:
     if not _is_external(url):
         return None
     try:
-        with httpx.Client(timeout=DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
+        with httpx.Client(timeout=DOWNLOAD_TIMEOUT, follow_redirects=False) as client:
+            resp = _get_checked(client, url)
             content = resp.content
             if not content or len(content) > MAX_DOWNLOAD_BYTES:
                 logger.warning("media_store: skip %s (empty or too large)", url[:120])
