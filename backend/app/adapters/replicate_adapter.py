@@ -288,8 +288,11 @@ class ReplicateAdapter(BaseModelAdapter):
                             f"{base}/v1/predictions/{prediction_id}/cancel",
                             headers=headers,
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.error(
+                            "[Replicate] cancel of timed-out prediction %s failed, "
+                            "it may keep billing: %s", prediction_id, e,
+                        )
                     raise RuntimeError(
                         f"Replicate prediction {prediction_id} timed out after {timeout}s"
                     )

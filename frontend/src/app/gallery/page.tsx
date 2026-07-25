@@ -98,7 +98,9 @@ export default function GalleryPage() {
       try {
         const statsResp = await fetch(`${API_BASE}/gallery/stats`);
         if (statsResp.ok) setStats(await statsResp.json());
-      } catch {}
+      } catch (e) {
+        console.error("gallery: stats load failed", e);
+      }
     } catch (err: any) {
       setError(err.message || "加载画廊失败");
     } finally {

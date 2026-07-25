@@ -1,7 +1,9 @@
 """
 Pricing plans API — subscription tiers and credits bundles.
 """
-from fastapi import APIRouter, Depends
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy import select
@@ -9,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.models.user import User
 from app.models.billing import UserBalance
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -142,8 +146,11 @@ async def get_user_balance(user_id: int = 0, db: AsyncSession = Depends(get_db))
 
         user_result = await db.execute(select(User).where(User.id == user_id))
         user = user_result.scalar_one_or_none()
-    except Exception:
-        pass
+    except Exception as e:
+        # Reporting a zero balance on a database failure looks like the user
+        # lost their credits — surface the outage instead.
+        logger.exception("pricing: balance lookup failed for user %s", user_id)
+        raise HTTPException(status_code=503, detail="余额服务暂时不可用，请稍后重试") from e
 
     if balance is None:
         return {

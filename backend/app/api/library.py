@@ -6,6 +6,7 @@ Item id scheme:
   gen_<task_id>_<index>  -> entry <index> in Task.results (generated)
 """
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Optional
@@ -20,6 +21,8 @@ from app.db import get_db
 from app.models.asset import Asset
 from app.models.task import Task
 from app.auth import resolve_user_id
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -136,6 +139,7 @@ async def list_library(
             try:
                 items.append(_asset_item(a))
             except Exception:
+                logger.warning("library: skipping malformed asset %s", a.asset_id, exc_info=True)
                 continue
 
     if source in ("all", "generated"):
@@ -147,6 +151,7 @@ async def list_library(
             try:
                 items.extend(_generated_items(t))
             except Exception:
+                logger.warning("library: skipping malformed task results %s", t.task_id, exc_info=True)
                 continue
 
     kw = q.strip().lower()
@@ -225,8 +230,8 @@ async def delete_library_item(item_id: str, db: AsyncSession = Depends(get_db)):
                 p = Path(settings.STORAGE_LOCAL_PATH) / asset.url[len(prefix):]
                 if p.is_file():
                     p.unlink()
-        except Exception:
-            pass
+        except OSError:
+            logger.warning("library: could not delete local file for %s", asset.asset_id, exc_info=True)
         await db.delete(asset)
         await db.commit()
         return {"deleted": item_id}

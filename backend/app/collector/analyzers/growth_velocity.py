@@ -179,8 +179,8 @@ class GrowthVelocityTracker:
         if self._redis:
             try:
                 self._redis.delete(f"{self.SNAPSHOT_PREFIX}:{source_id}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("[growth] Redis clear failed for %s: %s", source_id, e)
         self._memory_store.pop(source_id, None)
 
 

@@ -50,7 +50,9 @@ export default function TaskDetailPage() {
         if (data.status === "completed" || data.status === "failed") {
           clearInterval(interval);
         }
-      } catch {}
+      } catch (e) {
+        console.error(`task ${taskId}: status refresh failed`, e);
+      }
     }, 2000);
     return () => clearInterval(interval);
   }, [task, taskId]);

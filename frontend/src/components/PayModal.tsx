@@ -20,18 +20,21 @@ export function PayModal({ target, onClose, onPaid }: { target: PayTarget | null
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [paid, setPaid] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState<Record<string, boolean>>({});
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    getPayMethods().then((m) => setLive({ wechat: m.methods.wechat?.live, alipay: m.methods.alipay?.live })).catch(() => {});
+    getPayMethods()
+      .then((m) => setLive({ wechat: m.methods.wechat?.live, alipay: m.methods.alipay?.live }))
+      .catch((e) => console.error("pay: methods lookup failed", e));
   }, []);
 
   const stopPoll = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
 
   const openOrder = useCallback(async (m: Method) => {
     if (!target) return;
-    setLoading(true); setPaid(false); setOrder(null); stopPoll();
+    setLoading(true); setPaid(false); setOrder(null); setError(null); stopPoll();
     try {
       const o = await createPayOrder(target.kind, target.id, m, target.cycle || "monthly");
       setOrder(o);
@@ -43,9 +46,13 @@ export function PayModal({ target, onClose, onPaid }: { target: PayTarget | null
             try { window.dispatchEvent(new Event("betty:credits")); } catch {}
             onPaid?.(s.balance);
           }
-        } catch {}
+        } catch (e) {
+          console.error("pay: status poll failed", e);
+        }
       }, 2000);
-    } catch (e) { /* surfaced by caller toast normally */ }
+    } catch (e: any) {
+      setError(e?.message || "创建订单失败，请稍后重试");
+    }
     finally { setLoading(false); }
   }, [target]);
 
@@ -59,7 +66,14 @@ export function PayModal({ target, onClose, onPaid }: { target: PayTarget | null
 
   const simulate = async () => {
     if (!order) return;
-    try { const r = await mockConfirmPay(order.order_no); stopPoll(); setPaid(true); try { window.dispatchEvent(new Event("betty:credits")); } catch {} onPaid?.(r.balance); } catch {}
+    try {
+      const r = await mockConfirmPay(order.order_no);
+      stopPoll(); setPaid(true);
+      try { window.dispatchEvent(new Event("betty:credits")); } catch {}
+      onPaid?.(r.balance);
+    } catch (e: any) {
+      setError(e?.message || "模拟支付失败");
+    }
   };
 
   return (
@@ -93,6 +107,11 @@ export function PayModal({ target, onClose, onPaid }: { target: PayTarget | null
                   <p className="text-lg font-semibold text-text-primary">支付成功</p>
                   <p className="text-sm text-text-secondary">+{order?.credits} 积分已到账</p>
                   <button onClick={onClose} className="btn-primary mt-2">完成</button>
+                </div>
+              ) : error ? (
+                <div className="py-10 flex flex-col items-center gap-3 text-center">
+                  <p className="text-sm text-destructive">{error}</p>
+                  <button onClick={() => openOrder(method)} className="btn-secondary text-sm">重试</button>
                 </div>
               ) : loading || !order ? (
                 <div className="py-16"><Loader2 className="w-8 h-8 animate-spin text-brand" /></div>

@@ -9,11 +9,14 @@ circuit; a success closes it immediately.
 from __future__ import annotations
 
 import json
+import logging
 import threading
 import time
 from dataclasses import asdict, dataclass
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 PREFIX = "model-health"
 CIRCUIT_FAILURES = 3
@@ -161,8 +164,8 @@ class ModelHealthRegistry:
         try:
             client = self._client()
             client.delete(self._stats_key(model_id), self._circuit_key(model_id))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("model_health: redis reset failed for %s: %s", model_id, e)
         with self._lock:
             self._memory.pop(model_id, None)
             self._circuits.pop(model_id, None)

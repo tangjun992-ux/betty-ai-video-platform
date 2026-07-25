@@ -41,7 +41,8 @@ def read_progress(job_id: str) -> dict | None:
         if not raw:
             return None
         return json.loads(raw)
-    except Exception:
+    except Exception as e:
+        logger.warning("[director_task] progress read failed for %s: %s", job_id, e)
         return None
 
 

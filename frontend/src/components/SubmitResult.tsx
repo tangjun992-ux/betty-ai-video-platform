@@ -125,7 +125,9 @@ export function SubmitResult({ result, onReset }: SubmitResultProps) {
               setStatus(data);
               ws.close();
             }
-          } catch {}
+          } catch (e) {
+            console.error("submit: unreadable progress message", e);
+          }
         };
 
         ws.onclose = () => {

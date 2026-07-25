@@ -26,6 +26,7 @@ def _update_task(db_task_id: str, **kwargs):
         stmt = text("SELECT id FROM tasks WHERE task_id = :tid")
         row = session.execute(stmt, {"tid": db_task_id}).first()
         if not row:
+            logger.error("task row not found, update dropped: task_id=%s fields=%s", db_task_id, list(kwargs))
             return None
         task_pk = row[0]
         for field, value in kwargs.items():
@@ -57,8 +58,8 @@ def _broadcast_progress(task_id: str, progress: int, stage: str, message: str = 
             loop.run_until_complete(_send())
         finally:
             loop.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("progress broadcast failed for task %s at %s: %s", task_id, stage, e)
 
 
 @app.task(

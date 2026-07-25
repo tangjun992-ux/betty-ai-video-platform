@@ -2,6 +2,7 @@
 Gallery/Explore API — community showcase from real completed tasks.
 """
 import json
+import logging
 import zlib
 from fastapi import APIRouter, Query, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,8 @@ from typing import Optional
 from app.db import get_db
 from app.models.task import Task
 from app.models.billing import Transaction, TransactionType
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -185,8 +188,8 @@ async def explore_gallery(
                     try:
                         routing = json.loads(routing_str) if isinstance(routing_str, str) else routing_str
                         styles_list = routing.get("detected_styles", [])
-                    except Exception:
-                        pass
+                    except (json.JSONDecodeError, AttributeError, TypeError):
+                        logger.warning("gallery: unreadable routing_info on task %s", t.task_id, exc_info=True)
 
                 # Filter by style if specified
                 if style != "all" and style not in styles_list:
@@ -224,6 +227,7 @@ async def explore_gallery(
                 })
             except Exception:
                 # One malformed legacy row must never break the whole gallery
+                logger.warning("gallery: skipping malformed result on task %s", t.task_id, exc_info=True)
                 continue
 
     # Sort

@@ -104,7 +104,7 @@ export default function AgentPage() {
         else img.push(opt);
       }
       setModels({ image: img, video: vid });
-    }).catch(() => {});
+    }).catch((e) => console.error("agent: model catalog load failed", e));
   }, []);
 
   const loadSessions = useCallback(async () => {
@@ -115,7 +115,9 @@ export default function AgentPage() {
         if (Array.isArray(d.sessions) && d.sessions.length)
           setSessions(d.sessions.map((s: any) => ({ id: s.session_uid, title: s.title, lastMessage: s.brief || "导演会话" })));
       }
-    } catch {}
+    } catch (e) {
+      console.error("agent: session list load failed", e);
+    }
   }, []);
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
@@ -123,14 +125,16 @@ export default function AgentPage() {
   const loadSession = useCallback(async (uid: string) => {
     try {
       const res = await fetch(`${API_BASE}/director/sessions/${uid}`);
-      if (!res.ok) return;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const s = await res.json();
       setActiveUid(uid);
       if (s.brief) setBrief(s.brief);
       const p = s.plan && s.plan.steps ? s.plan as Plan : null;
       const a = Array.isArray(s.assets) ? s.assets as Asset[] : [];
       if (p) { setPlan(p); setAssets(a); setPhase(a.length ? "done" : "planned"); }
-    } catch {}
+    } catch (e: any) {
+      setErr(`无法载入会话 (${e?.message})`);
+    }
   }, []);
   useEffect(() => {
     const uid = new URLSearchParams(window.location.search).get("session");
@@ -154,7 +158,10 @@ export default function AgentPage() {
         });
         loadSessions();
       }
-    } catch {}
+    } catch (e: any) {
+      console.error("agent: session save failed", e);
+      setErr(`会话保存失败 (${e?.message}) — 结果仍在本页，请勿刷新`);
+    }
   };
 
   const reset = () => { setPlan(null); setAssets([]); setPhase("idle"); setErr(null); setEditingId(null); };
@@ -192,9 +199,12 @@ export default function AgentPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: brief.trim(), media_type: "auto" }),
       });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       if (d.enhanced) setBrief(d.enhanced);
-    } catch {} finally { setComposerBusy(null); }
+    } catch (e: any) {
+      setErr(`提示词润色失败 (${e?.message})`);
+    } finally { setComposerBusy(null); }
   };
   const ideate = async () => {
     if (!brief.trim() || composerBusy) return;
@@ -204,9 +214,12 @@ export default function AgentPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ brief: brief.trim() }),
       });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d = await r.json();
       setConcepts(d.concepts || []);
-    } catch {} finally { setComposerBusy(null); }
+    } catch (e: any) {
+      setErr(`创意生成失败 (${e?.message})`);
+    } finally { setComposerBusy(null); }
   };
 
   // ── edit a step in place ──
@@ -359,9 +372,13 @@ export default function AgentPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ step, dry_run: dryRunMode }),
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const d = await res.json();
-      if (d.ok && d.asset) setAssets((prev) => prev.map((a) => a.step_id === asset.step_id ? d.asset : a));
-    } catch {} finally { setRerunning(null); }
+      if (!d.ok || !d.asset) throw new Error(d.error || "未返回结果");
+      setAssets((prev) => prev.map((a) => a.step_id === asset.step_id ? d.asset : a));
+    } catch (e: any) {
+      setErr(`重新生成失败 (${e?.message})`);
+    } finally { setRerunning(null); }
   };
 
   const newSession = () => { setActiveUid(null); setActiveSession(""); reset(); setBrief(""); setRefImage(false); setRefImageUrl(null); };
@@ -373,9 +390,12 @@ export default function AgentPage() {
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch(`${API_BASE}/library/upload`, { method: "POST", body: fd });
-      const d = await res.json();
-      if (d.url) { setRefImageUrl(d.url); setRefImage(true); }
-    } catch {} finally { setUploadingRef(false); }
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.url) throw new Error(d.detail || `HTTP ${res.status}`);
+      setRefImageUrl(d.url); setRefImage(true);
+    } catch (e: any) {
+      setErr(`参考图上传失败 (${e?.message})`);
+    } finally { setUploadingRef(false); }
   };
 
   const modelOptsFor = (action: string) => (action.includes("video") || action === "lipsync" ? models.video : models.image);

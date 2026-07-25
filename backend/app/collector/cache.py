@@ -43,8 +43,8 @@ class VISCache:
         if self._redis:
             try:
                 self._redis.delete(key)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("cache: redis delete failed for %s: %s", key, e)
         self._memory_fallback.pop(key, None)
 
     def invalidate_pattern(self, pattern: str):
@@ -54,8 +54,8 @@ class VISCache:
                 keys = self._redis.keys(pattern)
                 if keys:
                     self._redis.delete(*keys)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("cache: redis invalidate failed for %s: %s", pattern, e)
         # Memory fallback: simpler prefix match
         to_delete = [k for k in self._memory_fallback if k.startswith(pattern.replace("*", ""))]
         for k in to_delete:
