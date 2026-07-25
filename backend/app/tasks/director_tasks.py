@@ -3,13 +3,14 @@ Director async task — run a multi-shot storyboard in the background and stream
 progress to Redis, so long real-model films (6 shots × ~150s = 15+ min) never
 block an HTTP/SSE connection. The frontend polls GET /director/progress/<job_id>.
 """
-import asyncio
 import json
 import logging
 import os
 import time
 
 from celery_app import app
+
+from app.tasks.common import chdir_backend_root, run_async
 
 logger = logging.getLogger(__name__)
 
@@ -45,22 +46,11 @@ def read_progress(job_id: str) -> dict | None:
         return None
 
 
-def _run_async(coro):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
 @app.task(name="app.tasks.director_tasks.run_director", queue="director_q",
           soft_time_limit=3600, time_limit=3900)
 def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str | None = None):
     """Execute a director plan, persisting live per-step progress to Redis."""
-    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    if backend_dir not in os.getcwd():
-        os.chdir(backend_dir)
+    chdir_backend_root()
 
     from app.director import plan_from_dict, DirectorExecutor
 
@@ -108,7 +98,7 @@ def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str |
                 snapshot("done", done=True, total_ms=ev.get("total_ms"))
 
     try:
-        _run_async(_drive())
+        run_async(_drive())
     except Exception as e:
         logger.exception("[director_task] run failed: %s", e)
         write_progress(job_id, {"job_id": job_id, "status": "failed", "done": True,

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCreationStore } from "@/lib/stores";
-import { submitGeneration, getTaskStatus, type TaskResult } from "@/lib/api";
+import { submitGeneration, pollTask } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { ResultGrid } from "@/components/ResultGrid";
@@ -69,18 +69,6 @@ const LEFT_TOOLS: LeftTool[] = [
 
 function uid() {
   return Math.random().toString(36).slice(2, 10);
-}
-
-async function pollTask(taskId: string, interval: number, maxPolls: number): Promise<TaskResult> {
-  let polls = 0;
-  const poll = async (): Promise<TaskResult> => {
-    if (polls++ > maxPolls) throw new Error("生成超时，请重试");
-    const status = await getTaskStatus(taskId);
-    if (status.status === "completed" || status.status === "failed") return status as TaskResult;
-    await new Promise((r) => setTimeout(r, interval));
-    return poll();
-  };
-  return poll();
 }
 
 function formatTime(s: number) {
@@ -222,7 +210,7 @@ export default function CreateVideoPage() {
 
       const res = await submitGeneration(body);
       setTaskId(res.task_id);
-      const result = await pollTask(res.task_id, 3000, 200);
+      const result = await pollTask(res.task_id, { intervalMs: 3000, maxPolls: 200 });
 
       if (result.status === "failed") throw new Error(result.error_message || "视频生成失败");
 

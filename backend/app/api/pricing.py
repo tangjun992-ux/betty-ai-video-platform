@@ -29,6 +29,28 @@ class PricingPlan(BaseModel):
     badge: Optional[str] = None
 
 
+FEATURE_NAMES = [
+    "Seedance 2.0 全模态视频",
+    "16+ 专业图片模型",
+    "23+ 专业视频模型",
+    "高级唇形同步",
+    "高级图片编辑器",
+    "视频 & 图片放大",
+    "高级运动控制",
+    "商用授权许可",
+    "团队协作",
+    "优先支持",
+]
+
+
+def _features(*excluded: str) -> list[PlanFeature]:
+    """Build the plan feature matrix — every feature is included unless excluded."""
+    unknown = set(excluded) - set(FEATURE_NAMES)
+    if unknown:
+        raise ValueError(f"Unknown pricing features: {sorted(unknown)}")
+    return [PlanFeature(name=n, included=n not in excluded) for n in FEATURE_NAMES]
+
+
 PLANS: list[PricingPlan] = [
     PricingPlan(
         id="starter",
@@ -36,18 +58,10 @@ PLANS: list[PricingPlan] = [
         monthly_price=9.99,
         yearly_price=7.99,
         credits_per_month=1000,
-        features=[
-            PlanFeature(name="Seedance 2.0 全模态视频", included=False),
-            PlanFeature(name="16+ 专业图片模型", included=True),
-            PlanFeature(name="23+ 专业视频模型", included=False),
-            PlanFeature(name="高级唇形同步", included=True),
-            PlanFeature(name="高级图片编辑器", included=True),
-            PlanFeature(name="视频 & 图片放大", included=True),
-            PlanFeature(name="高级运动控制", included=True),
-            PlanFeature(name="商用授权许可", included=False),
-            PlanFeature(name="团队协作", included=False),
-            PlanFeature(name="优先支持", included=False),
-        ],
+        features=_features(
+            "Seedance 2.0 全模态视频", "23+ 专业视频模型",
+            "商用授权许可", "团队协作", "优先支持",
+        ),
     ),
     PricingPlan(
         id="personal",
@@ -55,18 +69,7 @@ PLANS: list[PricingPlan] = [
         monthly_price=24.99,
         yearly_price=19.99,
         credits_per_month=3000,
-        features=[
-            PlanFeature(name="Seedance 2.0 全模态视频", included=True),
-            PlanFeature(name="16+ 专业图片模型", included=True),
-            PlanFeature(name="23+ 专业视频模型", included=True),
-            PlanFeature(name="高级唇形同步", included=True),
-            PlanFeature(name="高级图片编辑器", included=True),
-            PlanFeature(name="视频 & 图片放大", included=True),
-            PlanFeature(name="高级运动控制", included=True),
-            PlanFeature(name="商用授权许可", included=False),
-            PlanFeature(name="团队协作", included=False),
-            PlanFeature(name="优先支持", included=False),
-        ],
+        features=_features("商用授权许可", "团队协作", "优先支持"),
     ),
     PricingPlan(
         id="creator",
@@ -76,18 +79,7 @@ PLANS: list[PricingPlan] = [
         credits_per_month=7000,
         highlighted=True,
         badge="最受欢迎 🔥",
-        features=[
-            PlanFeature(name="Seedance 2.0 全模态视频", included=True),
-            PlanFeature(name="16+ 专业图片模型", included=True),
-            PlanFeature(name="23+ 专业视频模型", included=True),
-            PlanFeature(name="高级唇形同步", included=True),
-            PlanFeature(name="高级图片编辑器", included=True),
-            PlanFeature(name="视频 & 图片放大", included=True),
-            PlanFeature(name="高级运动控制", included=True),
-            PlanFeature(name="商用授权许可", included=True),
-            PlanFeature(name="团队协作", included=True),
-            PlanFeature(name="优先支持", included=True),
-        ],
+        features=_features(),
     ),
     PricingPlan(
         id="pro",
@@ -95,18 +87,7 @@ PLANS: list[PricingPlan] = [
         monthly_price=99.99,
         yearly_price=79.99,
         credits_per_month=15000,
-        features=[
-            PlanFeature(name="Seedance 2.0 全模态视频", included=True),
-            PlanFeature(name="16+ 专业图片模型", included=True),
-            PlanFeature(name="23+ 专业视频模型", included=True),
-            PlanFeature(name="高级唇形同步", included=True),
-            PlanFeature(name="高级图片编辑器", included=True),
-            PlanFeature(name="视频 & 图片放大", included=True),
-            PlanFeature(name="高级运动控制", included=True),
-            PlanFeature(name="商用授权许可", included=True),
-            PlanFeature(name="团队协作", included=True),
-            PlanFeature(name="优先支持", included=True),
-        ],
+        features=_features(),
     ),
 ]
 

@@ -9,11 +9,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from app.db import get_db
 from app.models.task import Task
 from app.models.user import User
-from app.models.billing import UserBalance, Transaction, TransactionType
+from app.services.credits import check_and_deduct_credits
 from app.tasks.image_tasks import generate_image_task
 from app.tasks.video_tasks import generate_video_task
 from app.tasks.pipeline_tasks import run_pipeline
@@ -25,66 +24,6 @@ from app.auth import resolve_user_id
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-
-async def _check_and_deduct_credits(
-    db: AsyncSession, user_id: int, cost: int, task_id: str, model: str
-) -> bool:
-    """Check and deduct credits from user balance. Returns True if successful."""
-    if cost <= 0:
-        return True
-
-    result = await db.execute(select(UserBalance).where(UserBalance.user_id == user_id))
-    balance = result.scalar_one_or_none()
-
-    total_available = 0
-    if balance:
-        total_available = balance.credits + balance.daily_credits
-
-    # Allow first-time users (no balance record) — they start with free trial
-    if balance is None:
-        balance = UserBalance(user_id=user_id, credits=50, daily_credits=10)  # trial credits
-        db.add(balance)
-        await db.flush()
-        total_available = 60
-
-    if total_available < cost:
-        return False
-
-    # Deduct from daily credits first, then purchased
-    remaining = cost
-    credits_before = balance.credits + balance.daily_credits
-
-    if balance.daily_credits > 0:
-        deduct_daily = min(balance.daily_credits, remaining)
-        balance.daily_credits -= deduct_daily
-        remaining -= deduct_daily
-
-    if remaining > 0:
-        balance.credits -= remaining
-
-    balance.total_spent += cost
-    balance.total_tasks += 1
-    credits_after = balance.credits + balance.daily_credits
-
-    # Create transaction record
-    txn = Transaction(
-        user_id=user_id,
-        task_id=task_id,
-        type=TransactionType.CONSUMPTION.value,
-        amount=-cost,
-        balance_before=credits_before,
-        balance_after=credits_after,
-        model_used=model,
-        description=f"Generation task {task_id[:8]}...",
-    )
-    db.add(txn)
-    await db.flush()
-
-    logger.info(
-        f"Credits deducted: user={user_id} cost={cost} "
-        f"balance={credits_before}→{credits_after}"
-    )
-    return True
 
 
 class GenerateRequest(BaseModel):
@@ -222,7 +161,7 @@ async def submit_generation(req: GenerateRequest, db: AsyncSession = Depends(get
     await db.flush()
 
     # Check and deduct credits
-    credits_ok = await _check_and_deduct_credits(
+    credits_ok = await check_and_deduct_credits(
         db=db, user_id=user_id, cost=estimated_cost,
         task_id=task_id, model=estimated_model,
     )
