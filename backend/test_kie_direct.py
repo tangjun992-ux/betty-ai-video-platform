@@ -3,7 +3,9 @@ KIE Adapter Direct Test — Image + Video Generation
 """
 import asyncio, sys, os
 sys.path.insert(0, os.path.dirname(__file__))
-os.environ["KIE_API_KEY"] = "e56cda27611a71ad0ad6548733a9192f"
+
+if not os.getenv("KIE_API_KEY"):
+    sys.exit("KIE_API_KEY is not set — export it before running this script.")
 
 from app.adapters.kie_adapter import KieAdapter
 

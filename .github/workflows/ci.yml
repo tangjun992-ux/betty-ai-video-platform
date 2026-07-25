@@ -29,7 +29,7 @@ jobs:
           pip install -r requirements.txt
           pip install "moto[s3]" pytest
       - name: Self-contained unit tests
-        run: pytest tests/test_moderation.py tests/test_storage.py -q
+        run: pytest tests/test_moderation.py tests/test_storage.py tests/test_security.py -q
       - name: Alembic migrations apply on a fresh DB
         env:
           DATABASE_URL: "sqlite:////tmp/ci_alembic.db"

@@ -6,7 +6,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ${POSTGRES_DB:-aivideo}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -49,11 +49,11 @@ services:
       - "${API_PORT:-8000}:8000"
     environment:
       - ENV=production
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-aivideo}
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set to a unique 32+ char value}
       - KIE_API_KEY=${KIE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - SEEDANCE_API_KEY=${SEEDANCE_API_KEY}
@@ -98,7 +98,7 @@ services:
     command: celery -A celery_app worker --loglevel=info --concurrency=4 -Q celery,image_q,video_q,director_q,pipeline_q,collector_q
     environment:
       - ENV=production
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-aivideo}
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
       - KIE_API_KEY=${KIE_API_KEY}

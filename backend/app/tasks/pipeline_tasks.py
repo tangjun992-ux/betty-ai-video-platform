@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timezone
 
 from celery_app import app
+from app.models.task import Task
 
 from app.services.media_store import persist_results
 
@@ -21,6 +22,12 @@ def _get_db_url():
     elif db_url.startswith("postgresql+asyncpg"):
         db_url = db_url.replace("postgresql+asyncpg", "postgresql")
     return db_url
+
+
+
+# Column names are interpolated into the UPDATE statement, so only real Task
+# columns may ever reach it.
+_TASK_COLUMNS = {c.name for c in Task.__table__.columns}
 
 
 def _update_task(db_task_id: str, **kwargs):
@@ -37,6 +44,8 @@ def _update_task(db_task_id: str, **kwargs):
         task_pk = row[0]
         for field, value in kwargs.items():
             if value is not None:
+                if field not in _TASK_COLUMNS:
+                    raise ValueError(f"unknown task column: {field}")
                 if isinstance(value, (dict, list)):
                     value = json.dumps(value)
                 session.execute(

@@ -15,13 +15,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from celery_app import app
+from app.models.task import Task
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
 FFMPEG_BIN = "/usr/bin/ffmpeg"
+MEDIA_URL_PREFIX = "/api/v1/media/"
 STORAGE_DIR = Path(os.getenv("STORAGE_LOCAL_PATH", "/home/tom/ai-video-platform/backend/storage"))
+
+
+
+# Column names are interpolated into the UPDATE statement, so only real Task
+# columns may ever reach it.
+_TASK_COLUMNS = {c.name for c in Task.__table__.columns}
 
 
 def _get_db_url_sync():
@@ -44,6 +52,8 @@ def _update_task(db_task_id: str, **kwargs):
         task_pk = row[0]
         for field, value in kwargs.items():
             if value is not None:
+                if field not in _TASK_COLUMNS:
+                    raise ValueError(f"unknown task column: {field}")
                 if isinstance(value, (dict, list)):
                     value = json.dumps(value)
                 session.execute(
@@ -80,24 +90,24 @@ def _broadcast_progress(task_id: str, progress: int, stage: str, message: str = 
         pass
 
 
-def _is_local_file(url: str) -> bool:
-    """Check if a URL is a local file path we can access."""
-    if not url:
-        return False
-    # Local storage paths
-    local_prefixes = ["/api/v1/media/", STORAGE_DIR.as_posix(), "/home/tom/ai-video-platform/backend/storage"]
-    return any(url.startswith(p) for p in local_prefixes) or os.path.exists(url)
-
-
 def _resolve_path(url: str) -> str:
-    """Resolve URL to local file path."""
-    if os.path.exists(url):
-        return url
-    # /api/v1/media/videos/filename.mp4 → storage/videos/filename.mp4
-    if url.startswith("/api/v1/media/"):
-        rel = url.replace("/api/v1/media/", "")
-        return (STORAGE_DIR / rel).as_posix()
-    return url
+    """Resolve a media URL to a path inside STORAGE_DIR. Anything that escapes
+    the media root (absolute paths, `..` traversal) resolves to "", so the
+    renderer can never read files outside the media storage directory."""
+    if not url or not url.startswith(MEDIA_URL_PREFIX):
+        return ""
+    rel = url[len(MEDIA_URL_PREFIX):].split("?", 1)[0].lstrip("/")
+    root = STORAGE_DIR.resolve()
+    candidate = (root / rel).resolve()
+    if candidate == root or root not in candidate.parents:
+        return ""
+    return candidate.as_posix()
+
+
+def _is_local_file(url: str) -> bool:
+    """Check if a URL points at a media file we can read locally."""
+    resolved = _resolve_path(url)
+    return bool(resolved) and os.path.exists(resolved)
 
 
 @app.task(bind=True, max_retries=2, default_retry_delay=30)
@@ -182,7 +192,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
                     out_file = tmp / f"clip_{i:03d}.mp4"
                     trimmed_files.append(out_file)
 
-                    if os.path.exists(resolved):
+                    if resolved and os.path.exists(resolved):
                         cmd = [
                             FFMPEG_BIN, "-y", "-ss", str(start), "-t", str(duration),
                             "-i", resolved,

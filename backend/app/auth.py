@@ -19,6 +19,7 @@ from sqlalchemy import select
 # Security
 # Security — using hashlib to avoid passlib/bcrypt compatibility issues
 import hashlib
+import hmac
 import secrets
 
 def _hash_password(password: str, salt: str = "") -> str:
@@ -27,8 +28,11 @@ def _hash_password(password: str, salt: str = "") -> str:
     return f"{salt}${hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000).hex()}"
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not hashed_password or "$" not in hashed_password:
+        return False
     salt, hash_hex = hashed_password.split("$", 1)
-    return hashlib.pbkdf2_hmac('sha256', plain_password.encode(), salt.encode(), 100000).hex() == hash_hex
+    candidate = hashlib.pbkdf2_hmac('sha256', plain_password.encode(), salt.encode(), 100000).hex()
+    return hmac.compare_digest(candidate, hash_hex)
 
 def get_password_hash(password: str) -> str:
     return _hash_password(password)

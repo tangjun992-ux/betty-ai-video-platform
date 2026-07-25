@@ -10,6 +10,7 @@ from typing import Optional
 from app.db import get_db
 from app.models.task import Task
 from app.models.billing import Transaction, TransactionType
+from app.rate_limiter import rate_limit
 
 router = APIRouter()
 
@@ -238,7 +239,8 @@ async def explore_gallery(
     return {"items": paged, "total": total, "limit": limit, "offset": offset, "styles": STYLE_OPTIONS}
 
 
-@router.post("/{item_key}/like", summary="点赞作品")
+@router.post("/{item_key}/like", summary="点赞作品",
+             dependencies=[Depends(rate_limit("gallery_like", rpm=30, rph=300))])
 async def like_item(item_key: str, undo: bool = Query(default=False), db: AsyncSession = Depends(get_db)):
     """Increment (or undo) a community like for a gallery item. Persisted in
     gallery_likes so counts survive restarts (real reactions, not seeded)."""
@@ -261,7 +263,8 @@ async def like_item(item_key: str, undo: bool = Query(default=False), db: AsyncS
     return {"item_key": item_key, "likes": _base_likes(task_id) + stored, "liked": not undo}
 
 
-@router.post("/{item_key}/report", summary="举报作品")
+@router.post("/{item_key}/report", summary="举报作品",
+             dependencies=[Depends(rate_limit("gallery_report", rpm=10, rph=60))])
 async def report_item(item_key: str, db: AsyncSession = Depends(get_db)):
     """Community report. Increments the report count and auto-hides the item
     once it reaches the threshold (takedown). Idempotent-ish per call."""

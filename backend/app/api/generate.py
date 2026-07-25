@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db import get_db
@@ -21,6 +21,7 @@ from app.router import router as prompt_router
 from app.prompt_enhancer import enhancer as prompt_enhancer
 from app.rate_limiter import rate_limit
 from app.auth import resolve_user_id
+from app.services.media_store import MEDIA_URL_PREFIX, is_safe_remote_url
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -99,8 +100,20 @@ class GenerateRequest(BaseModel):
     template: Optional[str] = Field(default=None, description="可选模板名称")
     webhook_url: Optional[str] = Field(default=None, description="回调地址")
     enhance_prompt: Optional[bool] = Field(default=True, description="是否自动增强提示词")
-    image_url: Optional[str] = Field(default=None, description="参考图片URL（用于图转视频）")
+    image_url: Optional[str] = Field(default=None, max_length=2000, description="参考图片URL（用于图转视频）")
     seed: Optional[int] = Field(default=None, ge=0, le=2147483647, description="随机种子（复现同一结果；留空则随机）")
+
+    @field_validator("webhook_url", "image_url")
+    @classmethod
+    def _no_internal_urls(cls, v: Optional[str]) -> Optional[str]:
+        """Reject URLs the server would fetch/call that point at internal hosts."""
+        if not v:
+            return v
+        if f"{MEDIA_URL_PREFIX}/" in v:  # our own served media
+            return v
+        if not is_safe_remote_url(v):
+            raise ValueError("URL 必须是公网 http(s) 地址")
+        return v
 
 
 class GenerateResponse(BaseModel):
@@ -350,8 +363,10 @@ async def edit_image_tool(
                 data = f.read()
             ctype = "image/png"
         else:
+            if not is_safe_remote_url(image_url):
+                raise HTTPException(status_code=400, detail="image_url 必须是公网 http(s) 地址")
             import httpx
-            async with httpx.AsyncClient(timeout=60) as c:
+            async with httpx.AsyncClient(timeout=60, follow_redirects=False) as c:
                 r = await c.get(image_url)
                 r.raise_for_status()
                 data = r.content

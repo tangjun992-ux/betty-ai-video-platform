@@ -211,10 +211,17 @@ async def upload_to_library(
 
 
 @router.delete("/{item_id}", summary="删除内容库条目")
-async def delete_library_item(item_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_library_item(item_id: str, db: AsyncSession = Depends(get_db),
+                              user_id: int = Depends(resolve_user_id)):
+    def _own(col):
+        if user_id == 0:
+            return (col == 0) | (col.is_(None))
+        return col == user_id
+
     if item_id.startswith("up_"):
         asset_id = item_id[3:]
-        res = await db.execute(select(Asset).where(Asset.asset_id == asset_id))
+        res = await db.execute(select(Asset).where(
+            Asset.asset_id == asset_id, _own(Asset.user_id)))
         asset = res.scalar_one_or_none()
         if not asset:
             raise HTTPException(status_code=404, detail="条目不存在")
@@ -237,7 +244,8 @@ async def delete_library_item(item_id: str, db: AsyncSession = Depends(get_db)):
             idx = int(idx_str)
         except ValueError:
             raise HTTPException(status_code=400, detail="无效的条目 ID")
-        res = await db.execute(select(Task).where(Task.task_id == task_id))
+        res = await db.execute(select(Task).where(
+            Task.task_id == task_id, _own(Task.user_id)))
         task = res.scalar_one_or_none()
         if not task:
             raise HTTPException(status_code=404, detail="条目不存在")

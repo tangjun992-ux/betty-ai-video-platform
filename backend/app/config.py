@@ -2,6 +2,10 @@ import os
 from pydantic_settings import BaseSettings
 from typing import Optional
 
+# Placeholder secrets that must never be used outside local development.
+DEV_JWT_SECRET = "dev-secret-change-in-production-please!"
+INSECURE_JWT_SECRETS = {DEV_JWT_SECRET, "change-me-in-production", "changeme", "secret"}
+
 class Settings(BaseSettings):
     APP_NAME: str = "AI Video Platform"
     APP_VERSION: str = "0.1.0"
@@ -20,7 +24,7 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
 
     # JWT
-    JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-secret-change-in-production-please!")
+    JWT_SECRET: str = os.getenv("JWT_SECRET", DEV_JWT_SECRET)
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = 24
 
@@ -35,6 +39,25 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return (self.ENV or "").lower() in ("production", "prod")
+
+    @property
+    def cors_allows_credentials(self) -> bool:
+        """Credentials must never be combined with a wildcard origin."""
+        return "*" not in self.CORS_ORIGINS
+
+    def validate_production(self) -> None:
+        """Fail fast when the deployment is production but still carries local
+        development defaults that would be exploitable (forgeable JWTs, a
+        wildcard CORS origin)."""
+        if not self.is_production:
+            return
+        problems = []
+        if self.JWT_SECRET in INSECURE_JWT_SECRETS or len(self.JWT_SECRET) < 32:
+            problems.append("JWT_SECRET must be set to a unique value of at least 32 characters")
+        if "*" in self.CORS_ORIGINS:
+            problems.append("CORS_ORIGINS must list explicit origins (no '*')")
+        if problems:
+            raise RuntimeError("Insecure production configuration: " + "; ".join(problems))
 
     # KIE.ai Unified API
     KIE_API_KEY: str = os.getenv("KIE_API_KEY", "")
