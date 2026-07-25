@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models.task import Task
-from app.models.billing import UserBalance, Transaction, TransactionType
+from app.services.credits import check_and_deduct_credits
 from app.tasks.motion_tasks import process_motion_task
 
 logger = logging.getLogger(__name__)
@@ -44,68 +44,6 @@ class MotionResponse(BaseModel):
 MOTION_COST = 6  # credits
 MOTION_ESTIMATED_TIME = 90  # seconds
 
-
-async def _check_and_deduct_credits(
-    db: AsyncSession, user_id: int, cost: int, task_id: str, model: str
-) -> bool:
-    """Check and deduct credits from user balance. Returns True if successful."""
-    from sqlalchemy import select
-
-    if cost <= 0:
-        return True
-
-    result = await db.execute(select(UserBalance).where(UserBalance.user_id == user_id))
-    balance = result.scalar_one_or_none()
-
-    total_available = 0
-    if balance:
-        total_available = balance.credits + balance.daily_credits
-
-    # Allow first-time users (no balance record) — they start with free trial
-    if balance is None:
-        balance = UserBalance(user_id=user_id, credits=50, daily_credits=10)
-        db.add(balance)
-        await db.flush()
-        total_available = 60
-
-    if total_available < cost:
-        return False
-
-    # Deduct from daily credits first, then purchased
-    remaining = cost
-    credits_before = balance.credits + balance.daily_credits
-
-    if balance.daily_credits > 0:
-        deduct_daily = min(balance.daily_credits, remaining)
-        balance.daily_credits -= deduct_daily
-        remaining -= deduct_daily
-
-    if remaining > 0:
-        balance.credits -= remaining
-
-    balance.total_spent += cost
-    balance.total_tasks += 1
-    credits_after = balance.credits + balance.daily_credits
-
-    # Create transaction record
-    txn = Transaction(
-        user_id=user_id,
-        task_id=task_id,
-        type=TransactionType.CONSUMPTION.value,
-        amount=-cost,
-        balance_before=credits_before,
-        balance_after=credits_after,
-        model_used=model,
-        description=f"Motion control task {task_id[:8]}...",
-    )
-    db.add(txn)
-    await db.flush()
-
-    logger.info(
-        f"Credits deducted (motion): user={user_id} cost={cost} "
-        f"balance={credits_before}→{credits_after}"
-    )
-    return True
 
 
 # ─── Endpoints ─────────────────────────────────────────
@@ -165,9 +103,10 @@ async def submit_motion(
     await db.flush()
 
     # Check and deduct credits
-    credits_ok = await _check_and_deduct_credits(
+    credits_ok = await check_and_deduct_credits(
         db=db, user_id=0, cost=MOTION_COST,
         task_id=task_id, model=model,
+        description=f"Motion control task {task_id[:8]}...",
     )
     if not credits_ok:
         task.status = "failed"

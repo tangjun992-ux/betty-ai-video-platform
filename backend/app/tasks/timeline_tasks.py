@@ -4,7 +4,6 @@ Timeline Render Celery Task — FFmpeg 视频合成
 Real video composition using FFmpeg concat demuxer + transition effects.
 Falls back to simulation if FFmpeg unavailable or clips are external URLs.
 """
-import asyncio
 import json
 import logging
 import os
@@ -15,69 +14,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from celery_app import app
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session
+
+from app.tasks.common import broadcast_progress, chdir_backend_root, update_task
 
 logger = logging.getLogger(__name__)
 
 FFMPEG_BIN = "/usr/bin/ffmpeg"
 STORAGE_DIR = Path(os.getenv("STORAGE_LOCAL_PATH", "/home/tom/ai-video-platform/backend/storage"))
-
-
-def _get_db_url_sync():
-    db_url = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
-    if db_url.startswith("sqlite+aiosqlite"):
-        db_url = db_url.replace("sqlite+aiosqlite", "sqlite")
-    elif db_url.startswith("postgresql+asyncpg"):
-        db_url = db_url.replace("postgresql+asyncpg", "postgresql")
-    return db_url
-
-
-def _update_task(db_task_id: str, **kwargs):
-    db_url = _get_db_url_sync()
-    engine = create_engine(db_url)
-    with Session(engine) as session:
-        stmt = text("SELECT id FROM tasks WHERE task_id = :tid")
-        row = session.execute(stmt, {"tid": db_task_id}).first()
-        if not row:
-            return None
-        task_pk = row[0]
-        for field, value in kwargs.items():
-            if value is not None:
-                if isinstance(value, (dict, list)):
-                    value = json.dumps(value)
-                session.execute(
-                    text(f"UPDATE tasks SET {field} = :val WHERE id = :id"),
-                    {"val": value, "id": task_pk},
-                )
-        session.commit()
-        return task_pk
-
-
-def _run_async(coro):
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
-
-
-def _broadcast_progress(task_id: str, progress: int, stage: str, message: str = ""):
-    try:
-        from app.api.websocket import broadcast_task_progress
-
-        async def _send():
-            await broadcast_task_progress(task_id, {
-                "type": "progress",
-                "progress": progress,
-                "current_stage": stage,
-                "message": message or stage,
-            })
-
-        _run_async(_send())
-    except Exception:
-        pass
 
 
 def _is_local_file(url: str) -> bool:
@@ -111,9 +54,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
     3. Concatenate all processed clips
     4. Output final video
     """
-    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    if backend_dir not in os.getcwd():
-        os.chdir(backend_dir)
+    chdir_backend_root()
 
     logger.info(f"Timeline render started: task={db_task_id} project={project_id}")
 
@@ -128,7 +69,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
         from app.api.timeline import _timeline_projects
         project = _timeline_projects.get(project_id)
         if not project:
-            _update_task(db_task_id, status="failed", error_message=f"Project not found: {project_id}")
+            update_task(db_task_id, status="failed", error_message=f"Project not found: {project_id}")
             return {"status": "failed", "error": "Project not found"}
     except ImportError:
         logger.warning("Cannot import timeline store, using simulation")
@@ -136,7 +77,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
 
     clips = project.get("clips", [])
     if not clips:
-        _update_task(db_task_id, status="failed", error_message="No clips in project")
+        update_task(db_task_id, status="failed", error_message="No clips in project")
         return {"status": "failed", "error": "No clips"}
 
     # Check if clips have accessible local files
@@ -153,15 +94,15 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"timeline_{db_task_id[:8]}.mp4"
 
-        _broadcast_progress(db_task_id, 10, "preparing", "准备渲染管线...")
-        _update_task(db_task_id, status="generating", progress=10, current_stage="preparing")
+        broadcast_progress(db_task_id, 10, "preparing", "准备渲染管线...")
+        update_task(db_task_id, status="generating", progress=10, current_stage="preparing")
 
         clip_count = len(clips)
 
         if len(local_clips) >= 1:
             # Real FFmpeg rendering with local clips
-            _broadcast_progress(db_task_id, 20, "trimming", f"裁剪片段 (共{clip_count}个)...")
-            _update_task(db_task_id, progress=20, current_stage="trimming")
+            broadcast_progress(db_task_id, 20, "trimming", f"裁剪片段 (共{clip_count}个)...")
+            update_task(db_task_id, progress=20, current_stage="trimming")
 
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmp = Path(tmpdir)
@@ -170,7 +111,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
 
                 for i, clip in enumerate(clips):
                     pct = 20 + int((i / max(clip_count, 1)) * 50)
-                    _broadcast_progress(db_task_id, pct, "processing", f"处理片段 {i+1}/{clip_count}...")
+                    broadcast_progress(db_task_id, pct, "processing", f"处理片段 {i+1}/{clip_count}...")
 
                     url = clip.get("url", "")
                     start = float(clip.get("start", 0))
@@ -188,7 +129,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
                             "-i", resolved,
                             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                             "-c:a", "aac", "-b:a", "128k",
-                            "-vf", f"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
+                            "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
                             str(out_file),
                         ]
                         subprocess.run(cmd, capture_output=True, timeout=60)
@@ -207,8 +148,8 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
                             f.write(f"file '{out_file}'\n")
 
                 # Concatenate all clips
-                _broadcast_progress(db_task_id, 75, "compositing", "合成最终视频...")
-                _update_task(db_task_id, progress=75, current_stage="compositing")
+                broadcast_progress(db_task_id, 75, "compositing", "合成最终视频...")
+                update_task(db_task_id, progress=75, current_stage="compositing")
 
                 concat_cmd = [
                     FFMPEG_BIN, "-y", "-f", "concat", "-safe", "0",
@@ -224,18 +165,18 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
                     logger.error(f"FFmpeg concat failed: {stderr}")
                     raise RuntimeError(f"视频合成失败: {stderr}")
 
-                _broadcast_progress(db_task_id, 90, "finalizing", "最终处理...")
-                _update_task(db_task_id, progress=90, current_stage="finalizing")
+                broadcast_progress(db_task_id, 90, "finalizing", "最终处理...")
+                update_task(db_task_id, progress=90, current_stage="finalizing")
                 time.sleep(0.5)
 
                 result_url = f"/api/v1/media/renders/timeline_{db_task_id[:8]}.mp4"
         else:
             # All clips are external URLs — simulate with progress
-            _broadcast_progress(db_task_id, 20, "preparing", "外部素材，模拟渲染...")
+            broadcast_progress(db_task_id, 20, "preparing", "外部素材，模拟渲染...")
             steps = [(35, "processing"), (55, "compositing"), (75, "rendering"), (90, "finalizing")]
             for pct, stage in steps:
-                _broadcast_progress(db_task_id, pct, stage, f"处理中...")
-                _update_task(db_task_id, progress=pct, current_stage=stage)
+                broadcast_progress(db_task_id, pct, stage, "处理中...")
+                update_task(db_task_id, progress=pct, current_stage=stage)
                 time.sleep(1)
             result_url = clips[0].get("url", "")
 
@@ -251,14 +192,14 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
             "output_url": result_url,
         }
 
-        _update_task(
+        update_task(
             db_task_id, status="completed", progress=100, current_stage="completed",
             completed_at=datetime.now(timezone.utc),
             results=json.dumps(results),
             result_url=result_url,
             actual_cost=4,
         )
-        _broadcast_progress(db_task_id, 100, "completed", "时间轴渲染完成！")
+        broadcast_progress(db_task_id, 100, "completed", "时间轴渲染完成！")
 
         logger.info(f"Timeline render completed: task={db_task_id}")
         return {"status": "completed", "result_url": result_url}
@@ -280,27 +221,27 @@ def _simulate_render(db_task_id: str):
         (85, "finalizing", "最终编码压缩..."),
     ]
     for pct, stage, msg in steps:
-        _broadcast_progress(db_task_id, pct, stage, msg)
-        _update_task(db_task_id, status="generating", progress=pct, current_stage=stage)
+        broadcast_progress(db_task_id, pct, stage, msg)
+        update_task(db_task_id, status="generating", progress=pct, current_stage=stage)
         time.sleep(1)
 
     result_url = ""
-    _update_task(
+    update_task(
         db_task_id, status="completed", progress=100, current_stage="completed",
         completed_at=datetime.now(timezone.utc),
         result_url=result_url,
         results=json.dumps({"mode": "simulation", "output_url": result_url}),
         actual_cost=4,
     )
-    _broadcast_progress(db_task_id, 100, "completed", "渲染完成（模拟模式）")
+    broadcast_progress(db_task_id, 100, "completed", "渲染完成（模拟模式）")
     return {"status": "completed", "mode": "simulation"}
 
 
 def _mark_failed(db_task_id: str, error_msg: str) -> dict:
     logger.error(f"Timeline render failed: {db_task_id}: {error_msg}")
-    _update_task(
+    update_task(
         db_task_id, status="failed", progress=0, current_stage="failed",
         error_message=error_msg, completed_at=datetime.now(timezone.utc),
     )
-    _broadcast_progress(db_task_id, 0, "failed", error_msg)
+    broadcast_progress(db_task_id, 0, "failed", error_msg)
     return {"status": "failed", "error": error_msg}

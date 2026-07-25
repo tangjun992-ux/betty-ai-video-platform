@@ -1,14 +1,19 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
 import { useAuthStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
 import { register, trackOnboarding } from "@/lib/api";
-import { BrandMark } from "@/components/BrandLogo";
+import {
+  AuthCard,
+  AuthField,
+  AuthForm,
+  AuthSubmitButton,
+  PasswordToggle,
+} from "@/components/auth/AuthForm";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -65,217 +70,90 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Background Effects */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-accent-cyan/[0.04] rounded-full blur-[120px]" />
-        <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-violet-500/[0.04] rounded-full blur-[100px]" />
-        <div
-          className="absolute inset-0 opacity-[0.02]"
-          style={{
-            backgroundImage:
-              "linear-gradient(hsl(var(--primary)/0.5) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--primary)/0.5) 1px, transparent 1px)",
-            backgroundSize: "60px 60px",
-            maskImage:
-              "radial-gradient(ellipse 60% 50% at 50% 50%, black 30%, transparent 70%)",
+    <AuthCard
+      title="创建账户"
+      subtitle="开始你的 AI 创作之旅"
+      glowSide="right"
+      footer={
+        <>
+          已有账号？{" "}
+          <Link
+            href="/auth/login"
+            className="text-brand hover:text-brand-strong font-medium transition-colors"
+          >
+            登录
+          </Link>
+        </>
+      }
+    >
+      <AuthForm onSubmit={handleSubmit} spacing="space-y-4">
+        <AuthField
+          label="用户名"
+          icon={User}
+          error={errors.username}
+          type="text"
+          value={username}
+          onChange={(e) => {
+            setUsername(e.target.value);
+            if (errors.username) setErrors((p) => ({ ...p, username: undefined }));
           }}
+          placeholder="你的用户名"
+          autoComplete="username"
         />
-      </div>
 
-      {/* Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 24, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-md"
-      >
-        <div className="glass-card shadow-elevation-lg p-8 md:p-10">
-          {/* Logo + Title */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="text-center mb-8"
-          >
-            <BrandMark className="w-14 h-14 mx-auto mb-4 shadow-button-glow rounded-2xl" />
-            <h1 className="text-2xl font-bold text-text-primary mb-1">创建账户</h1>
-            <p className="text-sm text-text-secondary">开始你的 AI 创作之旅</p>
-          </motion.div>
+        <AuthField
+          label="邮箱地址"
+          icon={Mail}
+          error={errors.email}
+          type="email"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            if (errors.email) setErrors((p) => ({ ...p, email: undefined }));
+          }}
+          placeholder="your@email.com"
+          autoComplete="email"
+        />
 
-          {/* Form */}
-          <motion.form
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            onSubmit={handleSubmit}
-            className="space-y-4"
-          >
-            {/* Username */}
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                用户名
-              </label>
-              <div className="relative">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary/50" />
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value);
-                    if (errors.username) setErrors((p) => ({ ...p, username: undefined }));
-                  }}
-                  placeholder="你的用户名"
-                  className="input-primary pl-10"
-                  autoComplete="username"
-                />
-              </div>
-              {errors.username && (
-                <motion.p
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-xs text-destructive mt-1.5"
-                >
-                  {errors.username}
-                </motion.p>
-              )}
-            </div>
+        <AuthField
+          label="密码"
+          icon={Lock}
+          error={errors.password}
+          className="pr-10"
+          type={showPassword ? "text" : "password"}
+          value={password}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            if (errors.password) setErrors((p) => ({ ...p, password: undefined }));
+          }}
+          placeholder="至少 6 位密码"
+          autoComplete="new-password"
+          trailing={
+            <PasswordToggle
+              visible={showPassword}
+              onToggle={() => setShowPassword(!showPassword)}
+              EyeIcon={Eye}
+              EyeOffIcon={EyeOff}
+            />
+          }
+        />
 
-            {/* Email */}
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                邮箱地址
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary/50" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (errors.email) setErrors((p) => ({ ...p, email: undefined }));
-                  }}
-                  placeholder="your@email.com"
-                  className="input-primary pl-10"
-                  autoComplete="email"
-                />
-              </div>
-              {errors.email && (
-                <motion.p
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-xs text-destructive mt-1.5"
-                >
-                  {errors.email}
-                </motion.p>
-              )}
-            </div>
+        <AuthField
+          label="确认密码"
+          icon={Lock}
+          error={errors.confirmPassword}
+          type={showPassword ? "text" : "password"}
+          value={confirmPassword}
+          onChange={(e) => {
+            setConfirmPassword(e.target.value);
+            if (errors.confirmPassword) setErrors((p) => ({ ...p, confirmPassword: undefined }));
+          }}
+          placeholder="再次输入密码"
+          autoComplete="new-password"
+        />
 
-            {/* Password */}
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                密码
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary/50" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (errors.password) setErrors((p) => ({ ...p, password: undefined }));
-                  }}
-                  placeholder="至少 6 位密码"
-                  className="input-primary pl-10 pr-10"
-                  autoComplete="new-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-text-secondary/50 hover:text-text-secondary transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {errors.password && (
-                <motion.p
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-xs text-destructive mt-1.5"
-                >
-                  {errors.password}
-                </motion.p>
-              )}
-            </div>
-
-            {/* Confirm Password */}
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                确认密码
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary/50" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => {
-                    setConfirmPassword(e.target.value);
-                    if (errors.confirmPassword)
-                      setErrors((p) => ({ ...p, confirmPassword: undefined }));
-                  }}
-                  placeholder="再次输入密码"
-                  className="input-primary pl-10"
-                  autoComplete="new-password"
-                />
-              </div>
-              {errors.confirmPassword && (
-                <motion.p
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="text-xs text-destructive mt-1.5"
-                >
-                  {errors.confirmPassword}
-                </motion.p>
-              )}
-            </div>
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="btn-primary w-full h-11 text-base mt-2"
-            >
-              {loading ? (
-                <motion.span
-                  animate={{ rotate: 360 }}
-                  transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-                  className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
-                />
-              ) : (
-                <>
-                  <UserPlus className="w-4 h-4" />
-                  注册
-                </>
-              )}
-            </button>
-          </motion.form>
-
-          {/* Footer Link */}
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            className="text-center text-sm text-text-secondary mt-6"
-          >
-            已有账号？{" "}
-            <Link
-              href="/auth/login"
-              className="text-brand hover:text-brand-strong font-medium transition-colors"
-            >
-              登录
-            </Link>
-          </motion.p>
-        </div>
-      </motion.div>
-    </div>
+        <AuthSubmitButton loading={loading} icon={UserPlus} label="注册" className="mt-2" />
+      </AuthForm>
+    </AuthCard>
   );
 }

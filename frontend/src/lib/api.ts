@@ -214,6 +214,38 @@ export async function getTaskStatus(taskId: string, timeoutMs = 15000): Promise<
   return res.json();
 }
 
+export interface PollTaskOptions {
+  intervalMs?: number;
+  maxPolls?: number;
+  /** Called on every poll with the server-reported progress (capped at 99) and stage. */
+  onProgress?: (progress: number | null, stage: string | null) => void;
+}
+
+/** Poll a task until it completes or fails, throwing when the poll budget runs out. */
+export async function pollTask(
+  taskId: string,
+  { intervalMs = 2000, maxPolls = 150, onProgress }: PollTaskOptions = {},
+): Promise<TaskResult> {
+  for (let polls = 0; polls <= maxPolls; polls++) {
+    const status = await getTaskStatus(taskId);
+
+    if (onProgress) {
+      const progress =
+        "progress" in status && typeof status.progress === "number"
+          ? Math.min(status.progress, 99)
+          : null;
+      const stage = "current_stage" in status && status.current_stage ? status.current_stage : null;
+      onProgress(progress, stage);
+    }
+
+    if (status.status === "completed" || status.status === "failed") {
+      return status as TaskResult;
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error("生成超时，请重试");
+}
+
 /** Upload an image and return the URL */
 export async function uploadImage(file: File): Promise<{ url: string }> {
   const form = new FormData();

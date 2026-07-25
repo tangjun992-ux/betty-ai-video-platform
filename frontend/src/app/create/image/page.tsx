@@ -17,7 +17,7 @@ import { CosmicParamPanel, CosmicSlider, CosmicSelect } from "@/components/cosmi
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { submitGeneration, getTaskStatus, trackOnboarding, type GenerateResponse, type TaskResult } from "@/lib/api";
+import { submitGeneration, pollTask, trackOnboarding, type GenerateResponse } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // ═══════════════════════════════════════════════════════════
@@ -138,6 +138,11 @@ export default function CreateImagePage() {
 
   // ── Handlers ─────────────────────────────────────────
 
+  const reportProgress = useCallback((value: number | null, stage: string | null) => {
+    if (value !== null) setProgress(value);
+    if (stage) setProgressStage(stage);
+  }, []);
+
   const handleAddReference = useCallback((file: File) => {
     const preview = URL.createObjectURL(file);
     addReference(file, preview, "image");
@@ -192,30 +197,7 @@ export default function CreateImagePage() {
       setProgressStage("模型推理中...");
 
       // 2) Poll until complete
-      const pollInterval = 2000;
-      const maxPolls = 150; // 5 minutes max
-      let polls = 0;
-
-      const poll = async (): Promise<TaskResult> => {
-        if (polls++ > maxPolls) throw new Error("生成超时，请重试");
-        const status = await getTaskStatus(res.task_id);
-
-        // Update progress from server
-        if ("progress" in status && typeof status.progress === "number") {
-          setProgress(Math.min(status.progress, 99));
-        }
-        if ("current_stage" in status && status.current_stage) {
-          setProgressStage(status.current_stage);
-        }
-
-        if (status.status === "completed" || status.status === "failed") {
-          return status as TaskResult;
-        }
-        await new Promise((r) => setTimeout(r, pollInterval));
-        return poll();
-      };
-
-      const result = await poll();
+      const result = await pollTask(res.task_id, { onProgress: reportProgress });
       setProgress(100);
 
       if (result.status === "failed") {
@@ -260,7 +242,7 @@ export default function CreateImagePage() {
   }, [
     prompt, selectedModel, quality, resolution, aspectRatio, count,
     style, creativity, submitting, addRecentPrompt, addResult, toast,
-    user?.id, completeOnboarding,
+    user?.id, completeOnboarding, reportProgress,
   ]);
 
   // 单资产迭代：变体(同 prompt/model，新种子×4) 或 复现(同种子)
@@ -280,17 +262,7 @@ export default function CreateImagePage() {
         ...(mode === "reproduce" ? { seed: src.seed } : {}),
       });
       setTaskId(res.task_id);
-      let polls = 0;
-      const poll = async (): Promise<TaskResult> => {
-        if (polls++ > 150) throw new Error("生成超时");
-        const s = await getTaskStatus(res.task_id);
-        if ("progress" in s && typeof s.progress === "number") setProgress(Math.min(s.progress, 99));
-        if ("current_stage" in s && s.current_stage) setProgressStage(s.current_stage);
-        if (s.status === "completed" || s.status === "failed") return s as TaskResult;
-        await new Promise((r) => setTimeout(r, 2000));
-        return poll();
-      };
-      const result = await poll();
+      const result = await pollTask(res.task_id, { onProgress: reportProgress });
       setProgress(100);
       if (result.status === "failed") throw new Error(result.error_message || "生成失败");
       for (const r of (result.results || [])) {
@@ -357,27 +329,7 @@ export default function CreateImagePage() {
         setProgress(5);
         setProgressStage("模型推理中...");
 
-        const pollInterval = 2000;
-        const maxPolls = 150;
-        let polls = 0;
-
-        const poll = async () => {
-          if (polls++ > maxPolls) throw new Error("生成超时，请重试");
-          const status = await getTaskStatus(res.task_id);
-          if ("progress" in status && typeof status.progress === "number") {
-            setProgress(Math.min(status.progress, 99));
-          }
-          if ("current_stage" in status && status.current_stage) {
-            setProgressStage(status.current_stage);
-          }
-          if (status.status === "completed" || status.status === "failed") {
-            return status as TaskResult;
-          }
-          await new Promise(r => setTimeout(r, pollInterval));
-          return poll();
-        };
-
-        const result = await poll();
+        const result = await pollTask(res.task_id, { onProgress: reportProgress });
         setProgress(100);
 
         if (result.status === "failed") {
@@ -410,7 +362,7 @@ export default function CreateImagePage() {
         setEstimatedSeconds(null);
       }
     }
-  }, [selectedModel, quality, aspectRatio, count, style, creativity, addRecentPrompt, addResult, toast, setPrompt]);
+  }, [selectedModel, quality, aspectRatio, count, style, creativity, addRecentPrompt, addResult, toast, setPrompt, reportProgress]);
 
   // ── Derived Values ───────────────────────────────────
   const imageResults = results.filter((r) => r.type === "image");

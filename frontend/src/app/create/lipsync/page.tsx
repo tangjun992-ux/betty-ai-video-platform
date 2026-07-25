@@ -8,7 +8,7 @@ import { ErrorState, Empty } from "@/components/StatusStates";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
-import { API_BASE } from "@/lib/api";
+import { API_BASE, pollTask } from "@/lib/api";
 
 const SAMPLE_VOICES = [
   { id: "zh-CN-XiaoxiaoNeural", name: "晓晓", gender: "女", desc: "温柔自然" },
@@ -74,18 +74,7 @@ export default function LipsyncPage() {
       const data = await res.json();
       setTaskId(data.task_id);
 
-      // Poll
-      const maxPolls = 90;
-      let polls = 0;
-      const poll = async (): Promise<any> => {
-        if (polls++ > maxPolls) throw new Error("生成超时");
-        const status = await fetch(`${API_BASE}/tasks/${data.task_id}`).then(r => r.json());
-        if (status.status === "completed" || status.status === "failed") return status;
-        await new Promise(r => setTimeout(r, 2000));
-        return poll();
-      };
-
-      const result = await poll();
+      const result = await pollTask(data.task_id, { maxPolls: 90 });
       if (result.status === "failed") throw new Error(result.error_message || "生成失败");
 
       toast.success("唇形同步完成", "视频已生成，正在跳转...");

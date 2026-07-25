@@ -1,7 +1,6 @@
 """
 Multi-step pipeline tasks — sequential image-to-video workflows.
 """
-import asyncio
 import json
 import logging
 import os
@@ -10,41 +9,9 @@ from datetime import datetime, timezone
 from celery_app import app
 
 from app.services.media_store import persist_results
+from app.tasks.common import load_adapters, run_async, update_task
 
 logger = logging.getLogger(__name__)
-
-
-def _get_db_url():
-    db_url = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
-    if db_url.startswith("sqlite+aiosqlite"):
-        db_url = db_url.replace("sqlite+aiosqlite", "sqlite")
-    elif db_url.startswith("postgresql+asyncpg"):
-        db_url = db_url.replace("postgresql+asyncpg", "postgresql")
-    return db_url
-
-
-def _update_task(db_task_id: str, **kwargs):
-    from sqlalchemy import create_engine, text
-    from sqlalchemy.orm import Session
-
-    db_url = _get_db_url()
-    engine = create_engine(db_url)
-    with Session(engine) as session:
-        stmt = text("SELECT id FROM tasks WHERE task_id = :tid")
-        row = session.execute(stmt, {"tid": db_task_id}).first()
-        if not row:
-            return None
-        task_pk = row[0]
-        for field, value in kwargs.items():
-            if value is not None:
-                if isinstance(value, (dict, list)):
-                    value = json.dumps(value)
-                session.execute(
-                    text(f"UPDATE tasks SET {field} = :val WHERE id = :id"),
-                    {"val": value, "id": task_pk},
-                )
-        session.commit()
-        return task_pk
 
 
 @app.task(
@@ -69,7 +36,7 @@ def run_pipeline(
         "total_steps": total_steps,
         "current_step": 0,
     })
-    _update_task(
+    update_task(
         db_task_id,
         status="generating",
         progress=5,
@@ -93,7 +60,7 @@ def run_pipeline(
             "total_steps": total_steps,
             "current_step": i + 1,
         })
-        _update_task(db_task_id, progress=progress, current_stage=f"step_{i+1}_{step_type}")
+        update_task(db_task_id, progress=progress, current_stage=f"step_{i+1}_{step_type}")
 
         # Pass previous step output if needed
         extra = {}
@@ -123,7 +90,7 @@ def run_pipeline(
         total_cost += step_result.get("cost", 0)
 
     results = persist_results(results)
-    _update_task(
+    update_task(
         db_task_id,
         status="completed",
         progress=100,
@@ -138,9 +105,7 @@ def run_pipeline(
 
 def _run_image(db_task_id, model, prompt, params):
     """Run image generation synchronously."""
-    from app.adapters.registry import get_adapter, _load_all_adapters
-    _load_all_adapters()
-    adapter = get_adapter(model)
+    adapter = load_adapters()(model)
     if not adapter:
         raise RuntimeError(f"No adapter: {model}")
 
@@ -148,14 +113,9 @@ def _run_image(db_task_id, model, prompt, params):
     style = params.get("style", "auto")
     count = params.get("count", 1)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        raw_results = loop.run_until_complete(
-            adapter.generate_image(prompt=prompt, size=size, style=style, count=count)
-        )
-    finally:
-        loop.close()
+    raw_results = run_async(
+        adapter.generate_image(prompt=prompt, size=size, style=style, count=count)
+    )
 
     output = []
     cost = 0
@@ -171,9 +131,7 @@ def _run_image(db_task_id, model, prompt, params):
 
 def _run_video(db_task_id, model, prompt, params):
     """Run video generation synchronously."""
-    from app.adapters.registry import get_adapter, _load_all_adapters
-    _load_all_adapters()
-    adapter = get_adapter(model)
+    adapter = load_adapters()(model)
     if not adapter:
         raise RuntimeError(f"No adapter: {model}")
 
@@ -181,17 +139,12 @@ def _run_video(db_task_id, model, prompt, params):
     resolution = params.get("resolution", "1080p")
     image_url = params.get("image_url")
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        result = loop.run_until_complete(
-            adapter.generate_video(
-                prompt=prompt, image_url=image_url,
-                duration=duration, resolution=resolution,
-            )
+    result = run_async(
+        adapter.generate_video(
+            prompt=prompt, image_url=image_url,
+            duration=duration, resolution=resolution,
         )
-    finally:
-        loop.close()
+    )
 
     rd = result.to_dict() if hasattr(result, "to_dict") else result
     output = [{
