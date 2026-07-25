@@ -122,7 +122,8 @@ def generate_placeholder_thumbnail(
         except IOError:
             font = ImageFont.load_default()
 
-        _, _, tw, th, _, _ = draw.textbbox((0, 0), text, font=font)
+        left, _, right, _ = draw.textbbox((0, 0), text, font=font)
+        tw = right - left
         draw.text(
             (cx - tw / 2, cy + 35),
             text,
