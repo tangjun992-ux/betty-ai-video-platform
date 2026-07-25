@@ -341,14 +341,14 @@ class XBrowserSource(BaseSource):
         if self._browser:
             try:
                 await self._browser.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("[x] Browser close failed: %s", e)
             self._browser = None
         if self._playwright:
             try:
                 await self._playwright.stop()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("[x] Playwright stop failed: %s", e)
             self._playwright = None
         self._browser_ready = False
 

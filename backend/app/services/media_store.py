@@ -154,7 +154,8 @@ async def backfill_generated_media() -> None:
                 if isinstance(raw, str):
                     try:
                         raw = json.loads(raw)
-                    except Exception:
+                    except json.JSONDecodeError as e:
+                        logger.warning("media_store: unparsable results on task %s: %s", t.task_id, e)
                         continue
                 if not isinstance(raw, list):
                     continue

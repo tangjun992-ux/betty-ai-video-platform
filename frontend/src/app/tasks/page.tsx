@@ -9,6 +9,7 @@ export default function TasksPage() {
   const router = useRouter();
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
 
   const fetchTasks = useCallback(async () => {
@@ -16,7 +17,10 @@ export default function TasksPage() {
       const statusFilter = filter === "all" ? undefined : filter;
       const data = await listTasks(undefined, statusFilter, 50);
       setTasks(data.tasks);
-    } catch {}
+      setError(null);
+    } catch (e: any) {
+      setError(e?.message || "加载任务失败");
+    }
     finally { setLoading(false); }
   }, [filter]);
 
@@ -32,7 +36,9 @@ export default function TasksPage() {
           if (status.status !== task.status || status.progress !== task.progress) {
             setTasks((prev) => prev.map((t) => t.task_id === task.task_id ? { ...t, ...status } : t));
           }
-        } catch {}
+        } catch (e) {
+          console.error(`tasks: status poll failed for ${task.task_id}`, e);
+        }
       }
     }, 3000);
     return () => clearInterval(interval);
@@ -68,7 +74,12 @@ export default function TasksPage() {
         ))}
       </div>
 
-      {tasks.length === 0 ? (
+      {error ? (
+        <div className="text-center py-20">
+          <p className="text-sm text-destructive mb-3">{error}</p>
+          <button onClick={fetchTasks} className="btn-secondary text-sm">重试</button>
+        </div>
+      ) : tasks.length === 0 ? (
         <div className="text-center py-20 text-dark-500">
           <div className="text-5xl mb-4">🎬</div>
           <p>还没有任务，去创作一个吧！</p>

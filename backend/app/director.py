@@ -572,7 +572,8 @@ class DirectorExecutor:
                                            style=(styles[0] if styles else "auto"), quality="high")
                     enhanced = getattr(out, "enhanced", None) or (
                         out.get("enhanced_prompt", step.prompt) if isinstance(out, dict) else step.prompt)
-                except Exception:
+                except Exception as e:
+                    logger.warning("[director] prompt enhancement failed, using template: %s", e)
                     enhanced = f"{step.prompt}，电影级画质，柔和自然光，高细节，专业构图"
                 step.status = "done"
                 return {"type": "prompt", "enhanced_prompt": enhanced}

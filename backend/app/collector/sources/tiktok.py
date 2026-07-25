@@ -193,7 +193,8 @@ class TikTokSource(BaseSource):
                 elif run_status in ("FAILED", "ABORTED", "TIMED-OUT"):
                     logger.warning("[tiktok] Run %s: %s", run_id, run_status)
                     return []
-            except Exception:
+            except Exception as e:
+                logger.warning("[tiktok] Run %s status check failed: %s", run_id, e)
                 continue
 
         # Fetch results

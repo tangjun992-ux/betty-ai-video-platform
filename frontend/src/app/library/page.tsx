@@ -217,7 +217,10 @@ export default function LibraryPage() {
       try {
         const res = await fetch(`${API_BASE}/library/${encodeURIComponent(id)}`, { method: "DELETE" });
         if (res.ok) ok += 1;
-      } catch { /* keep going */ }
+        else console.error(`library: delete ${id} failed with HTTP ${res.status}`);
+      } catch (e) {
+        console.error(`library: delete ${id} failed`, e);
+      }
     }
     if (ok > 0) toast.success(`已删除 ${ok} 项`);
     if (ok < ids.length) toast.error(`${ids.length - ok} 项删除失败`);

@@ -146,7 +146,8 @@ class StorageProvider:
         try:
             client.delete_object(Bucket=bucket, Key=key)
             return True
-        except Exception:
+        except Exception as e:
+            logger.error("s3 delete failed for %s: %s", key, e)
             return False
 
     async def _upload_oss(self, content: bytes, key: str, content_type: str) -> str:
@@ -183,7 +184,8 @@ class StorageProvider:
             )
             result = bucket.delete_object(key)
             return result.status == 204
-        except Exception:
+        except Exception as e:
+            logger.error("oss delete failed for %s: %s", key, e)
             return False
 
 

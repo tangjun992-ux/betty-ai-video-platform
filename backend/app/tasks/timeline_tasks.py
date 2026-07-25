@@ -40,6 +40,7 @@ def _update_task(db_task_id: str, **kwargs):
         stmt = text("SELECT id FROM tasks WHERE task_id = :tid")
         row = session.execute(stmt, {"tid": db_task_id}).first()
         if not row:
+            logger.error("task row not found, update dropped: task_id=%s fields=%s", db_task_id, list(kwargs))
             return None
         task_pk = row[0]
         for field, value in kwargs.items():
@@ -76,8 +77,21 @@ def _broadcast_progress(task_id: str, progress: int, stage: str, message: str = 
             })
 
         _run_async(_send())
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("progress broadcast failed for task %s at %s: %s", task_id, stage, e)
+
+
+def _run_ffmpeg(cmd: list[str], timeout: int, what: str) -> None:
+    """Run an FFmpeg command, raising with its stderr when it fails.
+
+    A non-zero exit leaves a missing or truncated intermediate file, so the
+    render must abort instead of concatenating garbage.
+    """
+    result = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    if result.returncode != 0:
+        stderr = result.stderr.decode(errors="replace")[-200:]
+        logger.error("FFmpeg %s failed (exit %d): %s", what, result.returncode, stderr)
+        raise RuntimeError(f"{what}失败: {stderr}")
 
 
 def _is_local_file(url: str) -> bool:
@@ -191,20 +205,17 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
                             "-vf", f"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
                             str(out_file),
                         ]
-                        subprocess.run(cmd, capture_output=True, timeout=60)
-                        # Write to concat list
-                        with open(concat_file, "a") as f:
-                            f.write(f"file '{out_file}'\n")
+                        _run_ffmpeg(cmd, timeout=60, what=f"裁剪片段 {i + 1}")
                     else:
                         # Generate a blank placeholder for missing clips
-                        subprocess.run([
+                        _run_ffmpeg([
                             FFMPEG_BIN, "-y", "-f", "lavfi",
                             "-i", f"color=c=black:s=1920x1080:d={duration}:r=30",
                             "-c:v", "libx264", "-preset", "ultrafast",
                             str(out_file),
-                        ], capture_output=True, timeout=30)
-                        with open(concat_file, "a") as f:
-                            f.write(f"file '{out_file}'\n")
+                        ], timeout=30, what=f"生成占位片段 {i + 1}")
+                    with open(concat_file, "a") as f:
+                        f.write(f"file '{out_file}'\n")
 
                 # Concatenate all clips
                 _broadcast_progress(db_task_id, 75, "compositing", "合成最终视频...")
@@ -217,12 +228,7 @@ def process_timeline_render(self, db_task_id: str, project_id: str):
                     "-c:a", "aac", "-b:a", "192k",
                     str(output_path),
                 ]
-                result = subprocess.run(concat_cmd, capture_output=True, timeout=120)
-
-                if result.returncode != 0:
-                    stderr = result.stderr.decode()[-200:]
-                    logger.error(f"FFmpeg concat failed: {stderr}")
-                    raise RuntimeError(f"视频合成失败: {stderr}")
+                _run_ffmpeg(concat_cmd, timeout=120, what="视频合成")
 
                 _broadcast_progress(db_task_id, 90, "finalizing", "最终处理...")
                 _update_task(db_task_id, progress=90, current_stage="finalizing")
