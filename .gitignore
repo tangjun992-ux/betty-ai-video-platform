@@ -35,6 +35,8 @@ celerybeat.pid
 
 # Next.js
 .next/
+.next.bak/
+*.tsbuildinfo
 
 # Database
 *.db
