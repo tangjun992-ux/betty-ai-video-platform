@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "pipeline": "director_gpt_image + espeak_speech + kling/ai-avatar-pro",
+  "tts_note": "ElevenLabs via KIE returned internal error x3; used espeak speech to validate lipsync",
+  "image_model": "gpt-image-2-text-to-image",
+  "lipsync_model": "kling/ai-avatar-pro",
+  "lipsync_url": "https://tempfile.aiquickdraw.com/k/4d8532feb9d52c9193d832eb257b9ce5_1_1784252985_1177.mp4",
+  "local_mp4": "/opt/cursor/artifacts/director_real_talking/asset_real_kling_avatar.mp4",
+  "bytes": 9702677,
+  "elapsed_s": 324.0,
+  "cost": 0.6,
+  "mouth_roi_mad_mean": 6.619,
+  "identity_pixel_mad": 4.79,
+  "passes_talking_proxy": true,
+  "n_frames": 63
+}

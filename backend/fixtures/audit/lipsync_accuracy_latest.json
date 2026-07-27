@@ -1,0 +1,247 @@
+{
+  "suite": "lipsync_accuracy_eval",
+  "ts": "2026-07-16T23:57:22Z",
+  "fixtures": {
+    "portrait_bytes": 3620,
+    "portrait_class": "cartoon_stick_figure",
+    "line_wav_bytes": 88244,
+    "line_wav_class": "steady_tone_not_speech"
+  },
+  "layers": {
+    "A_offline_demo": {
+      "ok": true,
+      "mode": "offline_demo_ken_burns",
+      "model": "demo-lipsync",
+      "media_url": "/api/v1/media/generated/1b2ee65c20b2.mp4",
+      "thumbnail": "/api/v1/media/generated/4b2c5024aecc.jpg",
+      "artifact": "/opt/cursor/artifacts/lipsync_accuracy/A_offline_kenburns.mp4",
+      "analysis": {
+        "mode": "offline_demo_ken_burns",
+        "model": "demo-lipsync",
+        "path": "/tmp/aivideo-media/generated/1b2ee65c20b2.mp4",
+        "has_video": true,
+        "has_audio": false,
+        "probe_streams": [
+          {
+            "codec_type": "video",
+            "codec_name": "h264",
+            "width": 720,
+            "height": 1280,
+            "sample_rate": null
+          }
+        ],
+        "audio_metrics": {
+          "speechlike_score_0_to_5": 0,
+          "class": "none",
+          "duration_s": 0
+        },
+        "motion_metrics": {
+          "n_frames": 25,
+          "frame_mad_mean": 0.813,
+          "mouth_roi_mad_mean": 0.381,
+          "eye_roi_mad_mean": 1.446,
+          "mouth_over_eye_ratio": 0.263,
+          "mouth_motion_score_0_to_5": 0,
+          "first_frame": "/tmp/tmpq_dt6_ii/f_001.jpg",
+          "unique_colors_frame0": 9150
+        },
+        "identity_metrics": {
+          "pixel_mad": 17.16,
+          "hist_corr": 0.0164,
+          "identity_score_0_to_5": 2,
+          "note": "High identity with near-zero mouth motion = frozen portrait, not talking avatar"
+        },
+        "scores_0_to_5": {
+          "audio_present": 0,
+          "audio_speechlike": 0,
+          "mouth_motion": 0,
+          "identity_preserve": 2,
+          "model_honesty": 5
+        },
+        "digital_human_accuracy_0_to_5": 0.3,
+        "passes_as_digital_human": false,
+        "verdict": "NOT a digital human — Ken Burns still-image zoom; silent; no visemes. Acceptable only as offline preview with DEMO watermark."
+      },
+      "honesty": "Product UI 'Demo · 标准唇形' is MISLEADING when DEMO_GENERATION/no-keys: output is Ken Burns zoom, silent, DEMO watermark — not lip sync."
+    },
+    "B_folded_live": {
+      "ok": true,
+      "mode": "folded_live_last_run",
+      "model": "kling/ai-avatar-pro",
+      "media_url": "https://tempfile.aiquickdraw.com/k/fd170e7d35cdff08a755695ce093fca8_1_1784212221_9731.mp4",
+      "cost": 0.6,
+      "artifact": "/opt/cursor/artifacts/lipsync_accuracy/B_folded_last_run.mp4",
+      "analysis": {
+        "mode": "folded_live_last_run",
+        "model": "kling/ai-avatar-pro",
+        "path": "/opt/cursor/artifacts/lipsync_accuracy/B_folded_last_run.mp4",
+        "has_video": true,
+        "has_audio": true,
+        "probe_streams": [
+          {
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "width": null,
+            "height": null,
+            "sample_rate": "44100"
+          },
+          {
+            "codec_type": "video",
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 1600,
+            "sample_rate": null
+          }
+        ],
+        "audio_metrics": {
+          "duration_s": 2.02,
+          "sample_rate": 22050,
+          "rms_mean": 5794.2,
+          "energy_cv": 0.135,
+          "zcr": 0.02,
+          "silence_ratio": 0.0,
+          "speechlike_score_0_to_5": 1,
+          "class": "tone_or_steady"
+        },
+        "motion_metrics": {
+          "n_frames": 11,
+          "frame_mad_mean": 0.929,
+          "mouth_roi_mad_mean": 0.932,
+          "eye_roi_mad_mean": 3.552,
+          "mouth_over_eye_ratio": 0.263,
+          "mouth_motion_score_0_to_5": 1,
+          "first_frame": "/tmp/tmpfnvhgjqp/f_001.jpg",
+          "unique_colors_frame0": 4991
+        },
+        "identity_metrics": {
+          "pixel_mad": 1.48,
+          "hist_corr": 0.006,
+          "identity_score_0_to_5": 2,
+          "note": "High identity with near-zero mouth motion = frozen portrait, not talking avatar"
+        },
+        "scores_0_to_5": {
+          "audio_present": 5,
+          "audio_speechlike": 1,
+          "mouth_motion": 1,
+          "identity_preserve": 2,
+          "model_honesty": 5
+        },
+        "digital_human_accuracy_0_to_5": 2.15,
+        "passes_as_digital_human": false,
+        "verdict": "FAIL as talking digital human — video+audio exist but mouth motion is near-static (frozen identity). Typical of cartoon/tone inputs or failed lipsync.",
+        "caveat": "Fixture portrait.png is a stick-figure cartoon; line.wav is a steady tone (energy_cv≈0.13). Even real kling/ai-avatar-pro cannot invent photoreal talking from these inputs — identity freeze + tone audio is expected failure mode.",
+        "input_fixture_quality": {
+          "portrait": "cartoon_stick_figure_not_photoreal",
+          "audio": "sine_or_steady_tone_not_speech"
+        }
+      }
+    },
+    "C_product_demo": {
+      "ok": true,
+      "mode": "product_demo_contract",
+      "status_code": 200,
+      "response": {
+        "task_id": "d057ead8-a306-4563-916a-8d15498e4169",
+        "estimated_cost_credits": 4,
+        "tier": "demo",
+        "detail": null
+      },
+      "demo_mode_active": false,
+      "expected_upstream": "kling/ai-avatar-pro @ ~480p (product Demo≠Ken Burns when keys present)",
+      "note": "Contract only — celery worker may not complete in-process. Layer D exercises KieAdapter outframe with photoreal+speech."
+    },
+    "D_live_photoreal": {
+      "ok": true,
+      "mode": "live_photoreal_speech",
+      "model": "kling/ai-avatar-pro",
+      "media_url": "https://tempfile.aiquickdraw.com/k/9536f13c5a74b4daf239e2900a2c449f_1_1784246454_2438.mp4",
+      "elapsed_s": 212.4,
+      "artifact": "/opt/cursor/artifacts/lipsync_accuracy/D_live_photoreal_speech.mp4",
+      "inputs": {
+        "image": "/workspace/backend/fixtures/lipsync/photo_face.jpg",
+        "audio": "/workspace/backend/fixtures/lipsync/speech_zh.wav"
+      },
+      "analysis": {
+        "mode": "live_photoreal_speech",
+        "model": "kling/ai-avatar-pro",
+        "path": "/opt/cursor/artifacts/lipsync_accuracy/D_live_photoreal_speech.mp4",
+        "has_video": true,
+        "has_audio": true,
+        "probe_streams": [
+          {
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "width": null,
+            "height": null,
+            "sample_rate": "44100"
+          },
+          {
+            "codec_type": "video",
+            "codec_name": "h264",
+            "width": 1280,
+            "height": 1600,
+            "sample_rate": null
+          }
+        ],
+        "audio_metrics": {
+          "duration_s": 6.06,
+          "sample_rate": 22050,
+          "rms_mean": 1770.8,
+          "energy_cv": 0.736,
+          "zcr": 0.1367,
+          "silence_ratio": 0.231,
+          "speechlike_score_0_to_5": 5,
+          "class": "speech_candidate"
+        },
+        "motion_metrics": {
+          "n_frames": 36,
+          "frame_mad_mean": 4.974,
+          "mouth_roi_mad_mean": 15.282,
+          "eye_roi_mad_mean": 13.978,
+          "mouth_over_eye_ratio": 1.093,
+          "mouth_motion_score_0_to_5": 5,
+          "first_frame": "/tmp/tmpbeyk6nbe/f_001.jpg",
+          "unique_colors_frame0": 31097
+        },
+        "identity_metrics": {
+          "pixel_mad": 2.25,
+          "hist_corr": 0.948,
+          "identity_score_0_to_5": 5,
+          "note": "High identity with near-zero mouth motion = frozen portrait, not talking avatar"
+        },
+        "scores_0_to_5": {
+          "audio_present": 5,
+          "audio_speechlike": 5,
+          "mouth_motion": 5,
+          "identity_preserve": 5,
+          "model_honesty": 5
+        },
+        "digital_human_accuracy_0_to_5": 5.0,
+        "passes_as_digital_human": true,
+        "verdict": "Passes proxy digital-human bar (A/V + measurable mouth motion)."
+      }
+    }
+  },
+  "professional_summary": {
+    "offline_demo_is_digital_human": false,
+    "offline_accuracy": 0.3,
+    "folded_stick_tone_accuracy": 2.15,
+    "folded_passes": false,
+    "live_photoreal_accuracy": 5.0,
+    "live_photoreal_passes": true,
+    "root_causes_of_user_complaint": [
+      "双轨混淆：产品档 Demo(4积分) ≠ 运行时 DEMO_GENERATION Ken Burns",
+      "UI『标准唇形』在离线时完全失实；有 Key 时 Demo/Studio 常同为 kling/ai-avatar-pro",
+      "历史 fixture 简笔画+正弦波会让真链路也『不像数字人』（口型 MAD≈1，口/眼运动比<1）",
+      "音色列表展示 Azure Neural id，实际上游映射到 Rachel/Adam，音色不一致"
+    ],
+    "key_finding": "用户选免费 Demo 却觉得『不像数字人』，需按路径诊断：(1) 离线 Ken Burns → 必然失败（无声+缩放）；(2) 真链路但输入非真人脸/非语音 → 身份冻结、口型近零；(3) 真链路+真人脸+语音 → 才可评口型准确度。",
+    "recommendations": [
+      "结果 JSON 写明 mode=ken_burns|kling_avatar，任务页强制展示",
+      "Demo 文案改为『480p 口型（需模型 Key）/ 离线为预览动效』",
+      "fixture 换真人脸+真实语音后再做回归门槛",
+      "Studio vs Demo 若同 SKU，诚实写『同模型·积分差异』",
+      "音色 UI 标注实际上游映射"
+    ]
+  }
+}

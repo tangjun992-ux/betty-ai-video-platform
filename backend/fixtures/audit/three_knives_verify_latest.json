@@ -1,0 +1,61 @@
+{
+  "generated_at": "2026-07-18T04:20Z",
+  "tests": [
+    {
+      "name": "k1_subtitle_count",
+      "pass": true,
+      "detail": "count=12 keys=['ad', 'bold', 'caption_box', 'drama', 'feed', 'impact', 'karaoke', 'minimal', 'neon', 'soft_shadow', 'talking', 'top_banner']"
+    },
+    {
+      "name": "k1_duck_compose_styles",
+      "pass": true,
+      "detail": "ok_styles=5/5"
+    },
+    {
+      "name": "k1_bgm_url_hook",
+      "pass": true,
+      "detail": "upbeat_url=empty(fallback fixtures)"
+    },
+    {
+      "name": "k3_identity_strip",
+      "pass": true,
+      "detail": "bytes=22863",
+      "path": "/opt/cursor/artifacts/three_knives_verify/k3_identity_strip.jpg"
+    },
+    {
+      "name": "k3_identity_lock_off",
+      "pass": true,
+      "detail": "shot2_variant=False"
+    },
+    {
+      "name": "k3_identity_lock_hero",
+      "pass": true,
+      "detail": "shot2_variant=False"
+    },
+    {
+      "name": "k3_identity_lock_edit",
+      "pass": true,
+      "detail": "shot2_variant=True"
+    },
+    {
+      "name": "k2_variants_plan",
+      "pass": true,
+      "detail": "status=200 count=2"
+    },
+    {
+      "name": "k2_variants_run_dry",
+      "pass": true,
+      "detail": "batch=decfc6644c404f5bb69c591cb1d64b65 jobs=2"
+    },
+    {
+      "name": "k2_variants_gallery_dry",
+      "pass": true,
+      "detail": "done=True finals=2"
+    },
+    {
+      "name": "k3_dryrun_strip_asset",
+      "pass": true,
+      "detail": "strip_assets=2 finals=1 asset_types=['image', 'video', 'video', 'identity_strip', 'video']"
+    }
+  ]
+}

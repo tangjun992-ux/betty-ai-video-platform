@@ -1,0 +1,9 @@
+{
+  "ok": true,
+  "media_url": "https://tempfile.aiquickdraw.com/as/78ac06ea317c28bcd2dfb3e77759fe12_1784211932366.png",
+  "model": "google/nano-banana-edit",
+  "mode": "i2i_edit",
+  "task_id": "78ac06ea317c28bcd2dfb3e77759fe12",
+  "honesty": "live createTask→success; i2i edit face compose, not InsightFace",
+  "source": "kie_live_probe_2026-07-16"
+}

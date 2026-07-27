@@ -1,0 +1,94 @@
+# Celery Beat 运维部署
+
+生产环境需单独运行 **Celery Beat** 调度器，否则 `model-health-smoke-daily` 等定时任务不会触发。
+
+## Docker Compose（推荐）
+
+仓库根目录 `docker-compose.yml` 已包含 `celery-beat` 服务：
+
+```bash
+docker compose up -d celery-beat celery-worker api redis db
+```
+
+Beat 与 Worker 必须共用同一 `CELERY_BROKER_URL` / `DATABASE_URL`。
+
+## 裸机部署
+
+```bash
+cd backend
+celery -A celery_app beat --loglevel=info
+```
+
+另开终端运行 worker（含 `pipeline_q` 以执行健康冒烟）：
+
+```bash
+celery -A celery_app worker -Q video_q,image_q,pipeline_q,director_q,celery --concurrency=4
+```
+
+## 模型隔离告警与复核
+
+- Beat 任务 `smoke_active_models` 失败会将模型写入 Redis 隔离区，并打 `MODEL_HEALTH_ALERT` 错误日志。
+- 管理员复核：`GET /api/v1/admin/model-health/quarantined`
+- 解除隔离：`POST /api/v1/admin/model-health/{model_id}/clear-quarantine`（需 admin 角色）
+
+## 每周 live 出片抽样（付费，需显式开启）
+
+Beat 已注册：
+- `model-health-live-video-weekly` → `smoke_live_video_weekly`
+- `model-health-live-image-weekly` → `smoke_live_image_weekly`
+
+| 变量 | 说明 |
+|------|------|
+| `MODEL_SMOKE_LIVE_VIDEO_WEEKLY=1` | 允许周检付费 video outframe |
+| `MODEL_SMOKE_LIVE_VIDEO=1` | 兼容门控（手动脚本） |
+| `MODEL_SMOKE_LIVE_IMAGE_WEEKLY=1` | 允许周检付费 image outframe |
+| `MODEL_SMOKE_LIVE=1` | 兼容门控（图片手动/周检） |
+
+未开启时任务 **no-op**（`skipped: true`）。  
+KPI：仅 `live_image` / `live_video` 计入 `outframe_ok`；**mapping 不再污染 Auto 路由成功率**。  
+视频最短合法时长 **5s**（duration=2 会 422）。
+
+```bash
+cd backend
+MODEL_SMOKE_LIVE=1 python scripts/smoke_live_image_sample.py
+MODEL_SMOKE_LIVE_VIDEO=1 python scripts/smoke_live_video_sample.py
+```
+
+## Stripe 生产环境变量
+
+| 变量 | 说明 |
+|------|------|
+| `STRIPE_API_KEY` | Stripe Secret Key |
+| `STRIPE_WEBHOOK_SECRET` | Webhook 签名密钥 |
+| `STRIPE_PRICE_STARTER_MONTHLY` / `_YEARLY` | Starter 套餐 Price ID |
+| `STRIPE_PRICE_PERSONAL_MONTHLY` / `_YEARLY` | Personal 套餐 Price ID |
+| `STRIPE_PRICE_CREATOR_MONTHLY` / `_YEARLY` | Creator 套餐 Price ID |
+| `STRIPE_PRICE_PRO_MONTHLY` / `_YEARLY` | Pro 套餐 Price ID |
+| `STRIPE_PRICE_TEAM_SEAT_MONTHLY` | 团队额外席位 Price ID |
+
+**推荐注入（Dashboard 或脚本）：**
+
+```bash
+cd backend
+python scripts/bootstrap_stripe_prices.py --dry-run --json-only   # 预览金额
+STRIPE_API_KEY=sk_test_... python scripts/bootstrap_stripe_prices.py --write-env .env
+```
+
+脚本按 `betty_plan_id` / `betty_cycle` metadata 幂等创建 Product/Price，并把 `price_*` 写入 env。
+
+**订阅就绪：** 配置 API Key + 至少一个 `*_MONTHLY` Price ID → Checkout `mode=subscription`。  
+未配置对应 Price ID 时该套餐回退 `price_data` 一次性支付（开发可用；生产应配齐）。  
+状态探针：`GET /api/v1/billing/stripe-status` / `GET /api/v1/system/readiness`。
+
+## OIDC / CDN（生产）
+
+| 变量 | 说明 |
+|------|------|
+| `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` / `OIDC_REDIRECT_URI` | 企业 SSO |
+| `OIDC_REQUIRED_IN_PRODUCTION` | `1` 时生产缺配阻塞 readiness |
+| `STORAGE_TYPE=s3` | 生产禁止 local |
+| `MEDIA_CDN_BASE_URL` 或 `S3_PUBLIC_BASE_URL` | 媒体公共基址 |
+| `AWS_ACCESS_KEY_ID` / `AWS_S3_BUCKET` | S3 必需项 |
+
+前端：配置后登录页出现「企业 SSO」；回调落地 `/auth/callback?token=`。  
+详见 `docs/P2_MOTION_OIDC_STRIPE.md`。

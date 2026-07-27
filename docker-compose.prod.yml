@@ -1,0 +1,173 @@
+# Production Docker Compose for AI Video Platform
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-aivideo}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "${API_PORT:-8000}:8000"
+    environment:
+      - ENV=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - KIE_API_KEY=${KIE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SEEDANCE_API_KEY=${SEEDANCE_API_KEY}
+      - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
+      - KLING_SECRET_KEY=${KLING_SECRET_KEY}
+      # Production default: object storage. Override STORAGE_TYPE=local only for smoke tests.
+      - STORAGE_TYPE=${STORAGE_TYPE:-s3}
+      - STORAGE_PATH=/app/storage
+      - MEDIA_CDN_BASE_URL=${MEDIA_CDN_BASE_URL:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-}
+      - AWS_S3_ENDPOINT_URL=${AWS_S3_ENDPOINT_URL:-}
+      - S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
+      - STRIPE_API_KEY=${STRIPE_API_KEY:-}
+      - WECHAT_APPID=${WECHAT_APPID:-}
+      - WECHAT_MCHID=${WECHAT_MCHID:-}
+      - ALIPAY_APP_ID=${ALIPAY_APP_ID:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - media_storage:/app/storage
+    restart: unless-stopped
+    # Horizontal scale: stateless API behind a load balancer (rate-limit + auth
+    # are Redis/JWT backed; WebSocket progress uses Redis pub/sub). Scale with `--scale api=N`.
+    deploy:
+      replicas: ${API_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A celery_app worker --loglevel=info --concurrency=4 -Q celery,image_q,video_q,director_q,pipeline_q,collector_q
+    environment:
+      - ENV=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - REDIS_URL=redis://redis:6379/0
+      - KIE_API_KEY=${KIE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SEEDANCE_API_KEY=${SEEDANCE_API_KEY}
+      - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
+      - KLING_SECRET_KEY=${KLING_SECRET_KEY}
+      - STORAGE_TYPE=${STORAGE_TYPE:-s3}
+      - STORAGE_PATH=/app/storage
+      - MEDIA_CDN_BASE_URL=${MEDIA_CDN_BASE_URL:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET:-}
+      - S3_PUBLIC_BASE_URL=${S3_PUBLIC_BASE_URL:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    volumes:
+      - media_storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # Scale workers horizontally for generation throughput: `--scale worker=N`.
+    deploy:
+      replicas: ${WORKER_REPLICAS:-2}
+
+  beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A celery_app beat --loglevel=info --max-interval 60
+    environment:
+      - ENV=production
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower:2.0
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run build && npm run start"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  media_storage:
+  frontend_node_modules:

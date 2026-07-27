@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "media_url": "https://tempfile.aiquickdraw.com/k/b6ad74cf5c53b548f7ed13ee1cb478d9_1_1784207201_3308.mp4",
+  "model": "kling-3.0/motion-control",
+  "cost": 3.0,
+  "motion_mode": "native",
+  "sku": "kling-3.0/motion-control",
+  "source": "kie_public_examples",
+  "fixture_error": "KIE task 2d5a94201d84fa6fe23d527ef33d0f5e failed: No valid characters detected in the video"
+}

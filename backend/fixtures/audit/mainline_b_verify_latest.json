@@ -1,0 +1,82 @@
+{
+  "generated_at": "2026-07-18T05:55Z",
+  "tests": [
+    {
+      "name": "b_bgm_stock_count",
+      "pass": true,
+      "detail": "installed=['soft', 'upbeat', 'cinematic', 'drama', 'corporate', 'energetic', 'chill', 'hype']"
+    },
+    {
+      "name": "b_bgm_public_urls",
+      "pass": true,
+      "detail": "url_presets=8/8 presets=8"
+    },
+    {
+      "name": "b_bgm_http_fetch",
+      "pass": true,
+      "detail": "status=200 bytes=2116878 url=http://localhost:8000/api/v1/media/bgm/upbeat.wav"
+    },
+    {
+      "name": "b_export_specs",
+      "pass": true,
+      "detail": "count=6 ids=['meta_feed', 'meta_stories', 'tiktok', 'reels', 'youtube_shorts', 'youtube_landscape']"
+    },
+    {
+      "name": "b_brief_templates",
+      "pass": true,
+      "detail": "count=9"
+    },
+    {
+      "name": "b_plan_meta_feed",
+      "pass": true,
+      "detail": "placement=meta_feed aspect=16:9 bgm=upbeat"
+    },
+    {
+      "name": "b_compose_stock_bgm",
+      "pass": true,
+      "detail": "audio=True bytes=519604"
+    },
+    {
+      "name": "b_api_export-specs",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "b_api_brief-templates",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "b_api_bgm-catalog",
+      "pass": true,
+      "detail": "status=200"
+    },
+    {
+      "name": "b_variants_plan_n2",
+      "pass": true,
+      "detail": "status=200 count=2"
+    },
+    {
+      "name": "b_live_variants_enqueued",
+      "pass": true,
+      "detail": "batch=df036b25f44c4cf2b54820242c4c79f7"
+    },
+    {
+      "name": "b_live_variants",
+      "pass": true,
+      "detail": "done=True finals=2"
+    },
+    {
+      "name": "b_variant_A_file",
+      "pass": true,
+      "detail": "bytes=1931359",
+      "path": "/opt/cursor/artifacts/mainline_b_verify/b_variant_A.mp4"
+    },
+    {
+      "name": "b_variant_B_file",
+      "pass": true,
+      "detail": "bytes=2977092",
+      "path": "/opt/cursor/artifacts/mainline_b_verify/b_variant_B.mp4"
+    }
+  ]
+}

@@ -1,0 +1,251 @@
+{
+  "generated_at": "2026-07-17T12:48Z",
+  "artifact_dir": "/opt/cursor/artifacts/director_eight_features",
+  "workspace_copy": "/workspace/artifacts/director_eight_features",
+  "order": [
+    "product_ad",
+    "ugc",
+    "anime",
+    "ai_portrait",
+    "product_commercial",
+    "micro_drama",
+    "product_photo",
+    "talking_avatar"
+  ],
+  "results": [
+    {
+      "scenario": "product_ad",
+      "title": "产品广告",
+      "tag": "A",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/product_ad/A_FINAL.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/product_ad/A_FINAL.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "product_ad",
+      "title": "产品广告",
+      "tag": "B",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/product_ad/B_FINAL.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/product_ad/B_FINAL.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "ugc",
+      "title": "UGC 种草",
+      "tag": "A",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/ugc/A_FINAL.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/ugc/A_FINAL.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "ugc",
+      "title": "UGC 种草",
+      "tag": "B",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/ugc/B_FINAL.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/ugc/B_FINAL.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "anime",
+      "title": "动漫生成",
+      "tag": "A",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/anime/A_asset1_分镜_1_1___建立镜头.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/anime/A_asset1_分镜_1_1___建立镜头.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "anime",
+      "title": "动漫生成",
+      "tag": "B",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/anime/B_asset1_分镜_1_1___建立镜头.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/anime/B_asset1_分镜_1_1___建立镜头.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "ai_portrait",
+      "title": "AI 写真",
+      "tag": "A",
+      "kind": "image",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/ai_portrait/A_0_形象照_4_4___名片裁切感.png",
+      "asset_count": 4,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/ai_portrait/A_0_形象照_4_4___名片裁切感.png",
+        "/opt/cursor/artifacts/director_eight_features/ai_portrait/A_1_形象照_3_4___自然微笑胸像.png",
+        "/opt/cursor/artifacts/director_eight_features/ai_portrait/A_2_形象照_1_4___正面职业头像.png",
+        "/opt/cursor/artifacts/director_eight_features/ai_portrait/A_3_形象照_2_4___四分之三侧脸.png"
+      ],
+      "image_count": 4
+    },
+    {
+      "scenario": "ai_portrait",
+      "title": "AI 写真",
+      "tag": "B",
+      "kind": "image",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/ai_portrait/B_0_形象照_4_4___名片裁切感.png",
+      "asset_count": 4,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/ai_portrait/B_0_形象照_4_4___名片裁切感.png",
+        "/opt/cursor/artifacts/director_eight_features/ai_portrait/B_1_形象照_3_4___自然微笑胸像.png",
+        "/opt/cursor/artifacts/director_eight_features/ai_portrait/B_2_形象照_1_4___正面职业头像.png",
+        "/opt/cursor/artifacts/director_eight_features/ai_portrait/B_3_形象照_2_4___四分之三侧脸.png"
+      ],
+      "image_count": 4
+    },
+    {
+      "scenario": "product_commercial",
+      "title": "产品商业片",
+      "tag": "A",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/product_commercial/A_FINAL.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/product_commercial/A_FINAL.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "product_commercial",
+      "title": "产品商业片",
+      "tag": "B",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/product_commercial/B_FINAL.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/product_commercial/B_FINAL.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "micro_drama",
+      "title": "微短剧",
+      "tag": "A",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/micro_drama/A_FINAL.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/micro_drama/A_FINAL.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "micro_drama",
+      "title": "微短剧",
+      "tag": "B",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/micro_drama/B_FINAL.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/micro_drama/B_FINAL.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "product_photo",
+      "title": "产品摄影",
+      "tag": "A",
+      "kind": "image",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/product_photo/A_0_产品摄影_3_4___材质特写.png",
+      "asset_count": 4,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/product_photo/A_0_产品摄影_3_4___材质特写.png",
+        "/opt/cursor/artifacts/director_eight_features/product_photo/A_1_产品摄影_1_4___正面主视觉.png",
+        "/opt/cursor/artifacts/director_eight_features/product_photo/A_2_产品摄影_4_4___场景置景.png",
+        "/opt/cursor/artifacts/director_eight_features/product_photo/A_3_产品摄影_2_4___侧面_45_.png"
+      ],
+      "image_count": 4
+    },
+    {
+      "scenario": "product_photo",
+      "title": "产品摄影",
+      "tag": "B",
+      "kind": "image",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/product_photo/B_0_产品摄影_4_4___场景置景.png",
+      "asset_count": 4,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/product_photo/B_0_产品摄影_4_4___场景置景.png",
+        "/opt/cursor/artifacts/director_eight_features/product_photo/B_1_产品摄影_3_4___材质特写.png",
+        "/opt/cursor/artifacts/director_eight_features/product_photo/B_2_产品摄影_1_4___正面主视觉.png",
+        "/opt/cursor/artifacts/director_eight_features/product_photo/B_3_产品摄影_2_4___侧面_45_.png"
+      ],
+      "image_count": 4
+    },
+    {
+      "scenario": "talking_avatar",
+      "title": "数字人口播",
+      "tag": "A",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/talking_avatar/A_asset1_唇形同步驱动__数字人开口.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/talking_avatar/A_asset1_唇形同步驱动__数字人开口.mp4"
+      ],
+      "image_count": null
+    },
+    {
+      "scenario": "talking_avatar",
+      "title": "数字人口播",
+      "tag": "B",
+      "kind": "video",
+      "status": "done",
+      "primary": "/opt/cursor/artifacts/director_eight_features/talking_avatar/B_asset1_唇形同步驱动__数字人开口.mp4",
+      "asset_count": 1,
+      "deliverables": [
+        "/opt/cursor/artifacts/director_eight_features/talking_avatar/B_asset1_唇形同步驱动__数字人开口.mp4"
+      ],
+      "image_count": null
+    }
+  ],
+  "ok": 16,
+  "total": 16,
+  "talking_loudness_qa": {
+    "A_lufs": -15.9,
+    "B_lufs": -16.3,
+    "target": -16.0,
+    "pass": true,
+    "note": "Edge TTS + loudnorm; Kling Avatar lip-sync ceiling vs HeyGen"
+  },
+  "notes": [
+    "Commercial samples used duration=15 (4 shots) for QA cost; product card path remains 30s/6 shots.",
+    "Anime samples are single-shot stylized clips (asset1) + keyframe.",
+    "Portrait/product_photo: 4 images each per A/B."
+  ]
+}

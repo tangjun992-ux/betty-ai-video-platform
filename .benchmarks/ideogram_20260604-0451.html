@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en" translate="no">
+  <head>
+    <meta charset="utf-8" />
+    <link
+      id="favicon-svg"
+      rel="icon"
+      type="image/svg+xml"
+      href="/favicon.svg"
+    />
+    <link
+      id="favicon-ico"
+      rel="alternate icon"
+      type="image/x-icon"
+      href="/favicon.ico"
+    />
+    <meta
+      name="viewport"
+      content="width=device-width, height=device-height, initial-scale=1, minimum-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <meta name="theme-color" content="#FFFFFF" />
+
+    <title>Ideogram</title>
+    <meta name="title" content="Ideogram" />
+    <meta
+      name="description"
+      content="Generate stunning images, explore creative ideas, and turn inspiration into reality with Ideogram."
+    />
+
+    <meta property="og:site_name" content="Ideogram" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ideogram" />
+    <meta property="og:description" content="Image generation for everyone" />
+    <meta property="og:url" content="https://ideogram.ai/" />
+    <meta
+      property="og:image"
+      content="https://ideogram.ai/assets/meta-tag.png"
+    />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="twitter:title" content="Ideogram" />
+    <meta
+      property="twitter:description"
+      content="Image generation for everyone"
+    />
+    <meta
+      property="twitter:image"
+      content="https://ideogram.ai/assets/meta-tag.png"
+    />
+    <meta property="twitter:url" content="https://ideogram.ai/" />
+
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap"
+      />
+    </noscript>
+
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-44J8R31CP6"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+
+      gtag("js", new Date());
+
+      gtag("config", "G-44J8R31CP6");
+    </script>
+    <script
+      async
+      defer
+      crossorigin="anonymous"
+      src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v22.0&appId=1381473896187308"
+    ></script>
+    <script>
+      let captchaPromise = null; // Prevent duplicated challenge
+
+      window.turnstileLoad = function () {
+        const originalFetch = window.fetch;
+
+        // Create overlay and widget container
+        const overlay = document.createElement("div");
+        overlay.style.position = "fixed";
+        overlay.style.top = "0";
+        overlay.style.left = "0";
+        overlay.style.right = "0";
+        overlay.style.bottom = "0";
+        overlay.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+        overlay.style.zIndex = "10000";
+        overlay.style.display = "none";
+        overlay.style.justifyContent = "center";
+        overlay.style.alignItems = "center";
+
+        const widgetContainer = document.createElement("div");
+        widgetContainer.id = "turnstile_widget";
+        widgetContainer.style.display = "flex";
+        widgetContainer.style.alignItems = "center";
+        widgetContainer.style.justifyContent = "center";
+
+        overlay.appendChild(widgetContainer);
+        document.body.appendChild(overlay);
+
+        // Override fetch globally
+        window.fetch = async function (...args) {
+          let response = await originalFetch(...args);
+
+          // If Cloudflare challenged the request
+          if (response.headers.get("cf-mitigated") === "challenge") {
+            overlay.style.display = "flex";
+
+            // Only when captchaPromise is null
+            if (!captchaPromise) {
+              captchaPromise = new Promise((resolve, reject) => {
+                widgetContainer.innerHTML = ""; // Clear any previous render
+
+                turnstile.render(widgetContainer, {
+                  sitekey: "0x4AAAAAAAYMuk7BF-qKU-xo", // Replace at build/runtime
+                  callback: (token, preClearanceObtained) => {
+                    if (preClearanceObtained) {
+                      resolve(token);
+                    } else {
+                      reject(new Error("Pre-clearance failed"));
+                    }
+
+                    overlay.style.display = "none";
+                    widgetContainer.innerHTML = "";
+                    captchaPromise = null;
+                  },
+                  "error-callback": (err) => {
+                    reject(err);
+                    overlay.style.display = "none";
+                    widgetContainer.innerHTML = "";
+                    captchaPromise = null;
+                  },
+                });
+              });
+            }
+
+            try {
+              const token = await captchaPromise;
+
+              // Inject token into headers
+              if (token && args.length > 1) {
+                const options = args[1];
+                options.headers = {
+                  ...(options.headers || {}),
+                  "cf-response-token": token,
+                };
+              }
+
+              // Retry the original request
+              response = await originalFetch(...args);
+            } catch (err) {
+              console.error("Turnstile verification failed:", err);
+            }
+          }
+
+          return response;
+        };
+      };
+
+      // Load Cloudflare Turnstile script once the page is ready
+      if (window.location.hostname) {
+        const script = document.createElement("script");
+        script.src =
+          "https://challenges.cloudflare.com/turnstile/v0/api.js?onload=turnstileLoad";
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+      }
+    </script>
+    <script type="module" crossorigin src="/app_assets/index-DpbeJtGi.js"></script>
+    <link rel="modulepreload" crossorigin href="/app_assets/react-vendor-CN3aIuuU.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/vendor-BSaCTbGF.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/react-core-GNVCND7e.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/datadog-CwMVR2A-.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/ideogram-nova-Dg0xrD4K.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/lodash-DzvBTscP.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/moment-C5S46NFB.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/api-generated-CPuvKwkb.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/shared-util-BcV7mHel.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/amplitude-DLtObO2O.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/shared-api-QMj1Ntaf.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/assets-BBgQWfnH.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/tiptap-BKe_vXua.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/firebase-RHBPmnRQ.js">
+    <link rel="modulepreload" crossorigin href="/app_assets/shared-B9unmHGu.js">
+    <link rel="stylesheet" crossorigin href="/app_assets/ideogram-nova-CD7V3Bu6.css">
+    <link rel="stylesheet" crossorigin href="/app_assets/assets-B__L13uD.css">
+    <link rel="stylesheet" crossorigin href="/app_assets/index-C_ZJTyKi.css">
+  </head>
+
+  <body>
+    <div id="root"></div>
+  <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a061931fe8c8db53',t:'MTc4MDUxOTg3NA=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
