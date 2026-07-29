@@ -8,13 +8,11 @@ import {
   Download, Video, ExternalLink, ImageIcon, Wand2, CheckCircle2,
   Copy, Maximize2, XCircle, Plus, Trash2, Coins, CheckSquare, Square,
 } from "lucide-react";
-import { ToolSidebar } from "@/components/ToolSidebar";
-import { ParameterPanel } from "@/components/ParameterPanel";
-import { StyleCardSelector } from "@/components/StyleCardSelector";
-import { CreativitySlider } from "@/components/CreativitySlider";
+import { ImageParamBar } from "@/components/ImageParamBar";
+import { ImageAppsRow } from "@/components/ImageAppsRow";
 import { BatchPromptInput } from "@/components/BatchPromptInput";
 import { CosmicPromptCard } from "@/components/cosmic/CosmicPromptCard";
-import { CosmicParamPanel, CosmicSlider, CosmicSelect } from "@/components/cosmic/CosmicParamPanel";
+import type { CreativityLevel } from "@/components/CreativitySlider";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
@@ -615,6 +613,11 @@ export default function CreateImagePage() {
     );
   }, [toast]);
 
+  // ── Credit estimate for the param bar ──
+  const selectedModelObj = imageModels.find((m) => m.id === selectedModel);
+  const perImageCredits = selectedModelObj?.credits ?? null;
+  const estimatedCredits = perImageCredits != null ? perImageCredits * count : null;
+
   // ── Derived Values ───────────────────────────────────
   const imageResults = results.filter((r) => r.type === "image");
   const showEmpty = !submitting && !error && imageResults.length === 0;
@@ -637,55 +640,52 @@ export default function CreateImagePage() {
   // Render
   // ═══════════════════════════════════════════════════════
 
+  const goPill = (href: string) => router.push(href);
+
   return (
     <div className="flex h-[calc(100vh-4rem)]">
-      {/* ── Left: Sessions + Tool Sidebar ──────────────────────────── */}
+      {/* ── Left: Sessions ──────────────────────────── */}
       <div className="hidden lg:block w-56 p-4 pt-6 border-r border-cosmic-border/40 overflow-y-auto flex-shrink-0">
-        {/* Sessions */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">会话</p>
-            <button
-              onClick={handleNewSession}
-              className="inline-flex items-center gap-0.5 text-[11px] text-accent-cyan hover:opacity-80"
-              title="新建会话"
-            >
-              <Plus className="w-3.5 h-3.5" /> 新建
-            </button>
-          </div>
-          {sessions.length === 0 ? (
-            <p className="text-[11px] text-text-secondary/50 leading-relaxed">
-              生成后自动创建会话，历史作品按会话归档。
-            </p>
-          ) : (
-            <div className="space-y-1">
-              {sessions.map((s) => (
-                <div
-                  key={s.session_uid}
-                  className={cn(
-                    "group flex items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors",
-                    activeSession === s.session_uid
-                      ? "bg-accent-cyan/[0.08] border border-accent-cyan/20 text-accent-cyan"
-                      : "text-text-secondary hover:bg-cosmic-surface/30 border border-transparent"
-                  )}
-                  onClick={() => handleSwitchSession(s.session_uid)}
-                >
-                  <span className="truncate flex-1">{s.title || "未命名会话"}</span>
-                  <span className="text-[9px] text-text-secondary/50">{s.assets?.length ?? 0}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.session_uid); }}
-                    className="opacity-0 group-hover:opacity-100 text-text-secondary/60 hover:text-destructive transition-opacity"
-                    title="删除会话"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">会话</p>
+          <button
+            onClick={handleNewSession}
+            className="inline-flex items-center gap-0.5 text-[11px] text-accent-cyan hover:opacity-80"
+            title="新建会话"
+          >
+            <Plus className="w-3.5 h-3.5" /> 新建
+          </button>
         </div>
-
-        <ToolSidebar activeTool={activeTool} onToolSelect={handleToolSelect} />
+        {sessions.length === 0 ? (
+          <p className="text-[11px] text-text-secondary/50 leading-relaxed">
+            生成后自动创建会话，历史作品按会话归档。
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {sessions.map((s) => (
+              <div
+                key={s.session_uid}
+                className={cn(
+                  "group flex items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors",
+                  activeSession === s.session_uid
+                    ? "bg-accent-cyan/[0.08] border border-accent-cyan/20 text-accent-cyan"
+                    : "text-text-secondary hover:bg-cosmic-surface/30 border border-transparent"
+                )}
+                onClick={() => handleSwitchSession(s.session_uid)}
+              >
+                <span className="truncate flex-1">{s.title || "未命名会话"}</span>
+                <span className="text-[9px] text-text-secondary/50">{s.assets?.length ?? 0}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.session_uid); }}
+                  className="opacity-0 group-hover:opacity-100 text-text-secondary/60 hover:text-destructive transition-opacity"
+                  title="删除会话"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Center: Creation Area ───────────────────────── */}
@@ -695,30 +695,36 @@ export default function CreateImagePage() {
           animate={{ opacity: 1, y: 0 }}
           className="flex-1 flex flex-col max-w-3xl mx-auto w-full"
         >
-          {/* ═══════════ Prompt Area (Cosmic) ═══════════ */}
-          <div className="flex-1 flex flex-col">
-            {/* Tabs */}
-            <div className="flex items-center gap-1 mb-3">
-              {PROMPT_TABS.map((tab) => (
+          {/* ═══════════ Title + tool pills (Yapper-style) ═══════════ */}
+          <div className="text-center mb-5">
+            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+              Prompt · 编辑 · 合成专业图像
+            </h1>
+            <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+              {[
+                { label: "创意构思", href: "/agent", badge: "App" },
+                { label: "图片编辑器", href: "/create/image-editor", badge: "App" },
+                { label: "产品图", href: "/create/product", badge: "App" },
+              ].map((pill) => (
                 <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
-                    activeTab === tab.id
-                      ? "bg-accent-cyan/[0.08] text-accent-cyan"
-                      : "text-text-secondary hover:text-text-primary hover:bg-cosmic-subtle"
-                  )}
+                  key={pill.label}
+                  onClick={() => goPill(pill.href)}
+                  className="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-cosmic-surface/50 border border-cosmic-border/60 text-text-secondary hover:text-text-primary hover:border-accent-cyan/40 transition-colors"
                 >
-                  {tab.label}
+                  <Sparkles className="w-3.5 h-3.5 text-accent-cyan/80" />
+                  {pill.label}
+                  <span className="px-1 py-0.5 rounded text-[8px] font-semibold bg-accent-cyan/[0.12] text-accent-cyan">{pill.badge}</span>
                 </button>
               ))}
             </div>
+          </div>
 
+          {/* ═══════════ Prompt Area (Cosmic) ═══════════ */}
+          <div className="flex flex-col">
             {/* Cosmic Prompt Card */}
             <CosmicPromptCard
               onSubmit={(p: string) => { setPrompt(p); handleSubmit(p); }}
-              placeholder="描述你想要创作的图像，或上传图片进行编辑..."
+              placeholder="输入提示词，或上传图片进行编辑 / 合成..."
               suggestions={SUGGESTIONS}
               loading={submitting}
               mode="图片创作"
@@ -729,6 +735,33 @@ export default function CreateImagePage() {
               onReorderReference={reorderReference}
               maxReferences={4}
             />
+
+            {/* Consolidated parameter toolbar (all configs via dropdowns) */}
+            <div className="mt-2.5 px-1">
+              <ImageParamBar
+                models={imageModels}
+                selectedModel={selectedModel}
+                onModelSelect={setSelectedModel}
+                aspectRatio={aspectRatio}
+                onAspectChange={setAspectRatio}
+                resolution={resolution}
+                onResolutionChange={setResolution}
+                count={count}
+                onCountChange={setCount}
+                quality={quality}
+                onQualityChange={setQuality}
+                seedInput={seedInput}
+                onSeedChange={setSeedInput}
+                negativePrompt={negativePrompt}
+                onNegativeChange={setNegativePrompt}
+                style={style}
+                onStyleChange={setStyle}
+                creativity={creativity}
+                onCreativityChange={(c: CreativityLevel) => setCreativity(c)}
+                estimatedCredits={estimatedCredits}
+                perImageCredits={perImageCredits}
+              />
+            </div>
           </div>
 
           {/* Batch Prompt Input */}
@@ -1018,39 +1051,10 @@ export default function CreateImagePage() {
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
-      </div>
 
-      {/* ── Right: Parameter Panel ───────────────────────── */}
-      <div className="hidden xl:block w-72 p-4 pt-6 border-l border-cosmic-border/40 overflow-y-auto flex-shrink-0">
-        <ParameterPanel
-          models={imageModels}
-          selectedModel={selectedModel}
-          onModelSelect={setSelectedModel}
-          aspectRatio={aspectRatio}
-          onAspectChange={setAspectRatio}
-          resolution={resolution}
-          onResolutionChange={setResolution}
-          quality={quality}
-          onQualityChange={setQuality}
-          count={count}
-          onCountChange={setCount}
-          type="image"
-          negativePrompt={negativePrompt}
-          onNegativeChange={setNegativePrompt}
-          seedInput={seedInput}
-          onSeedChange={setSeedInput}
-        />
-        <StyleCardSelector
-          selected={style}
-          onChange={setStyle}
-          className="mt-4"
-        />
-        <CreativitySlider
-          value={creativity as any}
-          onChange={setCreativity}
-          className="mt-6"
-        />
+          {/* ═══════════ Image Apps (all tools grouped, Yapper-style) ═══════════ */}
+          <ImageAppsRow className="mt-10 mb-4" />
+        </motion.div>
       </div>
 
       {/* ── Lightbox (放大预览) ─────────────────────────── */}
