@@ -118,7 +118,9 @@ export function ImageComposer(p: Props) {
           }}
           placeholder={p.placeholder || "输入提示词，或添加图片进行编辑 / 合成…"}
           rows={2}
-          className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-text-primary placeholder:text-text-tertiary/40 focus:outline-none min-h-[64px] max-h-[220px] py-0.5"
+          // Suppress the global :focus-visible brand ring so the textarea is
+          // seamless inside the card (no green inner box) — like Yapper.
+          className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-text-primary placeholder:text-text-tertiary/40 outline-none focus:outline-none focus-visible:outline-none focus:shadow-none focus-visible:shadow-none min-h-[64px] max-h-[220px] py-0.5"
         />
         <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
           {/* AI enhance */}
