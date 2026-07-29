@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ImagePlus, X, Download, Maximize2, Sparkles, Coins, Loader2, CheckCircle2 } from "lucide-react";
-import { listPhotoPacks, generatePack, getTaskStatus, uploadImage, type PhotoPack, type TaskResult } from "@/lib/api";
+import { ImagePlus, X, Download, Maximize2, Sparkles, Loader2, CheckCircle2, Globe } from "lucide-react";
+import { listPhotoPacks, generatePack, getTaskStatus, uploadImage, publishShare, type PhotoPack, type TaskResult } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
    variations generated in one job, filling a gallery as they finish.
    ───────────────────────────────────────────────────────────── */
 
-interface ResultCell { label: string; taskId: string; status: string; url?: string; error?: string }
+interface ResultCell { label: string; taskId: string; status: string; url?: string; error?: string; published?: boolean }
 
 export function BatchPackStudio({
   defaultPack, category, title, subtitle, subjectPlaceholder,
@@ -105,6 +105,18 @@ export function BatchPackStudio({
     }, i * 350));
   };
 
+  // Growth flywheel: publish finished pack results to Explore (create → explore → remix).
+  const publishAll = useCallback(async () => {
+    const done = cells.filter((c) => c.status === "completed" && !c.published);
+    if (!done.length) return;
+    let ok = 0;
+    await Promise.all(done.map(async (c) => {
+      try { await publishShare(c.taskId); ok++; setCells((prev) => prev.map((x) => x.taskId === c.taskId ? { ...x, published: true } : x)); }
+      catch { /* skip */ }
+    }));
+    if (ok) toast.success("已发布到 Explore", `${ok} 张作品已进入探索画廊`);
+  }, [cells, toast]);
+
   const doneCount = cells.filter((c) => c.status === "completed").length;
 
   return (
@@ -187,9 +199,14 @@ export function BatchPackStudio({
               套系结果 {doneCount}/{cells.length}
             </p>
             {doneCount > 0 && (
-              <button onClick={downloadAll} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] bg-accent-cyan/[0.1] text-accent-cyan hover:bg-accent-cyan/20">
-                <Download className="w-3.5 h-3.5" /> 下载全部
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={publishAll} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] border border-cosmic-border/60 text-text-secondary hover:text-accent-cyan hover:border-accent-cyan/40 transition-colors">
+                  <Globe className="w-3.5 h-3.5" /> 发布到 Explore
+                </button>
+                <button onClick={downloadAll} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] bg-accent-cyan/[0.1] text-accent-cyan hover:bg-accent-cyan/20">
+                  <Download className="w-3.5 h-3.5" /> 下载全部
+                </button>
+              </div>
             )}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">

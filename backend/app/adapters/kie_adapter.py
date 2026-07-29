@@ -854,26 +854,37 @@ class KieAdapter(BaseModelAdapter):
         base = self._base_url.rstrip("/")
 
         # Step 1: Submit — KIE expects {model, input: {...}}
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(
-                f"{base}/api/v1/jobs/createTask",
-                headers=headers,
-                json={"model": payload["model"], "input": {k: v for k, v in payload.items() if k != "model"}},
+        # createTask with transient-transport retry (KIE occasionally drops the
+        # connection mid-request — "Server disconnected"; retrying prevents a
+        # whole batch variation from failing on a blip).
+        create_body = {"model": payload["model"], "input": {k: v for k, v in payload.items() if k != "model"}}
+        data = None
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    resp = await client.post(
+                        f"{base}/api/v1/jobs/createTask", headers=headers, json=create_body,
+                    )
+                if resp.status_code != 200:
+                    raise RuntimeError(f"KIE createTask HTTP {resp.status_code}: {resp.text[:300]}")
+                data = resp.json()
+                break
+            except (httpx.TransportError, httpx.RemoteProtocolError) as e:
+                last_exc = e
+                logger.warning("[KIE] createTask transport error attempt %d: %s", attempt + 1, e)
+                if attempt < 2:
+                    await asyncio.sleep(2 * (attempt + 1))
+                    continue
+                raise RuntimeError(f"KIE createTask connection error: {e}") from e
+        if data is None:
+            raise RuntimeError(f"KIE createTask failed: {last_exc}")
+        if int(data.get("code", 0)) != 200:
+            raise RuntimeError(
+                f"KIE API error: code={data.get('code')} msg={data.get('msg', '')}"
             )
-
-            if resp.status_code != 200:
-                raise RuntimeError(
-                    f"KIE createTask HTTP {resp.status_code}: {resp.text[:300]}"
-                )
-
-            data = resp.json()
-            if int(data.get("code", 0)) != 200:
-                raise RuntimeError(
-                    f"KIE API error: code={data.get('code')} msg={data.get('msg', '')}"
-                )
-
-            task_id = data["data"]["taskId"]
-            logger.info("[KIE] task submitted: %s", task_id)
+        task_id = data["data"]["taskId"]
+        logger.info("[KIE] task submitted: %s", task_id)
 
         # Step 2: Poll
         poll_interval = 6 if media_type == "video" else 3
