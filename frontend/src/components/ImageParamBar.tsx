@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  ChevronDown, Coins, Sparkles, Ratio, Monitor, Hash, SlidersHorizontal,
+  ChevronsUpDown, Coins, Sparkles, Ratio, Monitor, Hash, SlidersHorizontal,
   Dice5, Ban, Check,
 } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -84,17 +84,16 @@ function Chip({
         <button
           type="button"
           className={cn(
-            "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs whitespace-nowrap transition-colors",
-            "border border-cosmic-border/60 bg-cosmic-surface/40 text-text-secondary",
-            "hover:border-accent-cyan/40 hover:text-text-primary",
-            open && "border-accent-cyan/40 text-text-primary bg-accent-cyan/[0.06]",
+            "inline-flex items-center gap-1 h-7 px-1.5 rounded-md text-xs whitespace-nowrap transition-colors",
+            "text-text-secondary hover:text-text-primary hover:bg-cosmic-subtle/60",
+            open && "text-text-primary bg-cosmic-subtle/60",
             className,
           )}
         >
-          <Icon className="w-3.5 h-3.5 opacity-80" />
-          <span className="text-text-secondary/70">{label}</span>
-          {value && <span className="font-medium text-text-primary">{value}</span>}
-          <ChevronDown className={cn("w-3 h-3 opacity-60 transition-transform", open && "rotate-180")} />
+          <Icon className="w-3.5 h-3.5 opacity-70" />
+          <span className="text-text-secondary/55">{label}</span>
+          {value && <span className="font-medium text-text-primary/90">{value}</span>}
+          <ChevronsUpDown className="w-3 h-3 opacity-45" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={6} className="w-64 border-cosmic-border bg-cosmic-surface p-2">

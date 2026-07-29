@@ -1,17 +1,19 @@
 "use client";
 
 import { useRef, useState, type DragEvent } from "react";
-import { ImagePlus, X, Coins, ArrowUp, Upload } from "lucide-react";
+import { ImagePlus, X, ArrowUp, Upload, Wand2, Info, CircleDollarSign } from "lucide-react";
 import { ImageParamBar, type ParamModel } from "@/components/ImageParamBar";
 import type { CreativityLevel } from "@/components/CreativitySlider";
 import type { Quality } from "@/lib/stores";
+import { enhancePrompt } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /* ─────────────────────────────────────────────────────────────
-   ImageComposer — a single, unified Yapper-style input box.
-   Prompt textarea on top; ONE toolbar row underneath holding the
-   reference thumbnails + add-ref + all parameter dropdown chips +
-   credit estimate + generate button. No nested/stacked frames.
+   ImageComposer — single unified input box modeled on Yapper.
+   • One flat rounded container (no nested frames).
+   • Round send button + AI-enhance icon at the TOP-RIGHT.
+   • One bottom toolbar row: add-image icon + borderless param
+     chips (模型/比例/分辨率/数量/更多) + ◎ credits ⓘ on the right.
    ───────────────────────────────────────────────────────────── */
 
 interface Ref { preview: string; name?: string }
@@ -58,6 +60,7 @@ export function ImageComposer(p: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropping, setDropping] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
   const maxRefs = p.maxReferences ?? 4;
   const atCap = p.referenceFiles.length >= maxRefs;
   const canGenerate = !!p.prompt.trim() && !p.loading;
@@ -75,16 +78,24 @@ export function ImageComposer(p: Props) {
     if (f && !atCap) p.onAddReference(f);
   };
 
+  const enhance = async () => {
+    if (!p.prompt.trim() || enhancing) return;
+    setEnhancing(true);
+    try {
+      const res = await enhancePrompt(p.prompt, "image");
+      if (res?.enhanced) p.onPromptChange(res.enhanced);
+    } catch { /* best-effort */ }
+    finally { setEnhancing(false); }
+  };
+
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setDropping(true); }}
       onDragLeave={(e) => { e.preventDefault(); setDropping(false); }}
       onDrop={onDrop}
       className={cn(
-        "relative w-full rounded-2xl bg-cosmic-surface border transition-all duration-200",
-        "shadow-elevation-md",
-        dropping ? "border-accent-cyan/50 shadow-glow-medium"
-          : "border-cosmic-border/60 focus-within:border-accent-cyan/30 focus-within:shadow-glow-subtle",
+        "relative w-full rounded-2xl bg-cosmic-surface/80 border transition-colors duration-200",
+        dropping ? "border-accent-cyan/50" : "border-cosmic-border/70 focus-within:border-cosmic-border",
       )}
     >
       {/* Drag overlay */}
@@ -94,20 +105,56 @@ export function ImageComposer(p: Props) {
         </div>
       )}
 
-      {/* Prompt textarea */}
-      <textarea
-        value={p.prompt}
-        onChange={(e) => p.onPromptChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (canGenerate) p.onGenerate(); }
-        }}
-        placeholder={p.placeholder || "输入提示词，或上传图片进行编辑 / 合成..."}
-        rows={2}
-        className="w-full resize-none bg-transparent px-5 pt-4 pb-2 text-[15px] leading-relaxed text-text-primary placeholder:text-text-tertiary/45 focus:outline-none min-h-[64px] max-h-[220px]"
-      />
+      {/* Top: prompt textarea + top-right controls */}
+      <div className="flex items-start gap-2 px-4 pt-3.5 pb-1">
+        <textarea
+          value={p.prompt}
+          onChange={(e) => p.onPromptChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (canGenerate) p.onGenerate(); }
+          }}
+          placeholder={p.placeholder || "输入提示词，或添加图片进行编辑 / 合成…"}
+          rows={2}
+          className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-text-primary placeholder:text-text-tertiary/40 focus:outline-none min-h-[52px] max-h-[220px] py-0.5"
+        />
+        <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+          {/* AI enhance */}
+          <button
+            type="button"
+            onClick={enhance}
+            disabled={!p.prompt.trim() || enhancing}
+            title="AI 优化提示词"
+            className={cn(
+              "inline-flex items-center justify-center h-7 w-7 rounded-lg text-text-secondary transition-colors",
+              p.prompt.trim() ? "hover:text-accent-cyan hover:bg-cosmic-subtle/60" : "opacity-40 cursor-not-allowed",
+            )}
+          >
+            {enhancing
+              ? <span className="w-3.5 h-3.5 border-2 border-accent-cyan/40 border-t-accent-cyan rounded-full animate-spin" />
+              : <Wand2 className="w-4 h-4" />}
+          </button>
+          {/* Send / generate */}
+          <button
+            type="button"
+            onClick={() => { if (canGenerate) p.onGenerate(); }}
+            disabled={!canGenerate}
+            title="生成"
+            className={cn(
+              "inline-flex items-center justify-center h-8 w-8 rounded-full transition-all",
+              canGenerate
+                ? "bg-accent-cyan text-white hover:brightness-110 active:scale-95"
+                : "bg-cosmic-subtle text-text-tertiary/50 cursor-not-allowed",
+            )}
+          >
+            {p.loading
+              ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              : <ArrowUp className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
 
-      {/* Single toolbar row: refs + add + params + credit + generate */}
-      <div className="flex items-center gap-2 flex-wrap px-3 pb-3 pt-1">
+      {/* Bottom toolbar: add-image + param chips + credits (single row) */}
+      <div className="flex items-center gap-1 flex-wrap px-2.5 pb-2.5 pt-0.5">
         {/* Reference thumbnails (inline) */}
         {p.referenceFiles.map((ref, i) => (
           <div
@@ -121,7 +168,7 @@ export function ImageComposer(p: Props) {
               setDragIndex(null);
             }}
             className={cn(
-              "relative group w-8 h-8 rounded-lg overflow-hidden border flex-shrink-0",
+              "relative group w-7 h-7 rounded-md overflow-hidden border flex-shrink-0 mr-0.5",
               dragIndex === i ? "border-accent-cyan/60 opacity-60" : "border-cosmic-border/60",
               p.onReorderReference && "cursor-grab active:cursor-grabbing",
             )}
@@ -132,30 +179,27 @@ export function ImageComposer(p: Props) {
               onClick={() => p.onRemoveReference(i)}
               className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"
             >
-              <X className="w-3.5 h-3.5 text-white" />
+              <X className="w-3 h-3 text-white" />
             </button>
           </div>
         ))}
 
-        {/* Add reference */}
+        {/* Add image (leading icon, borderless) */}
         <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
         <button
           type="button"
           onClick={() => { if (!atCap) fileRef.current?.click(); }}
           disabled={atCap}
-          title={atCap ? `最多 ${maxRefs} 张参考图` : "添加参考图"}
+          title={atCap ? `最多 ${maxRefs} 张参考图` : "添加图片"}
           className={cn(
-            "inline-flex items-center justify-center h-8 w-8 rounded-lg border border-cosmic-border/60 bg-cosmic-surface/40 text-text-secondary transition-colors flex-shrink-0",
-            atCap ? "opacity-40 cursor-not-allowed" : "hover:border-accent-cyan/40 hover:text-accent-cyan",
+            "inline-flex items-center justify-center h-7 w-7 rounded-md text-text-secondary transition-colors flex-shrink-0",
+            atCap ? "opacity-40 cursor-not-allowed" : "hover:text-accent-cyan hover:bg-cosmic-subtle/60",
           )}
         >
           <ImagePlus className="w-4 h-4" />
         </button>
 
-        {/* Divider */}
-        <span className="w-px h-5 bg-cosmic-border/50 mx-0.5" />
-
-        {/* Parameter chips */}
+        {/* Parameter chips (borderless) */}
         <ImageParamBar
           models={p.models}
           selectedModel={p.selectedModel}
@@ -178,29 +222,11 @@ export function ImageComposer(p: Props) {
           onCreativityChange={p.onCreativityChange}
         />
 
-        {/* Right group: credit + generate */}
-        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
-          <span className="inline-flex items-center gap-1 text-xs text-text-secondary/80" title="预估消耗积分" data-testid="credit-estimate">
-            <Coins className="w-3.5 h-3.5 text-accent-cyan" />
-            <span className="font-semibold text-accent-cyan">{p.estimatedCredits != null ? p.estimatedCredits : "—"}</span>
-            <span className="text-text-secondary/50">积分</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => { if (canGenerate) p.onGenerate(); }}
-            disabled={!canGenerate}
-            title="生成"
-            className={cn(
-              "inline-flex items-center justify-center h-9 w-9 rounded-xl transition-all",
-              canGenerate
-                ? "bg-gradient-to-br from-accent-cyan to-accent-violet text-white shadow-button-glow hover:brightness-110 active:scale-95"
-                : "bg-cosmic-subtle text-text-tertiary/50 cursor-not-allowed",
-            )}
-          >
-            {p.loading
-              ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-              : <ArrowUp className="w-4 h-4" />}
-          </button>
+        {/* Credits (◎ N ⓘ) — right aligned */}
+        <div className="ml-auto inline-flex items-center gap-1 text-xs text-text-secondary/80 pr-1" title="预估消耗积分" data-testid="credit-estimate">
+          <CircleDollarSign className="w-3.5 h-3.5 text-accent-cyan/90" />
+          <span className="font-medium text-text-primary/90">{p.estimatedCredits != null ? p.estimatedCredits : "—"}</span>
+          <Info className="w-3 h-3 opacity-45" />
         </div>
       </div>
     </div>
