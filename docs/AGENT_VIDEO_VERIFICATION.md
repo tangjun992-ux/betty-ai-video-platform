@@ -110,3 +110,45 @@ AV_GUEST=<funded-guest> AV_VERIFY_STORYBOARD_LIVE=1 PYTHONPATH=. .venv/bin/pytho
 ```
 
 **诚实边界：** 真实出片依赖 `KIE_API_KEY`（本机通过 secret 注入运行中的 API+Worker）；平台内积分为 Betty 计费系统，与 KIE 额度独立；视频/分镜真实渲染耗时较长（单镜 seedance ~1–4 分钟）。
+
+---
+
+## 7. 数字人（口播）模块专项分析与修复
+
+用户手工测试报告：`数字人口播` 流程中 **AI 配音(TTS) 耗时 478.6s 并失败/跳过**、**唇形同步驱动被跳过**，成片不是真正会说话的数字人。
+
+### 7.1 根因（逐环节）
+
+| 环节 | 现象 | 根因 |
+|------|------|------|
+| AI 配音 (TTS) | 478.6s 后失败/跳过 | `synthesize_speech_edge` 对 `edge_tts.Communicate.save()` **未设超时**；websocket 阻塞/抖动时会挂起数分钟 |
+| 唇形同步 | 被跳过 | lipsync 依赖配音音频；音频失败 → `if not (img_pub and aud_pub)` 判定"缺少配音"→ 正确地拒绝伪造，但被上游拖累 |
+| 成片字幕 | 中央大黑框盖住脸、字幕是 brief 全文 | `_script_to_subtitle_track` 只按句末标点切分；逗号分隔的中文 brief 变成**一条超长 cue**，叠加 `BorderStyle=3` 不透明框 → 覆盖面部 |
+
+另：验证期间发现**磁盘 100% 占满**（`/opt/cursor/recording-staging` 残留 246G 录屏暂存），会导致 TTS 临时文件写入 `ENOSPC` —— 已清理，恢复 233G 空闲。此为环境问题，非平台代码缺陷。
+
+### 7.2 修复
+
+1. **TTS 硬超时**：`synthesize_speech_edge` 用 `asyncio.wait_for(EDGE_TTS_TIMEOUT_S=20s)` 包裹并校验非空输出；超时/失败快速抛错 → 走 ElevenLabs/KIE 兜底。edge 正常 <1s。
+2. **字幕短句化**：`_script_to_subtitle_track` 增加按逗号/顿号/分号切分 + 长句均衡分块（无孤字），每条字幕为一行短句。
+3. **数字人字幕面部安全样式**：`talking` 预设改为描边下三分之一（`BorderStyle=1`，无不透明框）；并对 talking 意图/`talking_avatar` **强制**该样式，忽略投放位的方框预设。
+
+### 7.3 修复后真实验证（端到端）
+
+```
+AI 配音 (TTS)      done  2.4s        ← 此前 478.6s 挂起
+生成数字人形象      done  ~35s        Nano Banana 2 真实人像
+唇形同步驱动        done  ~5.4min     Kling AI Avatar · lipsync=True（真实开口）
+智能字幕            done
+口播成片包装        done  ~10s        final_*_sub_cta.mp4
+```
+视觉复核（videoReview + 抽帧）：真实女性数字人口型与中文语音**自然同步**；字幕为**底部短句**、**不遮挡面部**、随语音分段切换；片尾 CTA 正常。
+
+### 7.4 仍可优化（非阻塞）
+
+| 优先级 | 项 | 说明 |
+|:--:|----|------|
+| P1 | 口播脚本生成 | 目前数字人"念"的是 brief 原文（指令腔）；应由 LLM 生成自然口播话术再驱动 TTS/字幕 |
+| P1 | 唇形时延 | Kling AI Avatar 单条 ~5min；可加真实进度百分比与可取消 |
+| P2 | ElevenLabs/KIE TTS 兜底提速 | KIE TTS 兜底 >25s，edge 正常时不触发；作为二级兜底可接受 |
+| P2 | 字幕与音频时轴对齐 | 当前 cue 固定 2.4s/条；可按 TTS 实际时长自适应 |
