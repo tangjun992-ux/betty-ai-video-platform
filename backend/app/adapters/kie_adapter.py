@@ -886,9 +886,11 @@ class KieAdapter(BaseModelAdapter):
         task_id = data["data"]["taskId"]
         logger.info("[KIE] task submitted: %s", task_id)
 
-        # Step 2: Poll
+        # Step 2: Poll. Image queue-wait cap raised to 240s: under shared-GPU
+        # congestion nano-banana-edit (edit / face-swap / product packs) can sit
+        # in queue >160s; 240s survives moderate load without hanging forever.
         poll_interval = 6 if media_type == "video" else 3
-        max_waiting_seconds = 600 if media_type == "video" else 160
+        max_waiting_seconds = 600 if media_type == "video" else 240
 
         async with httpx.AsyncClient(timeout=30) as client:
             started_at = time.monotonic()
