@@ -940,12 +940,13 @@ export default function CreateImagePage() {
                         </div>
                       )}
 
-                      {/* Actions Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center gap-1.5 p-3 flex-wrap">
+                      {/* Actions Overlay — container ignores pointer events so a
+                          plain image click opens the lightbox; buttons re-enable. */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center gap-1.5 p-3 flex-wrap pointer-events-none">
                         {/* Maximize / lightbox */}
                         <button
                           onClick={() => setLightbox(item.url)}
-                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan"
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan pointer-events-auto"
                           title="放大预览"
                         >
                           <Maximize2 className="w-4 h-4" />
@@ -954,7 +955,7 @@ export default function CreateImagePage() {
                         <button
                           onClick={() => iterate("vary", { prompt: item.prompt, model: item.model, seed: item.seed })}
                           disabled={submitting}
-                          className="btn-icon bg-brand/[0.85] hover:bg-brand backdrop-blur-sm text-white disabled:opacity-50"
+                          className="btn-icon bg-brand/[0.85] hover:bg-brand backdrop-blur-sm text-white disabled:opacity-50 pointer-events-auto"
                           title="生成变体（同提示词，新随机种子）"
                         >
                           <Wand2 className="w-4 h-4" />
@@ -963,7 +964,7 @@ export default function CreateImagePage() {
                         <button
                           onClick={() => iterate("reproduce", { prompt: item.prompt, model: item.model, seed: item.seed })}
                           disabled={submitting || item.seed == null}
-                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan disabled:opacity-40"
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan disabled:opacity-40 pointer-events-auto"
                           title={item.seed != null ? `按种子复现 (${item.seed})` : "无种子信息"}
                         >
                           <RefreshCw className="w-4 h-4" />
@@ -971,7 +972,7 @@ export default function CreateImagePage() {
                         {/* Copy prompt */}
                         <button
                           onClick={() => copyPrompt(item.prompt)}
-                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan"
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan pointer-events-auto"
                           title="复制提示词"
                         >
                           <Copy className="w-4 h-4" />
@@ -982,7 +983,7 @@ export default function CreateImagePage() {
                           download
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan"
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan pointer-events-auto"
                           title="下载"
                         >
                           <Download className="w-4 h-4" />
@@ -990,7 +991,7 @@ export default function CreateImagePage() {
                         {/* Use in Video */}
                         <button
                           onClick={() => router.push("/create/video")}
-                          className="btn-icon bg-accent-cyan/[0.12] hover:bg-accent-cyan/30 backdrop-blur-sm text-accent-cyan"
+                          className="btn-icon bg-accent-cyan/[0.12] hover:bg-accent-cyan/30 backdrop-blur-sm text-accent-cyan pointer-events-auto"
                           title="用于视频"
                         >
                           <Video className="w-4 h-4" />
