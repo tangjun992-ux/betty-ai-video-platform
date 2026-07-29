@@ -56,12 +56,6 @@ const SUGGESTIONS = [
   "专业商务头像，现代办公室背景",
 ];
 
-const PROMPT_TABS = [
-  { id: "prompt" as const, label: "Prompt" },
-  { id: "edit" as const, label: "编辑" },
-  { id: "combine" as const, label: "合并图像" },
-];
-
 // ═══════════════════════════════════════════════════════════
 // Page Component
 // ═══════════════════════════════════════════════════════════
@@ -81,7 +75,6 @@ export default function CreateImagePage() {
     remoteRefs, addRemoteRef, removeRemoteRef,
     negativePrompt, setNegativePrompt, seedInput, setSeedInput,
     addRecentPrompt, addResult, results, setResults,
-    activeTab, setActiveTab,
   } = useCreationStore();
 
   // ── Local State ──────────────────────────────────────
@@ -482,13 +475,6 @@ export default function CreateImagePage() {
   const handleDismissError = useCallback(() => {
     setError(null);
   }, []);
-
-  const handleToolSelect = useCallback((tool: string) => {
-    setActiveTool((prev) => (prev === tool ? null : tool));
-    if (tool === "产品图") setPrompt("产品摄影，白色背景，专业灯光，高清细节");
-    if (tool === "专业头像") setPrompt("专业商务头像，现代办公室背景，柔和光线，高分辨率");
-    if (tool === "去背景") setPrompt("移除背景，保留主体，透明背景");
-  }, [setPrompt]);
 
   const handleBatchSubmit = useCallback(async (prompts: string[]) => {
     for (const p of prompts) {
