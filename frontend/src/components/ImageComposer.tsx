@@ -94,8 +94,10 @@ export function ImageComposer(p: Props) {
       onDragLeave={(e) => { e.preventDefault(); setDropping(false); }}
       onDrop={onDrop}
       className={cn(
-        // Soft, constant border like Yapper — no focus brightening / glow.
-        "relative w-full rounded-2xl bg-cosmic-surface border border-cosmic-border/45",
+        // One clearly-enclosing card like Yapper: elevated fill + a visible
+        // (but soft) border + depth shadow wrapping BOTH the prompt and the
+        // params row. Constant — no focus brightening / glow.
+        "relative w-full rounded-[18px] bg-cosmic-elevated border border-cosmic-border shadow-lg",
         dropping && "border-accent-cyan/40",
       )}
     >
@@ -107,7 +109,7 @@ export function ImageComposer(p: Props) {
       )}
 
       {/* Top: prompt textarea + top-right controls */}
-      <div className="flex items-start gap-2 px-4 pt-3.5 pb-1">
+      <div className="flex items-start gap-2 px-4 pt-4 pb-1.5">
         <textarea
           value={p.prompt}
           onChange={(e) => p.onPromptChange(e.target.value)}
@@ -116,7 +118,7 @@ export function ImageComposer(p: Props) {
           }}
           placeholder={p.placeholder || "输入提示词，或添加图片进行编辑 / 合成…"}
           rows={2}
-          className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-text-primary placeholder:text-text-tertiary/40 focus:outline-none min-h-[52px] max-h-[220px] py-0.5"
+          className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-text-primary placeholder:text-text-tertiary/40 focus:outline-none min-h-[64px] max-h-[220px] py-0.5"
         />
         <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
           {/* AI enhance */}
@@ -155,7 +157,7 @@ export function ImageComposer(p: Props) {
       </div>
 
       {/* Bottom toolbar: add-image + param chips + credits (single row) */}
-      <div className="flex items-center gap-1 flex-wrap px-2.5 pb-2.5 pt-0.5">
+      <div className="flex items-center gap-1 flex-wrap px-3 pb-3 pt-1">
         {/* Reference thumbnails (inline) */}
         {p.referenceFiles.map((ref, i) => (
           <div
