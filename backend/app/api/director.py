@@ -606,6 +606,8 @@ async def rerun_step(
 class SessionCreate(BaseModel):
     title: str | None = None
     brief: str | None = None
+    intent: str | None = None
+    status: str | None = None
 
 
 class SessionUpdate(BaseModel):
@@ -649,7 +651,8 @@ async def create_session(
 ):
     s = DirectorSession(
         session_uid=uuid.uuid4().hex, user_id=user_id,
-        title=req.title or "新导演会话", brief=req.brief, status="draft",
+        title=req.title or "新导演会话", brief=req.brief,
+        intent=req.intent, status=req.status or "draft",
     )
     db.add(s)
     await db.flush()

@@ -336,6 +336,14 @@ class KieAdapter(BaseModelAdapter):
                 except ValueError:
                     payload["seed"] = abs(hash(str(seed))) % (2**31)
 
+        # Negative prompt — honored by models that support it (SDXL/FLUX/…);
+        # sent under both common key spellings, ignored by models that don't.
+        negative = kwargs.get("negative_prompt")
+        if negative and str(negative).strip():
+            neg = str(negative).strip()
+            payload["negativePrompt"] = neg
+            payload["negative_prompt"] = neg
+
         # Number of images (n varies by model)
         if count > 1:
             payload["n"] = count

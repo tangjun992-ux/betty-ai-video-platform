@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, ChevronUp, Settings2, Info } from "lucide-react";
+import { ChevronDown, ChevronUp, Settings2, Info, Coins, Dice5, Ban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Quality } from "@/lib/stores";
 
@@ -11,6 +11,7 @@ interface Model {
   name: string;
   desc: string;
   badge?: string;
+  credits?: number;
 }
 
 interface ParameterPanelProps {
@@ -28,6 +29,11 @@ interface ParameterPanelProps {
   duration?: number;
   onDurationChange?: (n: number) => void;
   type: "image" | "video";
+  // Advanced params (image workspace)
+  negativePrompt?: string;
+  onNegativeChange?: (v: string) => void;
+  seedInput?: string;
+  onSeedChange?: (v: string) => void;
 }
 
 const ASPECT_RATIOS = [
@@ -35,11 +41,11 @@ const ASPECT_RATIOS = [
   { label: "16:9", value: "1920x1080", w: 16, h: 9 },
   { label: "9:16", value: "1080x1920", w: 9, h: 16 },
   { label: "4:3", value: "1280x960", w: 4, h: 3 },
-  { label: "3:2", value: "1536x1024", w: 3, h: 2 },
+  { label: "3:4", value: "960x1280", w: 3, h: 4 },
 ];
 
 const RESOLUTIONS = ["720p", "1080p", "2K", "4K"];
-const COUNTS = [1, 2, 4, 8];
+const COUNTS = [1, 2, 4];
 const DURATIONS = [3, 5, 10, 15, 30];
 
 export function ParameterPanel({
@@ -57,8 +63,16 @@ export function ParameterPanel({
   duration = 5,
   onDurationChange,
   type,
+  negativePrompt,
+  onNegativeChange,
+  seedInput,
+  onSeedChange,
 }: ParameterPanelProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const selected = models.find((m) => m.id === selectedModel);
+  const perImageCredits = selected?.credits;
+  const estTotal = perImageCredits != null ? perImageCredits * count : null;
 
   return (
     <div className="w-64 flex-shrink-0 space-y-5 pl-2">
@@ -83,13 +97,35 @@ export function ParameterPanel({
                 <span className="font-medium">{m.name}</span>
                 <span className="text-[10px] text-text-secondary/60">{m.desc}</span>
               </div>
-              {m.badge && (
-                <span className="px-1.5 py-0.5 rounded text-[10px] bg-accent-cyan/[0.08] text-accent-cyan">
-                  {m.badge}
-                </span>
-              )}
+              <div className="flex flex-col items-end gap-0.5">
+                {m.badge && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-accent-cyan/[0.08] text-accent-cyan">
+                    {m.badge}
+                  </span>
+                )}
+                {m.credits != null && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] text-text-secondary/70" title="每张预估积分">
+                    <Coins className="w-2.5 h-2.5" />{m.credits}
+                  </span>
+                )}
+              </div>
             </button>
           ))}
+        </div>
+
+        {/* Live credit estimate for the current selection */}
+        <div className="mt-2 flex items-center justify-between rounded-lg bg-cosmic-surface/40 border border-cosmic-border/40 px-3 py-2">
+          <span className="inline-flex items-center gap-1 text-[11px] text-text-secondary/70">
+            <Coins className="w-3 h-3 text-accent-cyan" /> 预估消耗
+          </span>
+          <span className="text-xs font-semibold text-accent-cyan" data-testid="credit-estimate">
+            {estTotal != null ? `${estTotal} 积分` : "智能计费"}
+            {perImageCredits != null && count > 1 && (
+              <span className="ml-1 text-[10px] text-text-secondary/60 font-normal">
+                ({perImageCredits}×{count})
+              </span>
+            )}
+          </span>
         </div>
       </div>
 
@@ -225,6 +261,53 @@ export function ParameterPanel({
                   ))}
                 </div>
               </div>
+
+              {/* Seed (image workspace) */}
+              {type === "image" && onSeedChange && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="inline-flex items-center gap-1 text-[11px] text-text-secondary/60">
+                      <Dice5 className="w-3 h-3" /> 种子 (Seed)
+                    </p>
+                    {seedInput ? (
+                      <button
+                        onClick={() => onSeedChange("")}
+                        className="text-[10px] text-text-secondary/60 hover:text-accent-cyan"
+                      >随机</button>
+                    ) : (
+                      <button
+                        onClick={() => onSeedChange(String(Math.floor(Math.random() * 2147483647)))}
+                        className="text-[10px] text-text-secondary/60 hover:text-accent-cyan"
+                      >固定</button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={seedInput ?? ""}
+                    onChange={(e) => onSeedChange(e.target.value.replace(/[^0-9]/g, "").slice(0, 10))}
+                    placeholder="留空 = 每次随机"
+                    className="w-full px-3 py-2 rounded-lg text-xs bg-cosmic-surface/40 border border-cosmic-border/50 text-text-primary placeholder:text-text-tertiary/50 focus:outline-none focus:border-accent-cyan/40"
+                  />
+                </div>
+              )}
+
+              {/* Negative prompt (image workspace) */}
+              {type === "image" && onNegativeChange && (
+                <div>
+                  <p className="inline-flex items-center gap-1 text-[11px] text-text-secondary/60 mb-1.5">
+                    <Ban className="w-3 h-3" /> 负向提示词
+                  </p>
+                  <textarea
+                    value={negativePrompt ?? ""}
+                    onChange={(e) => onNegativeChange(e.target.value.slice(0, 2000))}
+                    rows={2}
+                    placeholder="不希望出现的元素，如：模糊, 多余手指, 水印"
+                    className="w-full resize-none px-3 py-2 rounded-lg text-xs bg-cosmic-surface/40 border border-cosmic-border/50 text-text-primary placeholder:text-text-tertiary/50 focus:outline-none focus:border-accent-cyan/40"
+                  />
+                  <p className="mt-1 text-[9px] text-text-secondary/50">支持的模型将透传；不支持时自动忽略。</p>
+                </div>
+              )}
 
               {/* Info */}
               <div className="flex items-start gap-2 p-3 rounded-lg bg-cosmic-surface/30 border border-cosmic-border/40">

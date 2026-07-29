@@ -29,6 +29,8 @@ interface CosmicPromptCardProps {
   referenceFiles?: ReferenceFile[];
   onAddReference?: (file: File) => void;
   onRemoveReference?: (index: number) => void;
+  onReorderReference?: (from: number, to: number) => void;
+  maxReferences?: number;
 }
 
 export function CosmicPromptCard({
@@ -42,8 +44,12 @@ export function CosmicPromptCard({
   referenceFiles = [],
   onAddReference,
   onRemoveReference,
+  onReorderReference,
+  maxReferences = 4,
 }: CosmicPromptCardProps) {
   const [prompt, setPrompt] = useState("");
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const atCap = referenceFiles.length >= maxReferences;
 
   // Sync external pre-fill into the internal textarea state
   useEffect(() => {
@@ -149,23 +155,46 @@ export function CosmicPromptCard({
 
       {/* ── Reference Images Strip ── */}
       {referenceFiles.length > 0 && (
-        <div className="flex gap-2 px-5 pt-4 pb-0 flex-wrap">
-          {referenceFiles.map((ref, i) => (
-            <div
-              key={i}
-              className="relative group w-16 h-16 rounded-lg overflow-hidden border border-cosmic-border/60 flex-shrink-0"
-            >
-              <img src={ref.preview} alt={ref.name || "参考图"} className="w-full h-full object-cover" />
-              {onRemoveReference && (
-                <button
-                  onClick={() => onRemoveReference(i)}
-                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <X className="w-3 h-3 text-white" />
-                </button>
-              )}
-            </div>
-          ))}
+        <div className="px-5 pt-4 pb-0">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-caption text-text-tertiary">参考图 {referenceFiles.length}/{maxReferences}</span>
+            {onReorderReference && referenceFiles.length > 1 && (
+              <span className="text-[10px] text-text-tertiary/60">（拖拽可排序）</span>
+            )}
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {referenceFiles.map((ref, i) => (
+              <div
+                key={`${ref.preview}-${i}`}
+                draggable={!!onReorderReference}
+                onDragStart={() => setDragIndex(i)}
+                onDragOver={(e) => { if (onReorderReference) e.preventDefault(); }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (onReorderReference && dragIndex !== null && dragIndex !== i) {
+                    onReorderReference(dragIndex, i);
+                  }
+                  setDragIndex(null);
+                }}
+                className={cn(
+                  "relative group w-16 h-16 rounded-lg overflow-hidden border flex-shrink-0",
+                  dragIndex === i ? "border-accent-cyan/60 opacity-60" : "border-cosmic-border/60",
+                  onReorderReference && "cursor-grab active:cursor-grabbing"
+                )}
+              >
+                <img src={ref.preview} alt={ref.name || "参考图"} className="w-full h-full object-cover pointer-events-none" />
+                <span className="absolute bottom-0.5 left-0.5 px-1 rounded bg-black/60 text-[9px] text-white/80 font-mono">{i + 1}</span>
+                {onRemoveReference && (
+                  <button
+                    onClick={() => onRemoveReference(i)}
+                    className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3 h-3 text-white" />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -232,17 +261,20 @@ export function CosmicPromptCard({
                 className="hidden"
               />
               <button
-                onClick={() => fileRef.current?.click()}
+                onClick={() => { if (!atCap) fileRef.current?.click(); }}
+                disabled={atCap}
+                title={atCap ? `最多 ${maxReferences} 张参考图` : "添加参考图"}
                 className={cn(
                   "flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full",
                   "bg-cosmic-subtle border border-cosmic-border",
                   "text-caption text-text-tertiary",
                   "hover:bg-cosmic-subtle hover:text-text-secondary hover:border-cosmic-border-hover",
-                  "transition-all duration-200"
+                  "transition-all duration-200",
+                  atCap && "opacity-40 cursor-not-allowed hover:text-text-tertiary"
                 )}
               >
                 <ImagePlus className="w-3 h-3" />
-                <span className="truncate">添加参考图</span>
+                <span className="truncate">{atCap ? `已达 ${maxReferences} 张` : "添加参考图"}</span>
               </button>
             </>
           )}

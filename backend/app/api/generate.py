@@ -61,6 +61,11 @@ class GenerateRequest(BaseModel):
         description="Seedance Omni 是否同时生成音轨",
     )
     seed: Optional[int] = Field(default=None, ge=0, le=2147483647, description="随机种子（复现同一结果；留空则随机）")
+    negative_prompt: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="负向提示词：描述不希望出现的元素（支持的模型会透传；不支持时忽略）",
+    )
 
 
 class GenerateResponse(BaseModel):
@@ -187,6 +192,8 @@ async def execute_generation(
         "omni": omni,
         "generate_audio": bool(req.generate_audio),
     }
+    if req.negative_prompt and req.negative_prompt.strip():
+        params["negative_prompt"] = req.negative_prompt.strip()
     if primary_image:
         params["image_url"] = primary_image
     if ref_images:
@@ -244,6 +251,8 @@ async def execute_generation(
         "omni": omni,
         "generate_audio": bool(req.generate_audio),
     }
+    if req.negative_prompt and req.negative_prompt.strip():
+        celery_params["negative_prompt"] = req.negative_prompt.strip()
     if primary_image:
         celery_params["image_url"] = primary_image
     if ref_images:

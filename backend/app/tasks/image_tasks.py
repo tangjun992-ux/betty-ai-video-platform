@@ -119,6 +119,7 @@ def generate_image_task(
     style = params.get("style", "auto")
     count = params.get("count", 1)
     seed = params.get("seed")
+    negative_prompt = params.get("negative_prompt")
     # True i2i: multi-ref list or legacy single image_url
     ref_images = [
         u for u in (params.get("reference_images") or [])
@@ -149,14 +150,14 @@ def generate_image_task(
                     adapter.generate_image(
                         prompt=prompt, model_id=model, size=size, style=style,
                         count=count, seed=seed, image_url=ref_images[0],
-                        image_urls=ref_images,
+                        image_urls=ref_images, negative_prompt=negative_prompt,
                     )
                 )
         else:
             result = _run_async(
                 adapter.generate_image(
                     prompt=prompt, model_id=model, size=size, style=style,
-                    count=count, seed=seed,
+                    count=count, seed=seed, negative_prompt=negative_prompt,
                 )
             )
         # Adapt single GenerationResult to list for uniform processing

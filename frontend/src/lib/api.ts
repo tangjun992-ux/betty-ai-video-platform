@@ -186,6 +186,8 @@ export interface GenerateRequest {
   omni?: boolean;
   generate_audio?: boolean;
   seed?: number;
+  /** Negative prompt — elements to avoid (honored by supporting models) */
+  negative_prompt?: string;
 }
 
 export interface GenerateResponse {
@@ -204,6 +206,7 @@ export interface TaskProgress {
   status: string;
   progress?: number;
   current_stage?: string;
+  queue_position?: number | null;
   model?: string;
   started_at?: string;
   estimated_completion?: string;
@@ -245,6 +248,7 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
       omni: req.omni ?? null,
       generate_audio: req.generate_audio ?? false,
       ...(req.seed != null ? { seed: req.seed } : {}),
+      ...(req.negative_prompt ? { negative_prompt: req.negative_prompt } : {}),
     }),
   });
   if (!res.ok) {
@@ -262,6 +266,76 @@ export async function getTaskStatus(taskId: string, timeoutMs = 15000): Promise<
     throw new Error(err.detail || `查询任务失败: ${res.status}`);
   }
   return res.json();
+}
+
+/** Cancel an in-flight task — revokes the worker job and refunds credits. */
+export async function cancelTask(taskId: string): Promise<{ task_id: string; status: string; revoked?: boolean }> {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/cancel`, {
+    method: "POST",
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `取消任务失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+// ─── Creative sessions (reuse Director session store for the image workspace) ───
+
+export interface CreativeSession {
+  session_uid: string;
+  title: string;
+  intent?: string | null;
+  status?: string;
+  assets?: Array<{ url: string; type?: string; prompt?: string; model?: string; seed?: number; credits?: number }>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function listCreativeSessions(): Promise<CreativeSession[]> {
+  const res = await fetch(`${API_BASE}/director/sessions`, { headers: apiAuthHeaders() });
+  if (!res.ok) throw new Error(`加载会话失败: ${res.status}`);
+  const json = await res.json();
+  const arr: CreativeSession[] = Array.isArray(json) ? json : json.sessions ?? [];
+  return arr.filter((s) => (s.intent ?? "image_create") === "image_create");
+}
+
+export async function createCreativeSession(title: string): Promise<CreativeSession> {
+  const res = await fetch(`${API_BASE}/director/sessions`, {
+    method: "POST",
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ title, intent: "image_create", status: "active" }),
+  });
+  if (!res.ok) throw new Error(`创建会话失败: ${res.status}`);
+  return res.json();
+}
+
+export async function getCreativeSession(uid: string): Promise<CreativeSession> {
+  const res = await fetch(`${API_BASE}/director/sessions/${encodeURIComponent(uid)}`, { headers: apiAuthHeaders() });
+  if (!res.ok) throw new Error(`加载会话失败: ${res.status}`);
+  return res.json();
+}
+
+export async function updateCreativeSession(
+  uid: string,
+  patch: { title?: string; assets?: CreativeSession["assets"]; intent?: string },
+): Promise<CreativeSession> {
+  const res = await fetch(`${API_BASE}/director/sessions/${encodeURIComponent(uid)}`, {
+    method: "PATCH",
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(`更新会话失败: ${res.status}`);
+  return res.json();
+}
+
+export async function deleteCreativeSession(uid: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/director/sessions/${encodeURIComponent(uid)}`, {
+    method: "DELETE",
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) throw new Error(`删除会话失败: ${res.status}`);
 }
 
 /** Upload media (image / video / audio) and return the URL */

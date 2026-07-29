@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles, ImagePlus, Upload, X, Clock, RefreshCw,
   Download, Video, ExternalLink, ImageIcon, Wand2, CheckCircle2,
+  Copy, Maximize2, XCircle, Plus, Trash2, Coins, CheckSquare, Square,
 } from "lucide-react";
 import { ToolSidebar } from "@/components/ToolSidebar";
 import { ParameterPanel } from "@/components/ParameterPanel";
@@ -17,8 +18,28 @@ import { CosmicParamPanel, CosmicSlider, CosmicSelect } from "@/components/cosmi
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { submitGeneration, getTaskStatus, uploadImage, trackOnboarding, type GenerateResponse, type TaskResult, API_BASE } from "@/lib/api";
+import {
+  submitGeneration, getTaskStatus, uploadImage, trackOnboarding, cancelTask,
+  listCreativeSessions, createCreativeSession, getCreativeSession,
+  updateCreativeSession, deleteCreativeSession,
+  type GenerateResponse, type TaskResult, type CreativeSession, API_BASE,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+// Compose a real WxH from an aspect ratio + a resolution tier (long edge px).
+function resolveResolution(aspect: string, tier: string): string {
+  const longEdge: Record<string, number> = { "720p": 720, "1080p": 1080, "2K": 1440, "4K": 2160 };
+  const L = longEdge[tier] ?? 1080;
+  const ratios: Record<string, [number, number]> = {
+    "1:1": [1, 1], "16:9": [16, 9], "9:16": [9, 16], "4:3": [4, 3], "3:4": [3, 4],
+  };
+  const [rw, rh] = ratios[aspect] ?? [1, 1];
+  const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+  if (rw >= rh) {
+    return `${even(L)}x${even((L * rh) / rw)}`;
+  }
+  return `${even((L * rw) / rh)}x${even(L)}`;
+}
 
 // ═══════════════════════════════════════════════════════════
 // Constants
@@ -58,8 +79,10 @@ export default function CreateImagePage() {
     prompt, setPrompt, selectedModel, setSelectedModel,
     quality, setQuality, style, setStyle, creativity, setCreativity,
     resolution, setResolution, aspectRatio, setAspectRatio,
-    count, setCount, referenceFiles, addReference, removeReference,
-    addRecentPrompt, addResult, results,
+    count, setCount, referenceFiles, addReference, removeReference, reorderReference,
+    remoteRefs, addRemoteRef, removeRemoteRef,
+    negativePrompt, setNegativePrompt, seedInput, setSeedInput,
+    addRecentPrompt, addResult, results, setResults,
     activeTab, setActiveTab,
   } = useCreationStore();
 
@@ -79,8 +102,22 @@ export default function CreateImagePage() {
 
   // Submission tracking for empty state logic
   const [hasSubmitted, setHasSubmitted] = useState(false);
-  const [imageModels, setImageModels] = useState(IMAGE_MODELS_FALLBACK);
-  const [remixImageUrl, setRemixImageUrl] = useState<string | null>(null);
+  const [imageModels, setImageModels] = useState<Array<{ id: string; name: string; desc: string; badge?: string; credits?: number }>>(IMAGE_MODELS_FALLBACK);
+
+  // Result interactions
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [queuePos, setQueuePos] = useState<number | null>(null);
+  const cancelledRef = useRef(false);
+
+  // Sessions
+  const [sessions, setSessions] = useState<CreativeSession[]>([]);
+  const [activeSession, setActiveSession] = useState<string | null>(null);
+
+  const refreshSessions = useCallback(async () => {
+    try { setSessions(await listCreativeSessions()); } catch { /* guest/offline ok */ }
+  }, []);
+  useEffect(() => { refreshSessions(); }, [refreshSessions]);
 
   useEffect(() => {
     fetch(`${API_BASE}/models/?status=active`)
@@ -94,11 +131,12 @@ export default function CreateImagePage() {
         if (!active.length) return;
         setImageModels([
           IMAGE_MODELS_FALLBACK[0],
-          ...active.map((m: { id: string; display_name: string; description?: string; provider?: string }) => ({
+          ...active.map((m: { id: string; display_name: string; description?: string; provider?: string; capabilities?: { cost_per_image_credits?: number } }) => ({
             id: m.id,
             name: m.display_name,
             desc: (m.description || m.provider || "").slice(0, 48),
             badge: "已验证",
+            credits: m.capabilities?.cost_per_image_credits,
           })),
         ]);
       })
@@ -143,9 +181,9 @@ export default function CreateImagePage() {
       if (matched) setSelectedModel(matched.id);
     }
     if (remixImage) {
-      setRemixImageUrl(remixImage);
+      addRemoteRef(remixImage);
     }
-  }, [imageModels, setPrompt, setSelectedModel]); // remix pre-fill when models load
+  }, [imageModels, setPrompt, setSelectedModel, addRemoteRef]); // remix pre-fill when models load
 
   // ── Elapsed timer during generation ──────────────────
   useEffect(() => {
@@ -190,46 +228,45 @@ export default function CreateImagePage() {
   const handleSubmit = useCallback(async () => {
     if (!prompt.trim() || submitting) return;
 
+    cancelledRef.current = false;
     setSubmitting(true);
     setError(null);
     setProgress(0);
+    setQueuePos(null);
     setProgressStage("正在提交...");
     setEstimatedSeconds(null);
     addRecentPrompt(prompt);
+    const startedAt = Date.now();
 
     try {
-      // 1) Upload all reference images (true multi-ref i2i, max 4)
+      // 1) Upload local reference images, then append remote (remix) refs; cap 4.
       let referenceImages: string[] | undefined;
+      const urls: string[] = [];
       if (referenceFiles.length > 0) {
         setProgressStage("上传参考图...");
-        const urls: string[] = [];
         for (const ref of referenceFiles.slice(0, 4)) {
           const uploaded = await uploadImage(ref.file);
           if (uploaded.url) urls.push(uploaded.url);
         }
-        referenceImages = urls.length ? urls : undefined;
       }
-      // Explore Remix may pass a remote media URL without a local File
-      if (remixImageUrl) {
-        referenceImages = [remixImageUrl, ...(referenceImages || [])].slice(0, 4);
-      }
+      const combined = [...urls, ...remoteRefs].slice(0, 4);
+      referenceImages = combined.length ? combined : undefined;
 
-      // 2) Submit generation
+      // 2) Submit generation (real resolution from aspect + tier; seed / negative)
+      const seedNum = seedInput.trim() ? Number(seedInput.trim()) : undefined;
       const res: GenerateResponse = await submitGeneration({
         prompt,
         media_type: "image",
         model: selectedModel === "auto" ? undefined : selectedModel,
         quality,
-        resolution: aspectRatio === "1:1" ? "1080x1080"
-          : aspectRatio === "16:9" ? "1920x1080"
-          : aspectRatio === "9:16" ? "1080x1920"
-          : aspectRatio === "4:3" ? "1280x960"
-          : "1536x1024",
+        resolution: resolveResolution(aspectRatio, resolution),
         count,
         style: style || undefined,
         enhance_prompt: creativity !== "wild",
         image_url: referenceImages?.[0],
         reference_images: referenceImages,
+        seed: seedNum,
+        negative_prompt: negativePrompt.trim() || undefined,
       });
 
       setTaskId(res.task_id);
@@ -238,16 +275,19 @@ export default function CreateImagePage() {
       setProgress(5);
       setProgressStage("模型推理中...");
 
-      // 2) Poll until complete
+      // 2) Poll until complete (abortable via cancel button)
       const pollInterval = 2000;
       const maxPolls = 150; // 5 minutes max
       let polls = 0;
 
       const poll = async (): Promise<TaskResult> => {
+        if (cancelledRef.current) throw new Error("__cancelled__");
         if (polls++ > maxPolls) throw new Error("生成超时，请重试");
         const status = await getTaskStatus(res.task_id);
 
-        // Update progress from server
+        if ("queue_position" in status && typeof status.queue_position === "number") {
+          setQueuePos(status.queue_position);
+        }
         if ("progress" in status && typeof status.progress === "number") {
           setProgress(Math.min(status.progress, 99));
         }
@@ -255,7 +295,7 @@ export default function CreateImagePage() {
           setProgressStage(status.current_stage);
         }
 
-        if (status.status === "completed" || status.status === "failed") {
+        if (status.status === "completed" || status.status === "failed" || status.status === "cancelled") {
           return status as TaskResult;
         }
         await new Promise((r) => setTimeout(r, pollInterval));
@@ -268,47 +308,127 @@ export default function CreateImagePage() {
       if (result.status === "failed") {
         throw new Error(result.error_message || "生成失败");
       }
+      if (result.status === "cancelled") {
+        throw new Error("__cancelled__");
+      }
 
-      // 3) Add results
+      // 3) Add results (with per-image credits + elapsed time)
       const resultCount = result.results?.length || 0;
+      const elapsedMs = Date.now() - startedAt;
+      const perCredits = resultCount > 0 && result.cost_credits != null
+        ? Math.round((result.cost_credits / resultCount) * 100) / 100
+        : (res.estimated_cost_credits != null && count > 0 ? res.estimated_cost_credits / count : undefined);
+      const newItems: typeof results = [];
       if (result.results && result.results.length > 0) {
         for (const r of result.results) {
-          addResult({
+          const item = {
             url: r.url,
             type: (r.type || "image") as "image" | "video",
             prompt: prompt,
             model: res.estimated_model || selectedModel,
-            seed: (r as any).seed,
-          });
+            seed: (r as any).seed ?? seedNum,
+            credits: perCredits,
+            elapsedMs,
+          };
+          addResult(item);
+          newItems.push(item);
         }
       }
 
       setHasSubmitted(true);
-
-      // Success toast
       toast.success("生成完成", `已生成 ${resultCount} 张图片`);
       if (resultCount > 0 && user?.id) {
         completeOnboarding(String(user.id));
         trackOnboarding("first_work_completed");
       }
 
+      // 4) Persist into the active session (auto-create one if none)
+      if (newItems.length > 0) {
+        try {
+          let sid = activeSession;
+          if (!sid) {
+            const created = await createCreativeSession(prompt.slice(0, 40) || "图片会话");
+            sid = created.session_uid;
+            setActiveSession(sid);
+            await refreshSessions();
+          }
+          const merged = [...newItems, ...results].slice(0, 60).map((it) => ({
+            url: it.url, type: it.type, prompt: it.prompt, model: it.model,
+            seed: it.seed, credits: it.credits,
+          }));
+          await updateCreativeSession(sid, { assets: merged });
+          refreshSessions();
+        } catch { /* session persistence best-effort */ }
+      }
+
     } catch (err: any) {
-      const message = err.message || "生成失败，请重试";
-      setError(message);
-      toast.error("生成失败", message);
-      console.error("Generation error:", err);
+      if (err?.message === "__cancelled__") {
+        toast.info?.("已取消", "本次生成已取消");
+      } else {
+        const message = err.message || "生成失败，请重试";
+        setError(message);
+        toast.error("生成失败", message);
+        console.error("Generation error:", err);
+      }
     } finally {
       setSubmitting(false);
       setTaskId(null);
       setProgress(0);
+      setQueuePos(null);
       setProgressStage("");
       setEstimatedSeconds(null);
     }
   }, [
     prompt, selectedModel, quality, resolution, aspectRatio, count,
-    style, creativity, submitting, referenceFiles, addRecentPrompt, addResult, toast,
-    user?.id, completeOnboarding,
+    style, creativity, submitting, referenceFiles, remoteRefs, seedInput, negativePrompt,
+    addRecentPrompt, addResult, toast, user?.id, completeOnboarding,
+    activeSession, results, refreshSessions,
   ]);
+
+  // Cancel the in-flight generation (revokes worker + refunds, stops polling).
+  const handleCancel = useCallback(async () => {
+    cancelledRef.current = true;
+    const id = taskId;
+    if (id) {
+      try { await cancelTask(id); } catch { /* best-effort */ }
+    }
+    setSubmitting(false);
+    setTaskId(null);
+    setProgress(0);
+    setQueuePos(null);
+    setProgressStage("");
+  }, [taskId]);
+
+  // Session actions
+  const handleNewSession = useCallback(async () => {
+    try {
+      const created = await createCreativeSession("新图片会话");
+      setActiveSession(created.session_uid);
+      setResults([]);
+      await refreshSessions();
+      toast.success("已新建会话", "");
+    } catch { toast.error("新建失败", "请登录后使用会话"); }
+  }, [refreshSessions, setResults, toast]);
+
+  const handleSwitchSession = useCallback(async (uid: string) => {
+    try {
+      const s = await getCreativeSession(uid);
+      setActiveSession(uid);
+      const items = (s.assets || []).map((a) => ({
+        url: a.url, type: (a.type || "image") as "image" | "video",
+        prompt: a.prompt || "", model: a.model || "", seed: a.seed, credits: a.credits,
+      }));
+      setResults(items);
+    } catch { toast.error("加载会话失败", ""); }
+  }, [setResults, toast]);
+
+  const handleDeleteSession = useCallback(async (uid: string) => {
+    try {
+      await deleteCreativeSession(uid);
+      if (activeSession === uid) { setActiveSession(null); setResults([]); }
+      await refreshSessions();
+    } catch { toast.error("删除失败", ""); }
+  }, [activeSession, refreshSessions, setResults, toast]);
 
   // 单资产迭代：变体(同 prompt/model，新种子×4) 或 复现(同种子)
   const iterate = useCallback(async (
@@ -389,14 +509,11 @@ export default function CreateImagePage() {
           media_type: "image",
           model: selectedModel === "auto" ? undefined : selectedModel,
           quality,
-          resolution: aspectRatio === "1:1" ? "1080x1080"
-            : aspectRatio === "16:9" ? "1920x1080"
-            : aspectRatio === "9:16" ? "1080x1920"
-            : aspectRatio === "4:3" ? "1280x960"
-            : "1536x1024",
+          resolution: resolveResolution(aspectRatio, resolution),
           count,
           style: style || undefined,
           enhance_prompt: creativity !== "wild",
+          negative_prompt: negativePrompt.trim() || undefined,
         });
 
         setTaskId(res.task_id);
@@ -457,7 +574,42 @@ export default function CreateImagePage() {
         setEstimatedSeconds(null);
       }
     }
-  }, [selectedModel, quality, aspectRatio, count, style, creativity, addRecentPrompt, addResult, toast, setPrompt]);
+  }, [selectedModel, quality, aspectRatio, resolution, count, style, creativity, negativePrompt, addRecentPrompt, addResult, toast, setPrompt]);
+
+  // ── Reference preview: local uploads first, then remote (remix) URLs ──
+  const combinedRefs = [
+    ...referenceFiles.map((r) => ({ preview: r.preview, name: r.file?.name })),
+    ...remoteRefs.map((u) => ({ preview: u, name: "remix" })),
+  ].slice(0, 4);
+  const handleRemoveRef = useCallback((i: number) => {
+    if (i < referenceFiles.length) removeReference(i);
+    else removeRemoteRef(i - referenceFiles.length);
+  }, [referenceFiles.length, removeReference, removeRemoteRef]);
+
+  // ── Batch download / selection helpers ──
+  const toggleSelect = useCallback((url: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url); else next.add(url);
+      return next;
+    });
+  }, []);
+  const downloadUrls = useCallback(async (urls: string[]) => {
+    for (const u of urls) {
+      try {
+        const a = document.createElement("a");
+        a.href = u; a.download = ""; a.target = "_blank"; a.rel = "noopener";
+        document.body.appendChild(a); a.click(); a.remove();
+        await new Promise((r) => setTimeout(r, 350));
+      } catch { /* ignore */ }
+    }
+  }, []);
+  const copyPrompt = useCallback((p: string) => {
+    navigator.clipboard?.writeText(p).then(
+      () => toast.success("已复制提示词", ""),
+      () => toast.error("复制失败", ""),
+    );
+  }, [toast]);
 
   // ── Derived Values ───────────────────────────────────
   const imageResults = results.filter((r) => r.type === "image");
@@ -483,8 +635,52 @@ export default function CreateImagePage() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">
-      {/* ── Left: Tool Sidebar ──────────────────────────── */}
+      {/* ── Left: Sessions + Tool Sidebar ──────────────────────────── */}
       <div className="hidden lg:block w-56 p-4 pt-6 border-r border-cosmic-border/40 overflow-y-auto flex-shrink-0">
+        {/* Sessions */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">会话</p>
+            <button
+              onClick={handleNewSession}
+              className="inline-flex items-center gap-0.5 text-[11px] text-accent-cyan hover:opacity-80"
+              title="新建会话"
+            >
+              <Plus className="w-3.5 h-3.5" /> 新建
+            </button>
+          </div>
+          {sessions.length === 0 ? (
+            <p className="text-[11px] text-text-secondary/50 leading-relaxed">
+              生成后自动创建会话，历史作品按会话归档。
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {sessions.map((s) => (
+                <div
+                  key={s.session_uid}
+                  className={cn(
+                    "group flex items-center justify-between gap-1 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer transition-colors",
+                    activeSession === s.session_uid
+                      ? "bg-accent-cyan/[0.08] border border-accent-cyan/20 text-accent-cyan"
+                      : "text-text-secondary hover:bg-cosmic-surface/30 border border-transparent"
+                  )}
+                  onClick={() => handleSwitchSession(s.session_uid)}
+                >
+                  <span className="truncate flex-1">{s.title || "未命名会话"}</span>
+                  <span className="text-[9px] text-text-secondary/50">{s.assets?.length ?? 0}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteSession(s.session_uid); }}
+                    className="opacity-0 group-hover:opacity-100 text-text-secondary/60 hover:text-destructive transition-opacity"
+                    title="删除会话"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <ToolSidebar activeTool={activeTool} onToolSelect={handleToolSelect} />
       </div>
 
@@ -523,9 +719,11 @@ export default function CreateImagePage() {
               loading={submitting}
               mode="图片创作"
               initialValue={prefillPrompt}
-              referenceFiles={referenceFiles}
+              referenceFiles={combinedRefs}
               onAddReference={handleAddReference}
-              onRemoveReference={removeReference}
+              onRemoveReference={handleRemoveRef}
+              onReorderReference={reorderReference}
+              maxReferences={4}
             />
           </div>
 
@@ -580,11 +778,16 @@ export default function CreateImagePage() {
                   />
                 </div>
 
-                {/* Time estimate + elapsed */}
+                {/* Time estimate + elapsed + queue position */}
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-1.5 text-xs text-text-secondary">
                     <Clock className="w-3 h-3" />
                     <span>已耗时 {elapsedSeconds}s</span>
+                    {queuePos != null && queuePos > 0 && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded bg-cosmic-subtle text-[10px] text-text-secondary/80">
+                        队列第 {queuePos + 1} 位
+                      </span>
+                    )}
                   </div>
                   {remainingDisplay && (
                     <span className="text-xs text-text-secondary/60">
@@ -592,6 +795,14 @@ export default function CreateImagePage() {
                     </span>
                   )}
                 </div>
+
+                {/* Cancel */}
+                <button
+                  onClick={handleCancel}
+                  className="w-full mt-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs border border-cosmic-border/60 text-text-secondary hover:text-destructive hover:border-destructive/40 transition-colors"
+                >
+                  <XCircle className="w-3.5 h-3.5" /> 取消生成
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -659,11 +870,31 @@ export default function CreateImagePage() {
                 exit={{ opacity: 0, y: -8 }}
                 className="mt-6"
               >
-                {/* Header */}
+                {/* Header + batch toolbar */}
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">
                     生成结果 ({imageResults.length})
                   </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        const all = imageResults.map((r) => r.url);
+                        setSelected((prev) => (prev.size === all.length ? new Set() : new Set(all)));
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-accent-cyan"
+                    >
+                      {selected.size === imageResults.length && imageResults.length > 0
+                        ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                      全选
+                    </button>
+                    <button
+                      onClick={() => downloadUrls(selected.size ? imageResults.filter((r) => selected.has(r.url)).map((r) => r.url) : imageResults.map((r) => r.url))}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] bg-accent-cyan/[0.1] text-accent-cyan hover:bg-accent-cyan/20 transition-colors"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      {selected.size ? `下载所选 (${selected.size})` : "下载全部"}
+                    </button>
+                  </div>
                 </div>
 
                 {/* Grid */}
@@ -679,19 +910,25 @@ export default function CreateImagePage() {
                       transition={{ delay: i * 0.1, type: "spring", stiffness: 300, damping: 25 }}
                       className="group relative rounded-2xl overflow-hidden border border-cosmic-border bg-cosmic-subtle hover:scale-[1.02] transition-transform duration-300"
                     >
-                      {/* Image */}
+                      {/* Image (click to open lightbox) */}
                       <img
                         src={item.url}
                         alt={item.prompt}
-                        className="w-full aspect-square object-cover"
+                        onClick={() => setLightbox(item.url)}
+                        className="w-full aspect-square object-cover cursor-zoom-in"
                         loading="lazy"
                       />
 
-                      {/* Model Badge */}
-                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-[10px] text-text-accent-cyan/80 flex items-center gap-1">
-                        <ImageIcon className="w-3 h-3" />
-                        <span>{item.model}</span>
-                      </div>
+                      {/* Selection checkbox */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleSelect(item.url); }}
+                        className="absolute top-2 left-2 w-6 h-6 rounded-md bg-black/55 backdrop-blur-sm flex items-center justify-center text-white/90"
+                        title="选择"
+                      >
+                        {selected.has(item.url)
+                          ? <CheckSquare className="w-4 h-4 text-accent-cyan" /> : <Square className="w-4 h-4" />}
+                      </button>
+
                       {/* Seed Badge */}
                       {item.seed != null && (
                         <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-[10px] text-white/70 font-mono" title="随机种子">
@@ -700,7 +937,15 @@ export default function CreateImagePage() {
                       )}
 
                       {/* Actions Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center gap-2 p-3">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-center gap-1.5 p-3 flex-wrap">
+                        {/* Maximize / lightbox */}
+                        <button
+                          onClick={() => setLightbox(item.url)}
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan"
+                          title="放大预览"
+                        >
+                          <Maximize2 className="w-4 h-4" />
+                        </button>
                         {/* 变体 (variations) */}
                         <button
                           onClick={() => iterate("vary", { prompt: item.prompt, model: item.model, seed: item.seed })}
@@ -719,7 +964,15 @@ export default function CreateImagePage() {
                         >
                           <RefreshCw className="w-4 h-4" />
                         </button>
-                        {/* Download - btn-icon */}
+                        {/* Copy prompt */}
+                        <button
+                          onClick={() => copyPrompt(item.prompt)}
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan"
+                          title="复制提示词"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        {/* Download */}
                         <a
                           href={item.url}
                           download
@@ -730,7 +983,6 @@ export default function CreateImagePage() {
                         >
                           <Download className="w-4 h-4" />
                         </a>
-
                         {/* Use in Video */}
                         <button
                           onClick={() => router.push("/create/video")}
@@ -739,17 +991,21 @@ export default function CreateImagePage() {
                         >
                           <Video className="w-4 h-4" />
                         </button>
+                      </div>
 
-                        {/* Open in new tab */}
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan"
-                          title="新窗口打开"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
+                      {/* Metadata footer: model · credits · elapsed */}
+                      <div className="absolute bottom-0 inset-x-0 px-2.5 py-1.5 bg-gradient-to-t from-black/75 to-transparent flex items-center justify-between text-[10px] text-white/75 pointer-events-none group-hover:opacity-0 transition-opacity">
+                        <span className="inline-flex items-center gap-1 truncate max-w-[55%]">
+                          <ImageIcon className="w-3 h-3" /> {item.model}
+                        </span>
+                        <span className="inline-flex items-center gap-2">
+                          {item.credits != null && (
+                            <span className="inline-flex items-center gap-0.5"><Coins className="w-3 h-3" />{item.credits}</span>
+                          )}
+                          {item.elapsedMs != null && (
+                            <span>{(item.elapsedMs / 1000).toFixed(1)}s</span>
+                          )}
+                        </span>
                       </div>
                     </motion.div>
                   ))}
@@ -775,6 +1031,10 @@ export default function CreateImagePage() {
           count={count}
           onCountChange={setCount}
           type="image"
+          negativePrompt={negativePrompt}
+          onNegativeChange={setNegativePrompt}
+          seedInput={seedInput}
+          onSeedChange={setSeedInput}
         />
         <StyleCardSelector
           selected={style}
@@ -787,6 +1047,47 @@ export default function CreateImagePage() {
           className="mt-6"
         />
       </div>
+
+      {/* ── Lightbox (放大预览) ─────────────────────────── */}
+      <AnimatePresence>
+        {lightbox && (
+          <motion.div
+            key="lightbox"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setLightbox(null)}
+            className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6"
+          >
+            <button
+              onClick={() => setLightbox(null)}
+              className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white"
+              title="关闭"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <motion.img
+              key={lightbox}
+              initial={{ scale: 0.94 }}
+              animate={{ scale: 1 }}
+              src={lightbox}
+              alt="预览"
+              onClick={(e) => e.stopPropagation()}
+              className="max-w-full max-h-full rounded-lg object-contain shadow-2xl"
+            />
+            <a
+              href={lightbox}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="absolute bottom-6 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white text-sm"
+            >
+              <Download className="w-4 h-4" /> 下载原图
+            </a>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

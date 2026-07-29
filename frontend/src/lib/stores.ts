@@ -63,19 +63,31 @@ interface CreationState {
   duration: number;
   setDuration: (n: number) => void;
 
-  // Reference files
+  // Advanced params
+  negativePrompt: string;
+  setNegativePrompt: (p: string) => void;
+  seedInput: string; // empty string = random each run
+  setSeedInput: (s: string) => void;
+
+  // Reference files (local uploads) + remote URLs (e.g. remix)
   referenceFiles: Array<{ file: File; preview: string; type: "image" | "video" | "audio" }>;
   addReference: (f: File, preview: string, type: "image" | "video" | "audio") => void;
   removeReference: (idx: number) => void;
+  reorderReference: (from: number, to: number) => void;
   clearReferences: () => void;
+  remoteRefs: string[];
+  addRemoteRef: (url: string) => void;
+  removeRemoteRef: (idx: number) => void;
+  clearRemoteRefs: () => void;
 
   // History (recent prompts)
   recentPrompts: string[];
   addRecentPrompt: (p: string) => void;
 
   // Results
-  results: Array<{ url: string; type: "image" | "video"; prompt: string; model: string; seed?: number }>;
-  addResult: (r: { url: string; type: "image" | "video"; prompt: string; model: string; seed?: number }) => void;
+  results: Array<{ url: string; type: "image" | "video"; prompt: string; model: string; seed?: number; credits?: number; elapsedMs?: number }>;
+  addResult: (r: { url: string; type: "image" | "video"; prompt: string; model: string; seed?: number; credits?: number; elapsedMs?: number }) => void;
+  setResults: (rs: CreationState["results"]) => void;
 
   // Reset
   resetCreation: () => void;
@@ -111,12 +123,31 @@ export const useCreationStore = create<CreationState>()(
       duration: 5,
       setDuration: (n) => set({ duration: n }),
 
+      negativePrompt: "",
+      setNegativePrompt: (p) => set({ negativePrompt: p }),
+      seedInput: "",
+      setSeedInput: (s) => set({ seedInput: s }),
+
       referenceFiles: [],
       addReference: (file, preview, type) =>
         set((s) => ({ referenceFiles: [...s.referenceFiles, { file, preview, type }] })),
       removeReference: (idx) =>
         set((s) => ({ referenceFiles: s.referenceFiles.filter((_, i) => i !== idx) })),
+      reorderReference: (from, to) =>
+        set((s) => {
+          const arr = [...s.referenceFiles];
+          if (from < 0 || from >= arr.length || to < 0 || to >= arr.length) return {};
+          const [moved] = arr.splice(from, 1);
+          arr.splice(to, 0, moved);
+          return { referenceFiles: arr };
+        }),
       clearReferences: () => set({ referenceFiles: [] }),
+      remoteRefs: [],
+      addRemoteRef: (url) =>
+        set((s) => (s.remoteRefs.includes(url) ? {} : { remoteRefs: [...s.remoteRefs, url] })),
+      removeRemoteRef: (idx) =>
+        set((s) => ({ remoteRefs: s.remoteRefs.filter((_, i) => i !== idx) })),
+      clearRemoteRefs: () => set({ remoteRefs: [] }),
 
       recentPrompts: [],
       addRecentPrompt: (p) =>
@@ -126,6 +157,7 @@ export const useCreationStore = create<CreationState>()(
 
       results: [],
       addResult: (r) => set((s) => ({ results: [r, ...s.results].slice(0, 50) })),
+      setResults: (rs) => set({ results: rs.slice(0, 50) }),
 
       resetCreation: () =>
         set({
@@ -139,7 +171,10 @@ export const useCreationStore = create<CreationState>()(
           aspectRatio: "1:1",
           count: 1,
           duration: 5,
+          negativePrompt: "",
+          seedInput: "",
           referenceFiles: [],
+          remoteRefs: [],
           recentPrompts: [],
           results: [],
         }),

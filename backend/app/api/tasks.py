@@ -64,11 +64,24 @@ async def get_task_status(
             webhook=params.get("webhook") if isinstance(params, dict) else None,
         )
 
+    queue_position = None
+    if task.status == "queued":
+        # How many of this user's queued tasks were created before this one.
+        ahead = (await db.execute(
+            select(func.count()).select_from(Task).where(
+                Task.user_id == user_id,
+                Task.status == "queued",
+                Task.created_at < task.created_at,
+            )
+        )).scalar() or 0
+        queue_position = int(ahead)
+
     return {
         "task_id": task.task_id,
         "status": task.status,
         "progress": task.progress,
         "current_stage": task.current_stage,
+        "queue_position": queue_position,
         "model": task.selected_model,
         "started_at": task.started_at.isoformat() if task.started_at else None,
         "estimated_completion": task.estimated_completion.isoformat() if task.estimated_completion else None,
@@ -129,6 +142,25 @@ async def cancel_task(
     if task.status in ("completed", "failed", "cancelled"):
         raise HTTPException(status_code=400, detail=f"Cannot cancel task in status: {task.status}")
 
+    # Best-effort: actually stop the running/queued Celery worker job so we don't
+    # keep burning upstream credits after the user cancels.
+    revoked = False
+    if task.celery_task_id:
+        try:
+            from celery_app import app as celery_app
+            celery_app.control.revoke(task.celery_task_id, terminate=True, signal="SIGTERM")
+            revoked = True
+        except Exception:
+            revoked = False
+
+    # Refund any pre-deducted credits for the cancelled task (idempotent).
+    try:
+        from app.services.credits import refund_task_credits
+        await refund_task_credits(db, task_id, reason="cancelled")
+    except Exception:
+        pass
+
     task.status = "cancelled"
+    task.current_stage = "cancelled"
     await db.flush()
-    return {"task_id": task_id, "status": "cancelled"}
+    return {"task_id": task_id, "status": "cancelled", "revoked": revoked}
