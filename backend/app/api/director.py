@@ -11,7 +11,7 @@ import re
 from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -49,13 +49,20 @@ def _dry_run_default() -> bool:
 
 
 class PlanRequest(BaseModel):
-    brief: str = Field(..., description="一句话创作意图，例如：做一个30秒的咖啡产品宣传片")
+    brief: str = Field(..., min_length=1, description="一句话创作意图，例如：做一个30秒的咖啡产品宣传片")
+
+    @field_validator("brief")
+    @classmethod
+    def _brief_not_blank(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("brief 不能为空")
+        return v
     has_ref_image: bool = Field(default=False)
     duration: int = Field(default=5, ge=1, le=60)
     ref_image_url: Optional[str] = Field(default=None, description="参考图 URL（真正参与图生视频/关键帧）")
     minimal: bool = Field(
         default=False,
-        description="最短路径：跳过配音/字幕，多镜仍会合成一条成片（对标 Yapper quick-direct）",
+        description="快速成片：跳过 TTS 配音（省时省钱）；多镜仍烧字幕并合成一条可发布成片（对标 Yapper quick-direct）",
     )
     scenario: Optional[str] = Field(
         default=None,

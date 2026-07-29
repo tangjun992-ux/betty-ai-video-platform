@@ -1,0 +1,184 @@
+{
+  "generated_at": "2026-07-29T12:20:57.303762+00:00",
+  "base": "http://127.0.0.1:8000/api/v1",
+  "no_live": false,
+  "storyboard_live": true,
+  "passed": 28,
+  "total": 29,
+  "results": [
+    {
+      "name": "A1_capabilities",
+      "ok": true,
+      "detail": "demo_mode=False real=True",
+      "ms": null
+    },
+    {
+      "name": "A2_director_mode",
+      "ok": true,
+      "detail": "real_available=True label=真实生成可用",
+      "ms": null
+    },
+    {
+      "name": "A3_brain_modes",
+      "ok": true,
+      "detail": "brain modes ok",
+      "ms": null
+    },
+    {
+      "name": "A4_export_specs",
+      "ok": true,
+      "detail": "count=6",
+      "ms": null
+    },
+    {
+      "name": "A5_brief_templates",
+      "ok": true,
+      "detail": "count=9",
+      "ms": null
+    },
+    {
+      "name": "A6_bgm_catalog",
+      "ok": true,
+      "detail": "beds=8",
+      "ms": null
+    },
+    {
+      "name": "A7_video_models",
+      "ok": true,
+      "detail": "active_video=5",
+      "ms": null
+    },
+    {
+      "name": "B_plan_product_ad",
+      "ok": true,
+      "detail": "steps=7 intent=campaign credits=26",
+      "ms": 17
+    },
+    {
+      "name": "B_plan_product_commercial",
+      "ok": true,
+      "detail": "steps=9 intent=campaign credits=44",
+      "ms": 17
+    },
+    {
+      "name": "B_plan_ugc",
+      "ok": true,
+      "detail": "steps=7 intent=campaign credits=22",
+      "ms": 18
+    },
+    {
+      "name": "B_plan_micro_drama",
+      "ok": true,
+      "detail": "steps=8 intent=video_from_text credits=19",
+      "ms": 20
+    },
+    {
+      "name": "B_plan_anime",
+      "ok": true,
+      "detail": "steps=8 intent=video_from_text credits=17",
+      "ms": 19
+    },
+    {
+      "name": "B_plan_product_photo",
+      "ok": true,
+      "detail": "steps=5 intent=image_series credits=20",
+      "ms": 18
+    },
+    {
+      "name": "B_plan_ai_portrait",
+      "ok": true,
+      "detail": "steps=5 intent=image_series credits=20",
+      "ms": 21
+    },
+    {
+      "name": "B_plan_talking_avatar",
+      "ok": true,
+      "detail": "steps=6 intent=talking credits=11",
+      "ms": 16
+    },
+    {
+      "name": "B_minimal_shorter",
+      "ok": true,
+      "detail": "minimal=8 full=9",
+      "ms": null
+    },
+    {
+      "name": "B_identity_lock_edit",
+      "ok": true,
+      "detail": "steps=8 (identity_lock plan ok)",
+      "ms": null
+    },
+    {
+      "name": "B_export_placement",
+      "ok": true,
+      "detail": "placement plan ok steps=7",
+      "ms": null
+    },
+    {
+      "name": "B_ideate",
+      "ok": true,
+      "detail": "concepts=5",
+      "ms": null
+    },
+    {
+      "name": "B_variants_fanout",
+      "ok": true,
+      "detail": "variants=2",
+      "ms": null
+    },
+    {
+      "name": "C_moderation_gate",
+      "ok": true,
+      "detail": "HTTP 400 (blocked as expected)",
+      "ms": null
+    },
+    {
+      "name": "C_empty_brief",
+      "ok": true,
+      "detail": "HTTP 422",
+      "ms": null
+    },
+    {
+      "name": "C_count_validation",
+      "ok": true,
+      "detail": "HTTP 422",
+      "ms": null
+    },
+    {
+      "name": "C_authz_task_isolation",
+      "ok": true,
+      "detail": "cross-user HTTP 403",
+      "ms": null
+    },
+    {
+      "name": "C_cancel",
+      "ok": true,
+      "detail": "revoked=True",
+      "ms": null
+    },
+    {
+      "name": "D_concurrency_3x_image",
+      "ok": true,
+      "detail": "3/3 completed in 51777ms",
+      "ms": 51777
+    },
+    {
+      "name": "E1_video_t2v",
+      "ok": true,
+      "detail": "status=completed url=/api/v1/media/generated/db400ae8a0b7.mp4 err=None",
+      "ms": 166236
+    },
+    {
+      "name": "E2_agent_minimal_run",
+      "ok": false,
+      "detail": "status=timeout assets=0",
+      "ms": 362039
+    },
+    {
+      "name": "E3_storyboard_real",
+      "ok": true,
+      "detail": "status=done assets=4",
+      "ms": 358308
+    }
+  ]
+}

@@ -883,8 +883,8 @@ export default function AgentPage() {
 
               {/* 模式 */}
               <AgentChip icon={Zap} label="模式" value={minimal ? "快速成片" : "完整成片"}>
-                <AgentRow active={minimal} onClick={() => setMinimal(true)}>快速成片 · 1 图 1 视</AgentRow>
-                <AgentRow active={!minimal} onClick={() => setMinimal(false)}>完整成片 · 配音字幕合成</AgentRow>
+                <AgentRow active={minimal} onClick={() => setMinimal(true)}>快速成片 · 跳过配音（省时省钱）</AgentRow>
+                <AgentRow active={!minimal} onClick={() => setMinimal(false)}>完整成片 · 配音 + 字幕合成</AgentRow>
               </AgentChip>
 
               {/* 更多: 身份锁 + 投放位 */}

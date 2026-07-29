@@ -247,7 +247,8 @@ class DirectorPlanner:
 
         ``scenario`` — stable Agent card id (product_ad / ugc / ai_portrait / …).
         When set, uses scenario-specific beats/models/aspect (top-tier card parity).
-        ``minimal=True`` skips TTS/subtitle; multi-shot scenarios still stitch compose.
+        ``minimal=True`` skips TTS voiceover (saves time/cost); multi-shot scenarios
+        still burn subtitles and stitch a publishable compose.
         ``identity_lock``:
           - ``off``  — no cross-shot identity anchoring
           - ``hero`` — reuse hero as i2v source only (no per-shot edit)
