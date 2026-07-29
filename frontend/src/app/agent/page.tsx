@@ -7,11 +7,51 @@ import {
   Film, Image as ImageIcon, Mic, Layers, Clapperboard, Check, Loader2, Coins, ArrowRight,
   Pencil, RefreshCw, X, Music, Type as TypeIcon, Scissors, Ratio,
   Download, Trash2, StopCircle, CornerDownLeft, Star,
+  ChevronsUpDown, ArrowUp, Zap, SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { PayModal, type PayTarget } from "@/components/PayModal";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+
+/* Compact borderless dropdown chip for the agent composer toolbar. */
+function AgentChip({ icon: Icon, label, value, children }: {
+  icon: React.ElementType; label: string; value?: string; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className={cn(
+          "inline-flex items-center gap-1 h-7 px-1.5 rounded-md text-xs whitespace-nowrap transition-colors",
+          "text-text-secondary hover:text-text-primary hover:bg-cosmic-subtle/60",
+          open && "text-text-primary bg-cosmic-subtle/60",
+        )}>
+          <Icon className="w-3.5 h-3.5 opacity-70" />
+          <span className="text-text-secondary/55">{label}</span>
+          {value && <span className="font-medium text-text-primary/90">{value}</span>}
+          <ChevronsUpDown className="w-3.5 h-3.5 opacity-70 text-text-secondary" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" sideOffset={6} className="w-56 border-cosmic-border bg-cosmic-surface p-2">
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function AgentRow({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className={cn(
+      "flex items-center justify-between w-full px-2.5 py-2 rounded-md text-xs text-left transition-colors",
+      active ? "bg-brand/[0.12] text-brand" : "text-text-secondary hover:bg-cosmic-subtle hover:text-text-primary",
+    )}>
+      {children}
+      {active && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+    </button>
+  );
+}
 
 const MEDIA_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
 const resolveMedia = (u?: string) => (!u ? "" : u.startsWith("/") ? `${MEDIA_ORIGIN}${u}` : u);
@@ -780,118 +820,115 @@ export default function AgentPage() {
             <p className="text-sm text-text-secondary">一句话说出你想要的，AI 自动拆分镜、智能选模型、逐镜生成、剪辑成片</p>
           </div>
 
-          {/* Input — 旗舰画布输入 */}
-          <div className="bg-cosmic-surface border border-cosmic-border rounded-2xl p-3 shadow-sm focus-within:border-brand/50 focus-within:shadow-[0_0_0_4px_hsl(var(--brand)/0.10)] transition-all mb-3">
-            <textarea value={brief} onChange={(e) => setBrief(e.target.value)}
-              data-testid="agent-brief"
-              onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); makePlan(); } }}
-              placeholder="例如：做一个30秒的咖啡产品宣传片，电影级画质，竖屏抖音…（⌘/Ctrl + ⏎ 开始导演）"
-              rows={3} className="w-full bg-transparent border-0 resize-none text-[15px] leading-relaxed placeholder:text-text-tertiary focus:outline-none" />
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-cosmic-border/30">
-              <div className="flex items-center gap-2">
-                <input ref={fileRef} type="file" accept="image/*" className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadRef(f); e.target.value = ""; }} />
-                {refImageUrl ? (
-                  <div className="flex items-center gap-1.5 px-1.5 py-1 rounded-lg bg-brand/10 text-brand text-xs">
-                    <img src={resolveMedia(refImageUrl)} alt="ref" className="w-5 h-5 rounded object-cover" />
-                    参考图
-                    <button onClick={() => { setRefImageUrl(null); setRefImage(false); }} className="hover:text-red-500"><X className="w-3 h-3" /></button>
-                  </div>
-                ) : (
-                  <button onClick={() => fileRef.current?.click()} disabled={uploadingRef}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-text-primary transition-colors">
-                    {uploadingRef ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
-                    {uploadingRef ? "上传中" : "参考图"}
-                  </button>
-                )}
-                <div className="flex items-center gap-1 text-xs text-text-secondary">
-                  <Film className="w-3.5 h-3.5" />
-                  <select value={duration} onChange={(e) => setDuration(+e.target.value)}
-                    className="bg-transparent focus:outline-none text-text-secondary cursor-pointer">
-                    {[5, 10, 15, 30].map((d) => <option key={d} value={d} className="bg-cosmic-surface">{d}s</option>)}
-                  </select>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMinimal((v) => !v)}
-                  title="最短路径：enhance → 1 图 → 1 视（跳过配音/字幕/合成）"
-                  className={cn(
-                    "px-2.5 py-1.5 rounded-lg text-xs border transition-colors",
-                    minimal
-                      ? "bg-brand/10 text-brand border-brand/30"
-                      : "border-cosmic-border text-text-secondary hover:text-text-primary"
-                  )}
-                >
-                  {minimal ? "快速成片" : "完整成片"}
+          {/* Input — unified Yapper-style director composer */}
+          <div className="relative bg-cosmic-elevated border border-cosmic-border rounded-[18px] shadow-lg mb-3">
+            <input ref={fileRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadRef(f); e.target.value = ""; }} />
+
+            {/* Top: brief textarea + top-right polish/send */}
+            <div className="flex items-start gap-2 px-4 pt-4 pb-1.5">
+              <textarea value={brief} onChange={(e) => setBrief(e.target.value)}
+                data-testid="agent-brief"
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); makePlan(); } }}
+                placeholder="一句话说出你想要的，例如：做一个30秒的咖啡产品宣传片，电影级画质，竖屏抖音…（⌘/Ctrl + ⏎ 开始导演）"
+                rows={2}
+                className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-text-primary placeholder:text-text-tertiary/40 outline-none focus:outline-none focus-visible:outline-none focus:shadow-none focus-visible:shadow-none min-h-[64px] max-h-[220px] py-0.5" />
+              <div className="flex items-center gap-1.5 flex-shrink-0 pt-0.5">
+                <button type="button" onClick={polishBrief} disabled={!brief.trim() || !!composerBusy}
+                  title="AI 润色提示词"
+                  className={cn("inline-flex items-center justify-center h-7 w-7 rounded-lg text-text-secondary transition-colors",
+                    brief.trim() && !composerBusy ? "hover:text-brand hover:bg-cosmic-subtle/60" : "opacity-40 cursor-not-allowed")}>
+                  {composerBusy === "polish" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
                 </button>
-                {/* composer modes — 对标 yapper Help Prompt / Help Ideate */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] text-text-tertiary mr-1">导演大脑</span>
-                  {([
-                    { id: "fast", label: "快速" },
-                    { id: "quality", label: "深度" },
-                    { id: "rules", label: "规则" },
-                  ] as const).map((b) => (
-                    <button key={b.id} type="button" onClick={() => setBrain(b.id)}
-                      className={cn("px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all",
-                        brain === b.id ? "bg-brand/10 text-brand border-brand/30" : "border-cosmic-border text-text-secondary hover:text-text-primary")}>
-                      {b.label}
-                    </button>
+                <button onClick={() => makePlan()} disabled={!brief.trim() || phase === "planning"}
+                  data-testid="agent-plan-btn" title={t("agent.cta")}
+                  className={cn("inline-flex items-center justify-center h-8 w-8 rounded-full transition-all",
+                    brief.trim() && phase !== "planning" ? "bg-brand text-white hover:brightness-110 active:scale-95" : "bg-cosmic-subtle text-text-tertiary/50 cursor-not-allowed")}>
+                  {phase === "planning" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Bottom toolbar: ref + consolidated param chips + action pills */}
+            <div className="flex items-center gap-1 flex-wrap px-3 pb-3 pt-1">
+              {refImageUrl ? (
+                <div className="relative group w-7 h-7 rounded-md overflow-hidden border border-cosmic-border/60 flex-shrink-0 mr-0.5">
+                  <img src={resolveMedia(refImageUrl)} alt="ref" className="w-full h-full object-cover" />
+                  <button onClick={() => { setRefImageUrl(null); setRefImage(false); }} className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><X className="w-3 h-3 text-white" /></button>
+                </div>
+              ) : (
+                <button onClick={() => fileRef.current?.click()} disabled={uploadingRef} title="参考图"
+                  className="inline-flex items-center justify-center h-7 w-7 rounded-md text-text-secondary hover:text-brand hover:bg-cosmic-subtle/60 transition-colors flex-shrink-0">
+                  {uploadingRef ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+                </button>
+              )}
+
+              <span className="w-px h-5 bg-cosmic-border/50 mx-0.5" />
+
+              {/* 导演大脑 */}
+              <AgentChip icon={Sparkles} label="大脑" value={brain === "fast" ? "快速" : brain === "quality" ? "深度" : "规则"}>
+                {([{ id: "fast", label: "快速" }, { id: "quality", label: "深度" }, { id: "rules", label: "规则" }] as const).map((b) => (
+                  <AgentRow key={b.id} active={brain === b.id} onClick={() => setBrain(b.id)}>{b.label}</AgentRow>
+                ))}
+              </AgentChip>
+
+              {/* 时长 */}
+              <AgentChip icon={Film} label="时长" value={`${duration}s`}>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[5, 10, 15, 30].map((d) => (
+                    <AgentRow key={d} active={duration === d} onClick={() => setDuration(d)}>{d}s</AgentRow>
                   ))}
                 </div>
-                <button onClick={polishBrief} disabled={!brief.trim() || !!composerBusy}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40">
-                  {composerBusy === "polish" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} 润色
-                </button>
-                <button onClick={ideate} disabled={!brief.trim() || !!composerBusy}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40">
-                  {composerBusy === "ideate" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lightbulb className="w-3.5 h-3.5" />} 帮我构思
-                </button>
-                <button onClick={fanoutVariants} disabled={!brief.trim() || !!composerBusy}
-                  data-testid="agent-variants-btn"
-                  title="按钩子/CTA/seed 扇出多套可执行计划"
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-text-secondary hover:text-brand hover:bg-brand/5 transition-colors disabled:opacity-40">
-                  {composerBusy === "variants" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />} 创意变体
-                </button>
-                <div className="flex flex-wrap items-center gap-1.5" data-testid="agent-identity-lock">
-                  <span className="text-[11px] text-text-tertiary">身份锁</span>
-                  {([
-                    { id: "off" as const, label: "关闭" },
-                    { id: "hero" as const, label: "Hero" },
-                    { id: "edit" as const, label: "Edit" },
-                  ]).map((opt) => (
-                    <button key={opt.id} type="button" onClick={() => setIdentityLock(opt.id)}
-                      title={opt.id === "edit" ? "分镜>1 先 edit 再 i2v（最强）" : opt.id === "hero" ? "仅复用主视觉" : "不锁定身份"}
-                      className={cn("px-2 py-1 rounded-lg text-[11px] font-medium border transition-all",
-                        identityLock === opt.id ? "bg-brand/10 text-brand border-brand/30" : "border-cosmic-border text-text-secondary hover:text-text-primary")}>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                {exportSpecs.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5" data-testid="agent-export-placement">
-                    <span className="text-[11px] text-text-tertiary">投放位</span>
-                    {exportSpecs.map((sp) => (
-                      <button key={sp.id} type="button"
-                        onClick={() => {
-                          setExportPlacement(sp.id);
-                          if (sp.duration_default) setDuration(sp.duration_default);
-                        }}
-                        title={`${sp.label} · ${sp.aspect_ratio}`}
-                        className={cn("px-2 py-1 rounded-lg text-[11px] font-medium border transition-all",
-                          exportPlacement === sp.id ? "bg-brand/10 text-brand border-brand/30" : "border-cosmic-border text-text-secondary hover:text-text-primary")}>
-                        {sp.label}
+              </AgentChip>
+
+              {/* 模式 */}
+              <AgentChip icon={Zap} label="模式" value={minimal ? "快速成片" : "完整成片"}>
+                <AgentRow active={minimal} onClick={() => setMinimal(true)}>快速成片 · 1 图 1 视</AgentRow>
+                <AgentRow active={!minimal} onClick={() => setMinimal(false)}>完整成片 · 配音字幕合成</AgentRow>
+              </AgentChip>
+
+              {/* 更多: 身份锁 + 投放位 */}
+              <AgentChip icon={SlidersHorizontal} label="更多">
+                <div className="space-y-2" data-testid="agent-identity-lock">
+                  <p className="text-[10px] text-text-secondary/60">身份锁</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {([{ id: "off" as const, label: "关闭" }, { id: "hero" as const, label: "Hero" }, { id: "edit" as const, label: "Edit" }]).map((opt) => (
+                      <button key={opt.id} type="button" onClick={() => setIdentityLock(opt.id)}
+                        className={cn("py-1.5 rounded-md text-[11px] border transition-colors",
+                          identityLock === opt.id ? "border-brand/40 bg-brand/[0.1] text-brand" : "border-cosmic-border/50 text-text-secondary hover:border-cosmic-border")}>
+                        {opt.label}
                       </button>
                     ))}
                   </div>
-                )}
-              </div>
-              <button onClick={() => makePlan()} disabled={!brief.trim() || phase === "planning"}
-                data-testid="agent-plan-btn"
-                className={cn("flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-                  brief.trim() && phase !== "planning" ? "bg-brand text-white hover:bg-brand-strong" : "bg-cosmic-surface text-text-secondary cursor-not-allowed")}>
-                {phase === "planning" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                {phase === "planning" ? "规划中" : t("agent.cta")}
+                  {exportSpecs.length > 0 && (
+                    <div data-testid="agent-export-placement">
+                      <p className="text-[10px] text-text-secondary/60 mt-2 mb-1">投放位</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {exportSpecs.map((sp) => (
+                          <button key={sp.id} type="button"
+                            onClick={() => { setExportPlacement(sp.id); if (sp.duration_default) setDuration(sp.duration_default); }}
+                            title={`${sp.label} · ${sp.aspect_ratio}`}
+                            className={cn("py-1.5 px-1 rounded-md text-[11px] border transition-colors truncate",
+                              exportPlacement === sp.id ? "border-brand/40 bg-brand/[0.1] text-brand" : "border-cosmic-border/50 text-text-secondary hover:border-cosmic-border")}>
+                            {sp.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </AgentChip>
+
+              {/* Action pills */}
+              <span className="w-px h-5 bg-cosmic-border/50 mx-0.5" />
+              <button onClick={ideate} disabled={!brief.trim() || !!composerBusy}
+                className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs text-text-secondary hover:text-brand hover:bg-cosmic-subtle/60 transition-colors disabled:opacity-40">
+                {composerBusy === "ideate" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lightbulb className="w-3.5 h-3.5" />} 帮我构思
+              </button>
+              <button onClick={fanoutVariants} disabled={!brief.trim() || !!composerBusy}
+                data-testid="agent-variants-btn" title="按钩子/CTA/seed 扇出多套可执行计划"
+                className="inline-flex items-center gap-1 h-7 px-2 rounded-md text-xs text-text-secondary hover:text-brand hover:bg-cosmic-subtle/60 transition-colors disabled:opacity-40">
+                {composerBusy === "variants" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Layers className="w-3.5 h-3.5" />} 创意变体
               </button>
             </div>
           </div>
