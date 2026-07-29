@@ -651,6 +651,10 @@ class DirectorPlanner:
             "micro_drama": "drama", "anime": "cinematic", "talking_avatar": "soft",
         }
         sub_style = placement.get("subtitle_style") or _SUB_STYLE.get(scenario or "", "feed")
+        # A talking head must never be covered by an opaque caption box — force the
+        # face-safe outline style for talking intent, ignoring placement box presets.
+        if intent == "talking" or scenario == "talking_avatar":
+            sub_style = "talking"
         bgm_preset = placement.get("bgm_preset") or _BGM_PRESET.get(scenario or "", "soft")
         finish_aspect = placement.get("aspect_ratio") or finish_aspect
         finish_preset = placement.get("export_preset") or _ASPECT_TO_EXPORT.get(finish_aspect)
@@ -1085,20 +1089,37 @@ def _export_preset_from_params(params: dict | None) -> str | None:
     return _ASPECT_TO_EXPORT.get(ratio)
 
 
-def _script_to_subtitle_track(script: str, duration_per_cue: float = 3.0) -> list[dict]:
-    """Build simple timed cues from narration script (Director ↔ timeline/SRT bridge)."""
-    parts = re.split(r"[。！？\n.!?]+", script or "")
-    cues: list[dict] = []
-    t = 0.0
+def _script_to_subtitle_track(script: str, duration_per_cue: float = 2.4) -> list[dict]:
+    """Build short timed cues from a narration script.
+
+    Splits on sentence terminators AND clause punctuation (、，,；;) — Chinese
+    briefs are often comma-separated with no periods, which previously produced a
+    single giant cue that rendered as an opaque block covering the avatar's face.
+    Long clauses are further chunked so each on-screen caption is a clean,
+    short lower-third line (karaoke-style), not a wall of text.
+    """
+    parts = re.split(r"[。！？!?\n；;，,、]+", script or "")
+    MAX_CHARS = 12  # one clean line on 9:16
+    import math as _math
+    segs: list[str] = []
     for part in parts:
         text = part.strip()
         if not text:
             continue
-        cues.append({
-            "text": text,
-            "start": round(t, 3),
-            "end": round(t + duration_per_cue, 3),
-        })
+        if len(text) <= MAX_CHARS:
+            segs.append(text)
+            continue
+        # Balanced split into near-equal chunks (avoids tiny orphan cues)
+        n = _math.ceil(len(text) / MAX_CHARS)
+        size = _math.ceil(len(text) / n)
+        for i in range(0, len(text), size):
+            chunk = text[i:i + size].strip()
+            if chunk:
+                segs.append(chunk)
+    cues: list[dict] = []
+    t = 0.0
+    for seg in segs:
+        cues.append({"text": seg, "start": round(t, 3), "end": round(t + duration_per_cue, 3)})
         t += duration_per_cue
     return cues
 

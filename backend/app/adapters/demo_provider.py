@@ -567,10 +567,11 @@ SUBTITLE_STYLES: dict[str, str] = {
         "FontSize=26,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,"
         "BorderStyle=3,Outline=3,Alignment=2,MarginV=48,Bold=1"
     ),
-    # Talking avatar: larger, higher for face clearance
+    # Talking avatar: clean outline lower-third (NO opaque box) so captions never
+    # cover the speaker's face/mouth. Outline + shadow keep it readable.
     "talking": (
-        "FontSize=28,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,"
-        "BorderStyle=3,Outline=3,Alignment=2,MarginV=120,Bold=1"
+        "FontSize=22,PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,"
+        "BorderStyle=1,Outline=3,Shadow=1,Alignment=2,MarginV=70,Bold=1"
     ),
     # Product ad: clean commercial caption
     "ad": (
