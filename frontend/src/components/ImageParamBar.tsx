@@ -93,7 +93,7 @@ function Chip({
           <Icon className="w-3.5 h-3.5 opacity-70" />
           <span className="text-text-secondary/55">{label}</span>
           {value && <span className="font-medium text-text-primary/90">{value}</span>}
-          <ChevronsUpDown className="w-3 h-3 opacity-45" />
+          <ChevronsUpDown className="w-3.5 h-3.5 opacity-70 text-text-secondary" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" sideOffset={6} className="w-64 border-cosmic-border bg-cosmic-surface p-2">
