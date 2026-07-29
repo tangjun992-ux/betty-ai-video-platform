@@ -447,16 +447,30 @@ async def generate_speech(req: SpeechRequest):
     if not mod.allowed:
         raise moderation_reject(mod)
     from app.adapters.demo_provider import demo_mode_active
+    import asyncio as _a
     if demo_mode_active():
         from app.adapters.demo_provider import render_demo_speech
-        import asyncio as _a
         url = await _a.to_thread(render_demo_speech, req.text)
         return {"url": url, "media_type": "audio", "model": "demo-tts", "demo": True}
     from app.adapters.kie_adapter import KieAdapter
     from app.services.media_store import persist_results
+    # Prefer Edge Neural TTS (fast ~1s, bounded timeout) — same reliable path as
+    # the director; only fall back to KIE ElevenLabs (slower) if Edge fails.
+    from app.services.audio_prep import synthesize_speech_edge, is_azure_neural_voice
+    try:
+        edge_voice = req.voice if is_azure_neural_voice(req.voice) else "zh-CN-XiaoxiaoNeural"
+        wav_bytes, used_voice = await synthesize_speech_edge(req.text, edge_voice, rate="-5%")
+        url = await KieAdapter().upload_public_url(
+            wav_bytes, filename=f"tts_{uuid.uuid4().hex[:8]}.wav", content_type="audio/wav",
+        )
+        out = {"type": "audio", "url": url, "media_url": url, "model": f"edge-tts:{used_voice}"}
+        out = (await _a.to_thread(persist_results, [out]))[0]
+        return {"url": out.get("url"), "source_url": out.get("source_url", url),
+                "media_type": "audio", "model": f"edge-tts:{used_voice}", "cost": 0, "demo": False}
+    except Exception as edge_err:
+        logger.warning("[speech] edge-tts failed (%s) → KIE ElevenLabs", edge_err)
     res = await KieAdapter().generate_speech(req.text, voice=req.voice)
     out = {"type": "audio", "url": res.media_url, "media_url": res.media_url, "model": res.model}
-    import asyncio as _a
     out = (await _a.to_thread(persist_results, [out]))[0]
     return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
             "media_type": "audio", "model": res.model, "cost": res.cost, "demo": False}

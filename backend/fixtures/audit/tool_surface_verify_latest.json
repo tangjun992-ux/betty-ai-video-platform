@@ -1,0 +1,61 @@
+{
+  "passed": 9,
+  "total": 11,
+  "results": [
+    {
+      "name": "tool_edit",
+      "ok": true,
+      "detail": "HTTP 200 url=/api/v1/media/generated/dd3b8212e8d4.png"
+    },
+    {
+      "name": "tool_upscale",
+      "ok": true,
+      "detail": "HTTP 200 url=/api/v1/media/generated/0825e841c024.png"
+    },
+    {
+      "name": "tool_bg-remove",
+      "ok": true,
+      "detail": "HTTP 200 url=/api/v1/media/generated/48cf44e84296.png"
+    },
+    {
+      "name": "tool_extend",
+      "ok": true,
+      "detail": "HTTP 200 url=/api/v1/media/generated/1347264f28df.png"
+    },
+    {
+      "name": "tool_face_swap",
+      "ok": false,
+      "detail": "HTTP 202 url=None"
+    },
+    {
+      "name": "tool_extract_prompt",
+      "ok": true,
+      "detail": "HTTP 200 mode=heuristic"
+    },
+    {
+      "name": "tool_speech",
+      "ok": false,
+      "detail": "exc timed out"
+    },
+    {
+      "name": "tool_timeline_compose",
+      "ok": true,
+      "detail": "HTTP 200 url=/api/v1/media/generated/final_26a1af563e"
+    },
+    {
+      "name": "tool_lipsync_dispatch",
+      "ok": true,
+      "detail": "HTTP 200 task=3b4553e7-03b"
+    },
+    {
+      "name": "tool_motion_dispatch",
+      "ok": true,
+      "detail": "HTTP 202 task=3e6dc0b3-ee4"
+    },
+    {
+      "name": "tool_performance_dispatch",
+      "ok": true,
+      "detail": "HTTP 202 task=32997d54-da9"
+    }
+  ]
+}
