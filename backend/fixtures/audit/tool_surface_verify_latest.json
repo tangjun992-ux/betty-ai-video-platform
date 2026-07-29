@@ -1,31 +1,31 @@
 {
-  "passed": 9,
+  "passed": 10,
   "total": 11,
   "results": [
     {
       "name": "tool_edit",
       "ok": true,
-      "detail": "HTTP 200 url=/api/v1/media/generated/dd3b8212e8d4.png"
+      "detail": "HTTP 200 url=/api/v1/media/generated/8bf7480a4874.png"
     },
     {
       "name": "tool_upscale",
       "ok": true,
-      "detail": "HTTP 200 url=/api/v1/media/generated/0825e841c024.png"
+      "detail": "HTTP 200 url=/api/v1/media/generated/a7e25a751e19.png"
     },
     {
       "name": "tool_bg-remove",
       "ok": true,
-      "detail": "HTTP 200 url=/api/v1/media/generated/48cf44e84296.png"
+      "detail": "HTTP 200 url=/api/v1/media/generated/156fbe170cf4.png"
     },
     {
       "name": "tool_extend",
       "ok": true,
-      "detail": "HTTP 200 url=/api/v1/media/generated/1347264f28df.png"
+      "detail": "HTTP 200 url=/api/v1/media/generated/5f2b04345f98.png"
     },
     {
       "name": "tool_face_swap",
       "ok": false,
-      "detail": "HTTP 202 url=None"
+      "detail": "async failed url=None"
     },
     {
       "name": "tool_extract_prompt",
@@ -34,28 +34,28 @@
     },
     {
       "name": "tool_speech",
-      "ok": false,
-      "detail": "exc timed out"
+      "ok": true,
+      "detail": "HTTP 200 model=edge-tts:zh-CN-XiaoxiaoNeural"
     },
     {
       "name": "tool_timeline_compose",
       "ok": true,
-      "detail": "HTTP 200 url=/api/v1/media/generated/final_26a1af563e"
+      "detail": "HTTP 200 url=/api/v1/media/generated/final_5b074cc2e9"
     },
     {
       "name": "tool_lipsync_dispatch",
       "ok": true,
-      "detail": "HTTP 200 task=3b4553e7-03b"
+      "detail": "HTTP 200 task=610443a6-00f"
     },
     {
       "name": "tool_motion_dispatch",
       "ok": true,
-      "detail": "HTTP 202 task=3e6dc0b3-ee4"
+      "detail": "HTTP 202 task=f9dbf16c-f0b"
     },
     {
       "name": "tool_performance_dispatch",
       "ok": true,
-      "detail": "HTTP 202 task=32997d54-da9"
+      "detail": "HTTP 202 task=89df2f0a-1df"
     }
   ]
 }

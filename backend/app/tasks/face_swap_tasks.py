@@ -79,13 +79,33 @@ def process_face_swap(self, db_task_id: str, face_url: str, target_url: str, pro
 
     try:
         from app.adapters.kie_adapter import KieAdapter
+        from app.adapters.demo_provider import _local_media_path
         import asyncio
 
-        res = asyncio.run(KieAdapter().face_swap(
-            face_url=face_url,
-            target_url=target_url,
-            prompt=prompt or None,
-        ))
+        adapter = KieAdapter()
+
+        async def _publicize(u: str) -> str:
+            """KIE fetches source images by URL; local /api/v1/media paths aren't
+            reachable from KIE's servers → upload the bytes to a public URL first."""
+            if not u or u.startswith(("http://", "https://")):
+                return u
+            p = _local_media_path(u)
+            if not p:
+                return u
+            with open(p, "rb") as f:
+                data = f.read()
+            return await adapter.upload_public_url(
+                data, filename=os.path.basename(p), content_type="image/png",
+            )
+
+        async def _run():
+            face_pub = await _publicize(face_url)
+            target_pub = await _publicize(target_url)
+            return await adapter.face_swap(
+                face_url=face_pub, target_url=target_pub, prompt=prompt or None,
+            )
+
+        res = asyncio.run(_run())
         url = getattr(res, "media_url", "") or ""
         if not url:
             return _fail(db_task_id, "换脸未返回图片 URL")
