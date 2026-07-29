@@ -94,8 +94,9 @@ export function ImageComposer(p: Props) {
       onDragLeave={(e) => { e.preventDefault(); setDropping(false); }}
       onDrop={onDrop}
       className={cn(
-        "relative w-full rounded-2xl bg-cosmic-surface/80 border transition-colors duration-200",
-        dropping ? "border-accent-cyan/50" : "border-cosmic-border/70 focus-within:border-cosmic-border",
+        // Soft, constant border like Yapper — no focus brightening / glow.
+        "relative w-full rounded-2xl bg-cosmic-surface border border-cosmic-border/45",
+        dropping && "border-accent-cyan/40",
       )}
     >
       {/* Drag overlay */}
