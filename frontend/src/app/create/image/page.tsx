@@ -8,10 +8,9 @@ import {
   Download, Video, ExternalLink, ImageIcon, Wand2, CheckCircle2,
   Copy, Maximize2, XCircle, Plus, Trash2, Coins, CheckSquare, Square,
 } from "lucide-react";
-import { ImageParamBar } from "@/components/ImageParamBar";
+import { ImageComposer } from "@/components/ImageComposer";
 import { ImageAppsRow } from "@/components/ImageAppsRow";
 import { BatchPromptInput } from "@/components/BatchPromptInput";
-import { CosmicPromptCard } from "@/components/cosmic/CosmicPromptCard";
 import type { CreativityLevel } from "@/components/CreativitySlider";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
@@ -705,57 +704,47 @@ export default function CreateImagePage() {
             </div>
           </div>
 
-          {/* ═══════════ Prompt Area (Cosmic) ═══════════ */}
-          <div className="flex flex-col">
-            {/* Cosmic Prompt Card */}
-            <CosmicPromptCard
-              onSubmit={(p: string) => { setPrompt(p); handleSubmit(p); }}
-              placeholder="输入提示词，或上传图片进行编辑 / 合成..."
-              suggestions={SUGGESTIONS}
-              loading={submitting}
-              mode="图片创作"
-              initialValue={prefillPrompt}
-              referenceFiles={combinedRefs}
-              onAddReference={handleAddReference}
-              onRemoveReference={handleRemoveRef}
-              onReorderReference={reorderReference}
-              maxReferences={4}
-            />
-
-            {/* Consolidated parameter toolbar (all configs via dropdowns) */}
-            <div className="mt-2.5 px-1">
-              <ImageParamBar
-                models={imageModels}
-                selectedModel={selectedModel}
-                onModelSelect={setSelectedModel}
-                aspectRatio={aspectRatio}
-                onAspectChange={setAspectRatio}
-                resolution={resolution}
-                onResolutionChange={setResolution}
-                count={count}
-                onCountChange={setCount}
-                quality={quality}
-                onQualityChange={setQuality}
-                seedInput={seedInput}
-                onSeedChange={setSeedInput}
-                negativePrompt={negativePrompt}
-                onNegativeChange={setNegativePrompt}
-                style={style}
-                onStyleChange={setStyle}
-                creativity={creativity}
-                onCreativityChange={(c: CreativityLevel) => setCreativity(c)}
-                estimatedCredits={estimatedCredits}
-                perImageCredits={perImageCredits}
-              />
-            </div>
-          </div>
-
-          {/* Batch Prompt Input */}
-          <BatchPromptInput
-            onSubmit={handleBatchSubmit}
+          {/* ═══════════ Unified Composer (single box, Yapper-style) ═══════════ */}
+          <ImageComposer
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onGenerate={() => handleSubmit(prompt)}
             loading={submitting}
-            className="mt-4"
+            referenceFiles={combinedRefs}
+            onAddReference={handleAddReference}
+            onRemoveReference={handleRemoveRef}
+            onReorderReference={reorderReference}
+            maxReferences={4}
+            models={imageModels}
+            selectedModel={selectedModel}
+            onModelSelect={setSelectedModel}
+            aspectRatio={aspectRatio}
+            onAspectChange={setAspectRatio}
+            resolution={resolution}
+            onResolutionChange={setResolution}
+            count={count}
+            onCountChange={setCount}
+            quality={quality}
+            onQualityChange={setQuality}
+            seedInput={seedInput}
+            onSeedChange={setSeedInput}
+            negativePrompt={negativePrompt}
+            onNegativeChange={setNegativePrompt}
+            style={style}
+            onStyleChange={setStyle}
+            creativity={creativity}
+            onCreativityChange={(c: CreativityLevel) => setCreativity(c)}
+            estimatedCredits={estimatedCredits}
+            perImageCredits={perImageCredits}
           />
+
+          {/* Batch Prompt Input (subtle toggle) */}
+          <div className="mt-3 flex justify-center">
+            <BatchPromptInput
+              onSubmit={handleBatchSubmit}
+              loading={submitting}
+            />
+          </div>
 
           {/* ═══════════ Generation In Progress ═══════════ */}
           <AnimatePresence mode="wait">

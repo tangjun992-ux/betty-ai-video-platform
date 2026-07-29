@@ -66,8 +66,6 @@ interface Props {
   onStyleChange: (id: string) => void;
   creativity: string;
   onCreativityChange: (c: CreativityLevel) => void;
-  estimatedCredits: number | null;
-  perImageCredits?: number | null;
 }
 
 function Chip({
@@ -128,7 +126,7 @@ export function ImageParamBar(p: Props) {
   const activeStyle = STYLE_OPTIONS.find((s) => s.id === p.style);
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <>
       {/* Models */}
       <Chip icon={Sparkles} label="模型" value={modelLabel}>
         <div className="max-h-72 overflow-y-auto space-y-0.5">
@@ -289,18 +287,6 @@ export function ImageParamBar(p: Props) {
           </div>
         </div>
       </Chip>
-
-      {/* Credit estimate (right-aligned) */}
-      <div className="ml-auto inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg text-xs bg-cosmic-surface/40 border border-cosmic-border/40" title="预估消耗积分">
-        <Coins className="w-3.5 h-3.5 text-accent-cyan" />
-        <span className="font-semibold text-accent-cyan" data-testid="credit-estimate">
-          {p.estimatedCredits != null ? `${p.estimatedCredits}` : "—"}
-        </span>
-        <span className="text-text-secondary/60">积分</span>
-        {p.perImageCredits != null && p.count > 1 && (
-          <span className="text-[10px] text-text-secondary/50">({p.perImageCredits}×{p.count})</span>
-        )}
-      </div>
-    </div>
+    </>
   );
 }
