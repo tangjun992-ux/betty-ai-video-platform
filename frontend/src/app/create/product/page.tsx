@@ -1,29 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { BatchPackStudio } from "@/components/BatchPackStudio";
 
-/**
- * Dedicated Product Shots app (Yapper parity) — real workflow via image generate
- * with a product-photography prompt pack (not a dead link).
- */
-const PACK =
-  "professional product photography, studio softbox lighting, clean seamless backdrop, " +
-  "sharp focus, commercial catalog quality, subtle reflections, centered composition";
-
+/** Product Shots — real batch SKU pipeline (对标 Yapper Product Shots). */
 export default function ProductShotsPage() {
-  const router = useRouter();
-  useEffect(() => {
-    const q = new URLSearchParams({
-      tool: "product",
-      prompt: PACK,
-      model: "gpt-image-2",
-    });
-    router.replace(`/create/image?${q.toString()}`);
-  }, [router]);
   return (
-    <div className="max-w-lg mx-auto px-4 py-20 text-center text-sm text-text-secondary">
-      正在打开产品摄影工作流…
-    </div>
+    <BatchPackStudio
+      defaultPack="product"
+      category="product"
+      title="产品图批量生成"
+      subtitle="上传一张产品图或描述主体，一键生成白底 / 角度 / 细节 / 场景多图套系。"
+      subjectPlaceholder="例如：一瓶蓝色渐变的香水 / 一双白色运动鞋"
+    />
   );
 }

@@ -323,6 +323,115 @@ async def submit_generation(
     )
 
 
+class PackRequest(BaseModel):
+    pack_id: str = Field(..., description="Photo Pack id（见 GET /generate/packs）")
+    subject: Optional[str] = Field(default=None, max_length=2000, description="主体描述，如：一瓶蓝色香水 / 一位年轻女性")
+    image_url: Optional[str] = Field(default=None, description="参考图 URL（产品图/自拍，i2i 保持主体）")
+    count: Optional[int] = Field(default=None, ge=1, le=8, description="限制变体数量（默认全部）")
+    model: Optional[str] = Field(default=None, description="覆盖 pack 默认模型")
+
+
+@router.get("/packs", summary="Photo Pack 列表（批量 SKU）")
+async def list_photo_packs():
+    from app.photo_packs import list_packs
+    return {"packs": list_packs()}
+
+
+@router.post(
+    "/pack",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="批量生成 Photo Pack（Product Shots / Headshots / Photo Packs）",
+    dependencies=[Depends(rate_limit("pack", rpm=6, rph=60))],
+)
+async def generate_pack(
+    req: PackRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    """Expand one input into a BATCH of professional variations (real generation).
+
+    Each variation is dispatched as an independent image task; the client polls
+    each task_id (via GET /tasks/{id}) and fills a gallery as they complete.
+    """
+    from app.photo_packs import get_pack, build_variation_prompt
+
+    pack = get_pack(req.pack_id)
+    if not pack:
+        raise HTTPException(status_code=404, detail=f"未知 Photo Pack: {req.pack_id}")
+
+    variations = pack["variations"]
+    if req.count:
+        variations = variations[: req.count]
+    has_ref = bool(req.image_url and str(req.image_url).strip())
+    model = req.model or pack["model"]
+    aspect = pack.get("aspect", "1:1")
+    resolution = {"1:1": "1024x1024", "4:3": "1280x960", "3:4": "960x1280",
+                  "16:9": "1600x900", "9:16": "900x1600"}.get(aspect, "1024x1024")
+    team_id = resolve_team_id(request)
+    per_cost = _estimate_time_and_cost("image", model, 5)[1]
+
+    # Moderate the combined subject once.
+    from app.services.moderation import check_prompt, moderation_reject
+    mod = check_prompt(f"{req.subject or ''} {pack['label']}")
+    if not mod.allowed:
+        raise moderation_reject(mod)
+
+    batch_id = f"pack-{uuid.uuid4().hex[:12]}"
+    items: list[dict] = []
+    dispatched = 0
+    for v in variations:
+        prompt = build_variation_prompt(pack, v, req.subject or "", has_ref)
+        task_id = str(uuid.uuid4())
+        params = {
+            "resolution": resolution, "count": 1, "seed": None,
+            "pack_id": req.pack_id, "pack_batch": batch_id, "pack_variation": v["label"],
+        }
+        if has_ref:
+            params["image_url"] = req.image_url
+            params["reference_images"] = [req.image_url]
+        task = Task(
+            task_id=task_id, user_id=user_id, prompt=prompt, media_type="image",
+            quality="high", requested_model=model, selected_model=model,
+            parameters=params, estimated_cost=float(per_cost), status="queued",
+        )
+        db.add(task)
+        await db.flush()
+        ok = await deduct_credits(
+            db=db, user_id=user_id, cost=per_cost, task_id=task_id,
+            model=model, team_id=team_id, description=f"pack:{req.pack_id}:{v['label']}",
+        )
+        if not ok:
+            task.status = "failed"
+            task.error_message = "积分不足"
+            await db.flush()
+            items.append({"task_id": task_id, "label": v["label"], "status": "failed", "error": "积分不足"})
+            continue
+        celery_params = {"resolution": resolution, "count": 1}
+        if has_ref:
+            celery_params["image_url"] = req.image_url
+            celery_params["reference_images"] = [req.image_url]
+        try:
+            ct = generate_image_task.delay(db_task_id=task_id, model=model, prompt=prompt, params=celery_params)
+            task.celery_task_id = ct.id
+            task.status = "queued"
+            await db.flush()
+            dispatched += 1
+            items.append({"task_id": task_id, "label": v["label"], "status": "queued"})
+        except Exception as e:
+            task.status = "failed"
+            await refund_task_credits(db, task_id, reason="pack_dispatch_failed")
+            await db.flush()
+            items.append({"task_id": task_id, "label": v["label"], "status": "failed", "error": str(e)[:120]})
+
+    return {
+        "batch_id": batch_id, "pack_id": req.pack_id, "pack_label": pack["label"],
+        "count": len(items), "dispatched": dispatched,
+        "estimated_cost_credits": per_cost * dispatched,
+        "items": items,
+    }
+
+
 class SpeechRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=5000, description="要配音的文本/脚本")
     voice: str = Field(default="Rachel", description="音色")

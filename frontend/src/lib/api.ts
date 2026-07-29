@@ -305,6 +305,51 @@ export async function cancelTask(taskId: string): Promise<{ task_id: string; sta
   return res.json();
 }
 
+// ─── Photo Packs (batch SKU: Product Shots / Headshots / Photo Packs) ───
+
+export interface PhotoPack {
+  id: string;
+  label: string;
+  category: string;
+  desc: string;
+  i2i: boolean;
+  aspect: string;
+  variation_count: number;
+  variations: { label: string }[];
+  model: string;
+}
+
+export async function listPhotoPacks(): Promise<PhotoPack[]> {
+  const res = await fetch(`${API_BASE}/generate/packs`, { headers: apiAuthHeaders() });
+  if (!res.ok) throw new Error(`加载 Photo Packs 失败: ${res.status}`);
+  return (await res.json()).packs as PhotoPack[];
+}
+
+export interface PackBatch {
+  batch_id: string;
+  pack_id: string;
+  pack_label: string;
+  count: number;
+  dispatched: number;
+  estimated_cost_credits: number;
+  items: { task_id: string; label: string; status: string; error?: string }[];
+}
+
+export async function generatePack(req: {
+  pack_id: string; subject?: string; image_url?: string; count?: number; model?: string;
+}): Promise<PackBatch> {
+  const res = await fetch(`${API_BASE}/generate/pack`, {
+    method: "POST",
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `批量生成失败: ${res.status}`);
+  }
+  return res.json();
+}
+
 // ─── Creative sessions (reuse Director session store for the image workspace) ───
 
 export interface CreativeSession {

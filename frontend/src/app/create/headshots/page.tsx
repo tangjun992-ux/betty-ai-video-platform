@@ -1,25 +1,16 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { BatchPackStudio } from "@/components/BatchPackStudio";
 
-const PACK =
-  "professional LinkedIn headshot, soft studio lighting, neutral gray backdrop, " +
-  "sharp eyes, natural skin texture, business attire, 85mm portrait, confident expression";
-
+/** Professional Headshots — real batch SKU pipeline (对标 Yapper Headshots). */
 export default function HeadshotsPage() {
-  const router = useRouter();
-  useEffect(() => {
-    const q = new URLSearchParams({
-      tool: "avatar",
-      prompt: PACK,
-      model: "gpt-image-2",
-    });
-    router.replace(`/create/image?${q.toString()}`);
-  }, [router]);
   return (
-    <div className="max-w-lg mx-auto px-4 py-20 text-center text-sm text-text-secondary">
-      正在打开职业头像工作流…
-    </div>
+    <BatchPackStudio
+      defaultPack="headshots"
+      category="portrait"
+      title="专业头像批量生成"
+      subtitle="上传一张自拍或描述人物，一键生成商务 / LinkedIn / 证件 / 创意专业头像套系。"
+      subjectPlaceholder="例如：一位年轻的亚洲女性 / 一位戴眼镜的男性工程师"
+    />
   );
 }
