@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, enhancePrompt } from "@/lib/api";
 import { useLocale } from "@/i18n/LocaleProvider";
 
 // ─── Hero 演示轮播：由平台真实生成作品驱动（拉取 /gallery/，不用图库图）──
@@ -722,6 +722,16 @@ export default function HomePage() {
   const [heroInput, setHeroInput] = useState("");
   const [heroMode, setHeroMode] = useState<"agent" | "image" | "video">("agent");
   const [demoVideoIdx, setDemoVideoIdx] = useState(0);
+  const [heroEnhancing, setHeroEnhancing] = useState(false);
+  const heroEnhance = async () => {
+    if (!heroInput.trim() || heroEnhancing) return;
+    setHeroEnhancing(true);
+    try {
+      const r = await enhancePrompt(heroInput, heroMode === "video" ? "video" : "image");
+      if (r?.enhanced) setHeroInput(r.enhanced);
+    } catch { /* best-effort */ } finally { setHeroEnhancing(false); }
+  };
+
   const heroGo = (override?: "agent" | "image" | "video") => {
     const m = override || heroMode;
     const path = m === "agent" ? "/agent" : m === "video" ? "/create/video" : "/create/image";
@@ -836,15 +846,17 @@ export default function HomePage() {
                 })}
               </div>
 
-              {/* Unified multimodal canvas input (multi-line, 旗舰级) */}
-              <div className="input-canvas mb-4">
+              {/* Unified composer — same single flat card / no double frame /
+                  no focus ring as the dedicated /agent /create pages. */}
+              <div className="input-canvas mb-4 relative">
                 <textarea
                   value={heroInput}
                   onChange={(e) => setHeroInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); heroGo(); }
                   }}
-                  rows={3}
+                  rows={2}
+                  style={{ paddingRight: "5.5rem" }}
                   placeholder={
                     heroMode === "agent"
                       ? t("home.placeholderAgent")
@@ -853,19 +865,46 @@ export default function HomePage() {
                       : t("home.placeholderImage")
                   }
                 />
+                {/* Top-right: AI enhance + round send (mirrors dedicated composer) */}
+                <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={heroEnhance}
+                    disabled={!heroInput.trim() || heroEnhancing}
+                    title="AI 优化提示词"
+                    className={cn(
+                      "inline-flex items-center justify-center h-7 w-7 rounded-lg transition-colors",
+                      heroInput.trim() ? "text-text-secondary hover:text-accent-cyan hover:bg-cosmic-subtle/60" : "text-text-disabled cursor-not-allowed"
+                    )}
+                  >
+                    {heroEnhancing
+                      ? <span className="w-3.5 h-3.5 border-2 border-accent-cyan/40 border-t-accent-cyan rounded-full animate-spin" />
+                      : <Wand2 className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => heroGo()}
+                    disabled={!heroInput.trim()}
+                    title={heroMode === "agent" ? t("home.startDirect") : t("home.startCreate")}
+                    className={cn(
+                      "inline-flex items-center justify-center h-8 w-8 rounded-full transition-all",
+                      heroInput.trim() ? "bg-accent-cyan text-white hover:brightness-110 active:scale-95" : "bg-cosmic-subtle text-text-tertiary/50 cursor-not-allowed"
+                    )}
+                  >
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </div>
+                {/* Bottom toolbar */}
                 <div className="flex items-center justify-between px-3 pb-3 pt-1">
                   <div className="flex items-center gap-1.5">
-                    <Link href="/create/image" className="btn-icon" title="添加参考媒体">
-                      <ImageIcon className="w-[18px] h-[18px]" />
+                    <Link href={heroMode === "video" ? "/create/video" : "/create/image"} className="inline-flex items-center justify-center h-7 w-7 rounded-md text-text-secondary hover:text-accent-cyan hover:bg-cosmic-subtle/60 transition-colors" title="添加参考媒体">
+                      <ImageIcon className="w-4 h-4" />
                     </Link>
                     <span className="hidden sm:inline text-[11px] text-text-tertiary select-none">
-                      <kbd className="font-sans">⏎</kbd> 发送 · <kbd className="font-sans">⇧⏎</kbd> 换行
+                      <kbd className="font-sans">⏎</kbd> {heroMode === "agent" ? t("home.startDirect") : t("home.startCreate")} · <kbd className="font-sans">⇧⏎</kbd> 换行
                     </span>
                   </div>
-                  <button onClick={() => heroGo()} className="btn-primary h-10 px-5">
-                    <Sparkles className="w-4 h-4" />
-                    {heroMode === "agent" ? t("home.startDirect") : t("home.startCreate")}
-                  </button>
+                  <span className="text-[11px] text-text-tertiary/70">{heroMode === "agent" ? "AI 导演" : heroMode === "video" ? "视频" : "图片"}</span>
                 </div>
               </div>
 
