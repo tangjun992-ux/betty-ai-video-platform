@@ -16,6 +16,21 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 _TERMINAL = frozenset({"completed", "failed", "cancelled"})
+_TASK_COLUMNS: frozenset[str] | None = None
+
+
+def _valid_task_columns(engine) -> frozenset[str]:
+    """Real column names on the tasks table (cached) — so an unknown kwarg like
+    a stray ``result_url`` can never crash the whole update and fail a task that
+    actually succeeded."""
+    global _TASK_COLUMNS
+    if _TASK_COLUMNS is None:
+        try:
+            from sqlalchemy import inspect as _inspect
+            _TASK_COLUMNS = frozenset(c["name"] for c in _inspect(engine).get_columns("tasks"))
+        except Exception:
+            _TASK_COLUMNS = frozenset()
+    return _TASK_COLUMNS
 
 
 def get_db_url_sync() -> str:
@@ -38,12 +53,18 @@ def update_task(db_task_id: str, **kwargs):
         if not row:
             return None
         task_pk = row[0]
+        valid_cols = _valid_task_columns(engine)
         for field, value in kwargs.items():
             if value is not None:
                 if isinstance(value, (dict, list)):
                     value = json.dumps(value)
                 # Only allow known column names to avoid SQL injection via kwargs.
                 if not field.replace("_", "").isalnum():
+                    continue
+                # Skip kwargs that aren't real columns (e.g. a stray result_url)
+                # so one bad field can't crash the update and fail the task.
+                if valid_cols and field not in valid_cols:
+                    logger.warning("update_task: skipping unknown column %r", field)
                     continue
                 session.execute(
                     text(f"UPDATE tasks SET {field} = :val WHERE id = :id"),

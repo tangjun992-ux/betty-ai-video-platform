@@ -126,7 +126,6 @@ def process_face_swap(self, db_task_id: str, face_url: str, target_url: str, pro
             current_stage="completed",
             completed_at=datetime.now(timezone.utc),
             results=json.dumps(output),
-            result_url=output[0].get("url", "") if output else url,
             actual_cost=getattr(res, "cost", 0) or 0,
         )
         _broadcast_progress(db_task_id, 100, "completed", "换脸完成")
