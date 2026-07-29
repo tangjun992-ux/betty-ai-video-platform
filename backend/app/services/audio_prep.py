@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import tempfile
 import uuid
@@ -140,6 +141,13 @@ def boost_video_audio(url_or_path: str) -> Optional[str]:
         return None
 
 
+# Bound the Edge TTS network call. Edge normally returns in <1s; without a
+# timeout a blocked/slow websocket can hang the whole director step for minutes
+# (observed 478s in the wild) → audio fails → lip-sync is skipped → the digital
+# human never actually talks. Fail fast so the ElevenLabs/KIE fallback runs.
+EDGE_TTS_TIMEOUT_S = int(os.getenv("EDGE_TTS_TIMEOUT_S", "20"))
+
+
 async def synthesize_speech_edge(
     text: str, voice_id: str, *, rate: str = "-5%",
 ) -> tuple[bytes, str]:
@@ -147,14 +155,23 @@ async def synthesize_speech_edge(
 
     ``rate``: Edge TTS rate string. Talking-avatar uses slower speech (-8%) for
     clearer phonemes / lip-sync drive.
+
+    The network synthesis is wrapped in a hard timeout so a hung websocket can
+    never stall the pipeline; callers fall back to another TTS provider on error.
     """
+    import asyncio
     import edge_tts
 
     voice = (voice_id or "zh-CN-XiaoxiaoNeural").strip()
     communicate = edge_tts.Communicate(text, voice, rate=rate or "-5%")
     td = Path(tempfile.mkdtemp(prefix="betty_tts_"))
     mp3 = td / "tts.mp3"
-    await communicate.save(str(mp3))
+    try:
+        await asyncio.wait_for(communicate.save(str(mp3)), timeout=EDGE_TTS_TIMEOUT_S)
+    except asyncio.TimeoutError as e:
+        raise RuntimeError(f"edge-tts timed out after {EDGE_TTS_TIMEOUT_S}s") from e
+    if not mp3.exists() or mp3.stat().st_size == 0:
+        raise RuntimeError("edge-tts produced no audio")
     wav = td / "tts.wav"
     loudnorm_file(mp3, wav)
     return wav.read_bytes(), voice
