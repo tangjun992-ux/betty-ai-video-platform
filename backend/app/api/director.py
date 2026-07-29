@@ -608,6 +608,7 @@ class SessionCreate(BaseModel):
     brief: str | None = None
     intent: str | None = None
     status: str | None = None
+    assets: list | None = None
 
 
 class SessionUpdate(BaseModel):
@@ -653,6 +654,7 @@ async def create_session(
         session_uid=uuid.uuid4().hex, user_id=user_id,
         title=req.title or "新导演会话", brief=req.brief,
         intent=req.intent, status=req.status or "draft",
+        assets=req.assets,
     )
     db.add(s)
     await db.flush()

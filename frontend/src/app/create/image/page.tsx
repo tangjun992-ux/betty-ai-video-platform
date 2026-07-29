@@ -225,8 +225,12 @@ export default function CreateImagePage() {
     }
   }, [prompt, submitting]);
 
-  const handleSubmit = useCallback(async () => {
-    if (!prompt.trim() || submitting) return;
+  const handleSubmit = useCallback(async (promptOverride?: string) => {
+    // The Cosmic prompt card keeps its text internally and calls setPrompt(p)
+    // then handleSubmit() in the same tick — so the store `prompt` may be stale
+    // here. Accept an explicit override to avoid the race.
+    const effPrompt = (promptOverride ?? prompt).trim();
+    if (!effPrompt || submitting) return;
 
     cancelledRef.current = false;
     setSubmitting(true);
@@ -235,7 +239,7 @@ export default function CreateImagePage() {
     setQueuePos(null);
     setProgressStage("正在提交...");
     setEstimatedSeconds(null);
-    addRecentPrompt(prompt);
+    addRecentPrompt(effPrompt);
     const startedAt = Date.now();
 
     try {
@@ -255,7 +259,7 @@ export default function CreateImagePage() {
       // 2) Submit generation (real resolution from aspect + tier; seed / negative)
       const seedNum = seedInput.trim() ? Number(seedInput.trim()) : undefined;
       const res: GenerateResponse = await submitGeneration({
-        prompt,
+        prompt: effPrompt,
         media_type: "image",
         model: selectedModel === "auto" ? undefined : selectedModel,
         quality,
@@ -324,7 +328,7 @@ export default function CreateImagePage() {
           const item = {
             url: r.url,
             type: (r.type || "image") as "image" | "video",
-            prompt: prompt,
+            prompt: effPrompt,
             model: res.estimated_model || selectedModel,
             seed: (r as any).seed ?? seedNum,
             credits: perCredits,
@@ -345,19 +349,19 @@ export default function CreateImagePage() {
       // 4) Persist into the active session (auto-create one if none)
       if (newItems.length > 0) {
         try {
-          let sid = activeSession;
-          if (!sid) {
-            const created = await createCreativeSession(prompt.slice(0, 40) || "图片会话");
-            sid = created.session_uid;
-            setActiveSession(sid);
-            await refreshSessions();
-          }
           const merged = [...newItems, ...results].slice(0, 60).map((it) => ({
             url: it.url, type: it.type, prompt: it.prompt, model: it.model,
             seed: it.seed, credits: it.credits,
           }));
-          await updateCreativeSession(sid, { assets: merged });
-          refreshSessions();
+          if (!activeSession) {
+            // Create the session WITH its assets in one request (avoids a
+            // create→patch round-trip race under concurrent dev-DB writes).
+            const created = await createCreativeSession(effPrompt.slice(0, 40) || "图片会话", merged);
+            setActiveSession(created.session_uid);
+          } else {
+            await updateCreativeSession(activeSession, { assets: merged });
+          }
+          await refreshSessions();
         } catch { /* session persistence best-effort */ }
       }
 
@@ -713,7 +717,7 @@ export default function CreateImagePage() {
 
             {/* Cosmic Prompt Card */}
             <CosmicPromptCard
-              onSubmit={(p: string) => { setPrompt(p); handleSubmit(); }}
+              onSubmit={(p: string) => { setPrompt(p); handleSubmit(p); }}
               placeholder="描述你想要创作的图像，或上传图片进行编辑..."
               suggestions={SUGGESTIONS}
               loading={submitting}

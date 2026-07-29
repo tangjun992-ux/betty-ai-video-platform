@@ -26,17 +26,35 @@ export function authToken(): string | null {
   }
 }
 
-/** Stable per-browser guest id for isolated anonymous accounts. */
+// In-memory fallback so guest identity stays stable for the page session even
+// when localStorage is unavailable (private mode / storage blocked / sandboxed
+// browsers). Without this, every request would mint a new server-side guest and
+// task polling would 403 (task owned by a different ephemeral guest).
+let _memGuestId: string | null = null;
+
+function _newGuestId(): string {
+  return (typeof crypto !== "undefined" && crypto.randomUUID)
+    ? crypto.randomUUID().replace(/-/g, "")
+    : `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** Stable per-browser guest id for isolated anonymous accounts. Never throws. */
 export function guestId(): string {
   if (typeof window === "undefined") return "";
-  let id = localStorage.getItem("betty-guest-id");
-  if (!id) {
-    id = (typeof crypto !== "undefined" && crypto.randomUUID)
-      ? crypto.randomUUID().replace(/-/g, "")
-      : `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  // Prefer a persisted id; tolerate storage being blocked.
+  try {
+    const stored = localStorage.getItem("betty-guest-id");
+    if (stored) { _memGuestId = stored; return stored; }
+  } catch { /* storage blocked */ }
+
+  if (!_memGuestId) _memGuestId = _newGuestId();
+  const id = _memGuestId;
+  try {
     localStorage.setItem("betty-guest-id", id);
+  } catch { /* storage blocked — in-memory id keeps the session consistent */ }
+  try {
     document.cookie = `betty_guest_id=${encodeURIComponent(id)};path=/;max-age=31536000;SameSite=Lax`;
-  }
+  } catch { /* cookies blocked too */ }
   return id;
 }
 
@@ -56,10 +74,16 @@ export function setActiveTeamId(teamId: string | null): void {
 export function apiAuthHeaders(extra?: HeadersInit): Headers {
   const headers = new Headers(extra);
   const token = authToken();
-  if (token) {
-    if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
-  } else if (typeof window !== "undefined" && !headers.has("X-Guest-Id")) {
-    headers.set("X-Guest-Id", guestId());
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  // Always attach a stable guest id as a fallback identity. If a bearer token is
+  // present and valid the server uses it; if the token is missing/expired the
+  // server falls back to this guest instead of minting a fresh guest per request
+  // (which would make task polling 403 — task owned by a different ephemeral id).
+  if (typeof window !== "undefined" && !headers.has("X-Guest-Id")) {
+    const gid = guestId();
+    if (gid) headers.set("X-Guest-Id", gid);
   }
   const teamId = activeTeamId();
   if (teamId && !headers.has("X-Team-Id")) {
@@ -230,7 +254,7 @@ export interface TaskResult {
 export async function submitGeneration(req: GenerateRequest): Promise<GenerateResponse> {
   const res = await fetchWithTimeout(`${API_BASE}/generate/`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       prompt: req.prompt,
       media_type: req.media_type || "auto",
@@ -260,7 +284,7 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
 
 /** Poll task status — returns TaskResult when complete, TaskProgress otherwise */
 export async function getTaskStatus(taskId: string, timeoutMs = 15000): Promise<TaskProgress | TaskResult> {
-  const res = await fetchWithTimeout(`${API_BASE}/tasks/${taskId}`, {}, timeoutMs);
+  const res = await fetchWithTimeout(`${API_BASE}/tasks/${taskId}`, { headers: apiAuthHeaders() }, timeoutMs);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `查询任务失败: ${res.status}`);
@@ -301,11 +325,14 @@ export async function listCreativeSessions(): Promise<CreativeSession[]> {
   return arr.filter((s) => (s.intent ?? "image_create") === "image_create");
 }
 
-export async function createCreativeSession(title: string): Promise<CreativeSession> {
+export async function createCreativeSession(
+  title: string,
+  assets?: CreativeSession["assets"],
+): Promise<CreativeSession> {
   const res = await fetch(`${API_BASE}/director/sessions`, {
     method: "POST",
     headers: apiAuthHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ title, intent: "image_create", status: "active" }),
+    body: JSON.stringify({ title, intent: "image_create", status: "active", assets: assets ?? null }),
   });
   if (!res.ok) throw new Error(`创建会话失败: ${res.status}`);
   return res.json();
@@ -344,6 +371,7 @@ export async function uploadMedia(file: File): Promise<{ url: string; kind?: str
   form.append("file", file);
   const res = await fetch(`${API_BASE}/upload`, {
     method: "POST",
+    headers: apiAuthHeaders(),
     body: form,
   });
   if (!res.ok) {
@@ -813,8 +841,8 @@ export async function listTasks(token?: string, status?: string, limit = 50, off
   if (status) params.set("status", status);
   params.set("limit", String(limit));
   params.set("offset", String(offset));
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const headers = apiAuthHeaders();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
   const res = await fetch(`${API_BASE}/tasks/?${params}`, { headers });
   if (!res.ok) throw new Error(`获取任务列表失败: ${res.status}`);
   return res.json();
