@@ -8,7 +8,11 @@ import { cn } from "@/lib/utils";
 
 type Method = "wechat" | "alipay";
 
-export interface PayTarget { kind: "plan" | "pack"; id: string; cycle?: "monthly" | "yearly"; }
+export interface PayTarget {
+  kind: "plan" | "pack"; id: string; cycle?: "monthly" | "yearly";
+  // Mid-cycle prorated plan change — when set the order is billed on a prorated basis.
+  current_plan_id?: string | null; days_remaining?: number | null;
+}
 
 const METHOD_META: Record<Method, { label: string; color: string; icon: string }> = {
   wechat: { label: "微信支付", color: "text-[#07C160]", icon: "💬" },
@@ -33,7 +37,8 @@ export function PayModal({ target, onClose, onPaid }: { target: PayTarget | null
     if (!target) return;
     setLoading(true); setPaid(false); setOrder(null); stopPoll();
     try {
-      const o = await createPayOrder(target.kind, target.id, m, target.cycle || "monthly");
+      const o = await createPayOrder(target.kind, target.id, m, target.cycle || "monthly",
+        target.current_plan_id ? { current_plan_id: target.current_plan_id, days_remaining: target.days_remaining } : undefined);
       setOrder(o);
       pollRef.current = setInterval(async () => {
         try {

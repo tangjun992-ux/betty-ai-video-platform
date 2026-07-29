@@ -20,7 +20,7 @@ from app.config import settings
 from app.db import get_db
 from app.models.billing import UserBalance, Transaction, TransactionType
 from app.models.payment_order import PaymentOrder
-from app.api.pricing import PLANS
+from app.api.pricing import PLANS, compute_proration
 from app.rate_limiter import rate_limit
 from app.auth import resolve_user_id
 
@@ -43,6 +43,10 @@ class CheckoutRequest(BaseModel):
     kind: str = Field(..., description="plan | pack")
     id: str = Field(..., description="套餐或积分包 id")
     cycle: str = Field("monthly", description="套餐计费周期 monthly|yearly")
+    # Mid-cycle plan change (按比例升/降级). When current_plan_id is set the plan
+    # purchase is prorated for the days remaining in the cycle.
+    current_plan_id: Optional[str] = Field(None, description="当前方案 id（用于按比例变更）")
+    days_remaining: Optional[int] = Field(None, ge=0, description="当前计费周期剩余天数")
 
 
 class PayCreateRequest(CheckoutRequest):
@@ -60,11 +64,28 @@ async def _get_balance(db: AsyncSession, user_id: int) -> UserBalance:
 
 
 def _resolve_purchase(req: CheckoutRequest):
-    """Return (credits, price_usd, label) for the requested plan/pack."""
+    """Return (credits, price_usd, label) for the requested plan/pack.
+
+    For a mid-cycle plan change (current_plan_id + days_remaining supplied) the
+    plan is billed on a strict proration basis: the user is credited for the
+    unused portion of the current plan and charged the prorated new-plan price,
+    with credits granted proportionally to the remaining days."""
     if req.kind == "plan":
         plan = next((p for p in PLANS if p.id == req.id), None)
         if not plan:
             raise HTTPException(status_code=404, detail=f"套餐不存在: {req.id}")
+        # Mid-cycle prorated change.
+        if req.current_plan_id and req.days_remaining is not None:
+            cycle_days = 365 if req.cycle == "yearly" else 30
+            try:
+                pr = compute_proration(req.current_plan_id, req.id, req.days_remaining,
+                                       cycle_days=cycle_days, cycle=req.cycle)
+            except ValueError as e:
+                raise HTTPException(status_code=404, detail=str(e))
+            label = f"{plan.name}·按比例变更（剩余{pr['days_remaining']}天）"
+            # Net charge floored at 0 for the payment (downgrades are a credit,
+            # not a cash refund at checkout); credits are prorated.
+            return pr["prorated_credits"], max(0.0, pr["net_charge_usd"]), label
         price = plan.yearly_price if req.cycle == "yearly" else plan.monthly_price
         months = 12 if req.cycle == "yearly" else 1
         return plan.credits_per_month * months, round(price * months, 2), f"{plan.name}·{'年' if req.cycle=='yearly' else '月'}付"
@@ -261,6 +282,11 @@ async def checkout(req: CheckoutRequest, db: AsyncSession = Depends(get_db),
     bal.credits += credits
     bal.total_purchased += credits
     after = bal.credits + bal.daily_credits
+    # Persist the active plan on a plan purchase so future changes can prorate.
+    if req.kind == "plan":
+        bal.current_plan_id = req.id
+        bal.plan_started_at = datetime.now(timezone.utc)
+        bal.plan_cycle = req.cycle
     txn = Transaction(
         user_id=user_id,
         type=TransactionType.PURCHASE.value,
@@ -289,6 +315,11 @@ async def _grant_order(db: AsyncSession, order: PaymentOrder) -> int:
     bal.credits += order.credits
     bal.total_purchased += order.credits
     after = bal.credits + bal.daily_credits
+    # Persist the active plan on a plan order so future changes can prorate.
+    if order.kind == "plan":
+        bal.current_plan_id = order.item_id
+        bal.plan_started_at = datetime.now(timezone.utc)
+        bal.plan_cycle = order.cycle or "monthly"
     db.add(Transaction(
         user_id=order.user_id or GUEST_USER_ID,
         type=TransactionType.PURCHASE.value, amount=order.credits,

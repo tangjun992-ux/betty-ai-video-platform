@@ -1,135 +1,244 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Sparkles, Clock, Mic } from "lucide-react";
-import { useCreationStore } from "@/lib/stores";
-import { API_BASE } from "@/lib/api";
+import { User, Mic, Music, Upload, Info, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { ErrorState } from "@/components/StatusStates";
+import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
+import { API_BASE } from "@/lib/api";
+
+// Talking Avatar — 对标 yapper.so "Talking Avatar": image + audio to talking video.
+// Reuses the proven /lipsync backend pipeline (image + TTS/audio → lip-synced video).
+const SAMPLE_VOICES = [
+  { id: "zh-CN-XiaoxiaoNeural", name: "晓晓", gender: "女", desc: "温柔自然" },
+  { id: "zh-CN-YunxiNeural", name: "云希", gender: "男", desc: "沉稳大气" },
+  { id: "zh-CN-XiaoyiNeural", name: "晓伊", gender: "女", desc: "活泼可爱" },
+  { id: "en-US-JennyNeural", name: "Jenny", gender: "女", desc: "Friendly" },
+  { id: "en-US-GuyNeural", name: "Guy", gender: "男", desc: "Professional" },
+];
 
 export default function AvatarPage() {
   const router = useRouter();
-  const { setPrompt } = useCreationStore();
+  const toast = useToast();
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const [text, setText] = useState("");
+  const [voiceId, setVoiceId] = useState("zh-CN-XiaoxiaoNeural");
+  const [inputMode, setInputMode] = useState<"text" | "audio">("text");
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioName, setAudioName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setError(null);
+  }, []);
+
+  const handleAudioUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAudioFile(file);
+    setAudioName(file.name);
+  }, []);
+
+  const handleSubmit = async () => {
+    if (!imageFile && !imagePreview) { setError("请上传一张肖像照片"); return; }
+    if (inputMode === "text" && !text.trim()) { setError("请输入数字人要说的文字"); return; }
+    if (inputMode === "audio" && !audioFile) { setError("请上传音频文件"); return; }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      if (imageFile) formData.append("image_file", imageFile);
+      if (inputMode === "text") formData.append("text", text);
+      else if (audioFile) formData.append("audio_file", audioFile);
+      formData.append("voice_id", voiceId);
+
+      const res = await fetch(`${API_BASE}/lipsync`, { method: "POST", body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "数字人生成请求失败");
+      }
+      const data = await res.json();
+      setTaskId(data.task_id);
+
+      const maxPolls = 90;
+      let polls = 0;
+      const poll = async (): Promise<any> => {
+        if (polls++ > maxPolls) throw new Error("生成超时");
+        const status = await fetch(`${API_BASE}/tasks/${data.task_id}`).then((r) => r.json());
+        if (status.status === "completed" || status.status === "failed") return status;
+        await new Promise((r) => setTimeout(r, 2000));
+        return poll();
+      };
+      const result = await poll();
+      if (result.status === "failed") throw new Error(result.error_message || "生成失败");
+
+      toast.success("数字人生成完成", "说话视频已生成，正在跳转...");
+      router.push(`/tasks/${data.task_id}`);
+    } catch (err: any) {
+      const msg = err.message || "生成失败";
+      setError(msg);
+      toast.error("生成失败", msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] bg-cosmic-deep">
-      <div className="max-w-2xl mx-auto px-4 py-16 md:py-24">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="text-center space-y-6"
-        >
-          {/* ── Emoji / Icon Display ── */}
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.1, duration: 0.4, ease: [0.34, 1.56, 0.64, 1] }}
-            className="inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-brand-50 border border-cosmic-border shadow-elevation-sm"
-          >
-            <span className="text-5xl">👤</span>
-          </motion.div>
+    <div className="max-w-4xl mx-auto px-4 py-8">
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+        <h1 className="text-2xl font-bold mb-2 gradient-text-static flex items-center gap-2">
+          <User className="w-6 h-6 text-accent-cyan" /> 数字人 · Talking Avatar
+        </h1>
+        <p className="text-text-secondary text-sm mb-8">
+          上传一张肖像照片，输入文字或上传音频，AI 让静态肖像开口说话 —— 适用于虚拟主播、数字人播报、口播视频。
+        </p>
+      </motion.div>
 
-          {/* ── Title + Description ── */}
-          <div className="space-y-3">
-            <h1 className="text-h2 text-text-primary tracking-tight">
-              AI 头像
-            </h1>
-            <p className="text-body text-text-secondary max-w-md mx-auto leading-relaxed">
-              上传一张照片和一段音频，生成说话视频。让静态肖像开口说话，适用于虚拟主播、数字人播报等场景。
-            </p>
-          </div>
+      {error && !submitting && (
+        <ErrorState message={error} onRetry={handleSubmit} onDismiss={() => setError(null)} />
+      )}
 
-          {/* ── Status Badge ── */}
-          <div className="flex items-center justify-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-warning-muted border border-warning/20 text-warning text-caption font-semibold">
-              <Clock className="w-3.5 h-3.5" />
-              即将推出
-            </span>
-          </div>
+      {!error && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left: portrait + voice */}
+          <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }} className="space-y-4">
+            <label className="block">
+              <span className="text-sm font-medium text-text-accent-cyan mb-2 block">1. 上传肖像照片</span>
+              <div className="relative aspect-square rounded-2xl border-2 border-dashed border-cosmic-border hover:border-accent-cyan/40 bg-cosmic-subtle flex items-center justify-center cursor-pointer overflow-hidden transition-all group">
+                {imagePreview ? (
+                  <>
+                    <img src={imagePreview} alt="Portrait preview" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <RefreshCw className="w-8 h-8 text-text-accent-cyan" />
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center p-8">
+                    <Upload className="w-10 h-10 text-text-secondary mx-auto mb-3 group-hover:text-accent-cyan transition-colors" />
+                    <p className="text-sm text-text-secondary">点击上传肖像照片</p>
+                    <p className="text-xs text-text-secondary/40 mt-1">支持 JPG、PNG，建议清晰正面照</p>
+                  </div>
+                )}
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+              </div>
+            </label>
 
-          {/* ── CTA Button ── */}
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.4 }}
-            className="pt-2"
-          >
-            <button
-              onClick={() => {
-                setPrompt("生成头像说话视频");
-                router.push("/create/lipsync");
-              }}
-              className="btn-primary text-base px-8 py-3 h-auto gap-2"
-            >
-              <Mic className="w-4 h-4" />
-              跳转到唇形同步
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </motion.div>
-
-          {/* ── Suggested Tools ── */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5, duration: 0.4 }}
-            className="pt-8 border-t border-cosmic-border/60"
-          >
-            <p className="text-caption text-text-tertiary mb-4">相关工具</p>
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              {[
-                { label: "唇形同步", href: "/create/lipsync", icon: "🎤" },
-                { label: "动态同步", href: "/create/motion", icon: "🎬" },
-                { label: "图片创作", href: "/create/image", icon: "🖼️" },
-              ].map((tool) => (
-                <button
-                  key={tool.href}
-                  onClick={() => router.push(tool.href)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cosmic-surface border border-cosmic-border text-body-sm text-text-secondary hover:text-text-primary hover:border-cosmic-border-hover hover:shadow-elevation-sm transition-all duration-200"
-                >
-                  <span>{tool.icon}</span>
-                  <span>{tool.label}</span>
-                </button>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* ── Coming Soon Feature Preview ── */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6, duration: 0.4 }}
-            className="mt-6 p-6 rounded-2xl bg-cosmic-subtle/50 border border-dashed border-cosmic-border/80 text-left"
-          >
-            <div className="flex items-start gap-3">
-              <Sparkles className="w-5 h-5 text-accent-cyan mt-0.5 flex-shrink-0" />
-              <div className="space-y-2">
-                <h3 className="text-body-sm font-semibold text-text-primary">
-                  功能预告
-                </h3>
-                <ul className="space-y-1.5 text-body-sm text-text-secondary">
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan/60 flex-shrink-0" />
-                    上传任意肖像照片，AI 自动识别面部特征
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan/60 flex-shrink-0" />
-                    支持文本转语音或上传自定义音频
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan/60 flex-shrink-0" />
-                    生成自然的口型同步视频，支持多种语言
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-accent-cyan/60 flex-shrink-0" />
-                    输出 1080p 高清视频，适用于社交媒体
-                  </li>
-                </ul>
+            <div>
+              <span className="text-sm font-medium text-text-accent-cyan mb-2 block">3. 选择音色</span>
+              <div className="grid grid-cols-2 gap-2">
+                {SAMPLE_VOICES.map((v) => (
+                  <button key={v.id} onClick={() => setVoiceId(v.id)}
+                    className={cn(
+                      "flex items-center gap-2 p-2.5 rounded-xl text-left transition-all duration-200 border",
+                      voiceId === v.id
+                        ? "bg-accent-cyan/[0.08] text-accent-cyan border-accent-cyan/20"
+                        : "bg-cosmic-subtle border-cosmic-border text-text-secondary hover:text-text-accent-cyan hover:border-cosmic-border-hover"
+                    )}>
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold",
+                      v.gender === "女" ? "bg-pink-500/20 text-pink-400" : "bg-blue-500/20 text-blue-400")}>
+                      {v.name[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium truncate">{v.name} · {v.gender}</p>
+                      <p className="text-[10px] text-text-secondary/50">{v.desc}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
           </motion.div>
-        </motion.div>
-      </div>
+
+          {/* Right: script + submit */}
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="space-y-4 flex flex-col">
+            <div className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-text-accent-cyan">2. 台词 / 音频</span>
+                <div className="flex rounded-full bg-cosmic-subtle border border-cosmic-border p-0.5">
+                  <button onClick={() => setInputMode("text")}
+                    className={cn("px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200",
+                      inputMode === "text" ? "bg-cosmic-surface text-text-primary shadow-elevation-sm" : "text-text-secondary hover:text-text-accent-cyan")}>文字</button>
+                  <button onClick={() => setInputMode("audio")}
+                    className={cn("px-3 py-1 rounded-full text-xs font-semibold transition-all duration-200",
+                      inputMode === "audio" ? "bg-cosmic-surface text-text-primary shadow-elevation-sm" : "text-text-secondary hover:text-text-accent-cyan")}>音频</button>
+                </div>
+              </div>
+
+              {inputMode === "text" ? (
+                <textarea value={text} onChange={(e) => setText(e.target.value)}
+                  placeholder="输入数字人要说的台词...&#10;&#10;例如：大家好，欢迎来到今天的产品发布会！"
+                  rows={8}
+                  className="flex-1 w-full px-4 py-3 rounded-2xl bg-cosmic-subtle border border-cosmic-border text-sm text-text-accent-cyan placeholder:text-text-accent-cyan/20 focus:outline-none focus:ring-2 focus:ring-accent-cyan/20 focus:border-accent-cyan/30 resize-none transition-all" />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-cosmic-border hover:border-accent-cyan/40 bg-cosmic-subtle cursor-pointer transition-all group relative">
+                  {audioFile ? (
+                    <div className="text-center p-8">
+                      <Music className="w-10 h-10 text-accent-cyan mx-auto mb-3" />
+                      <p className="text-sm text-text-accent-cyan font-medium">{audioName}</p>
+                      <p className="text-xs text-text-secondary mt-1">{(audioFile.size / 1024 / 1024).toFixed(1)} MB</p>
+                      <button onClick={(e) => { e.preventDefault(); setAudioFile(null); setAudioName(""); }}
+                        className="mt-3 text-xs text-destructive hover:underline">移除</button>
+                    </div>
+                  ) : (
+                    <div className="text-center p-8">
+                      <Upload className="w-10 h-10 text-text-secondary mx-auto mb-3 group-hover:text-accent-cyan transition-colors" />
+                      <p className="text-sm text-text-secondary">点击上传音频文件</p>
+                      <p className="text-xs text-text-secondary/40 mt-1">支持 MP3、WAV、M4A</p>
+                    </div>
+                  )}
+                  <input type="file" accept="audio/*" onChange={handleAudioUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                </div>
+              )}
+
+              <p className="text-xs text-text-secondary mt-1.5 flex items-center gap-1">
+                <Info className="w-3 h-3" />
+                {inputMode === "text" ? "建议 10-100 字，支持中文/英文" : "音频时长建议 5-30 秒"}
+              </p>
+            </div>
+
+            <button onClick={handleSubmit}
+              disabled={submitting || !imagePreview || (inputMode === "text" ? !text.trim() : !audioFile)}
+              className="btn-primary w-full">
+              {submitting ? (
+                <><Loader2 className="w-5 h-5 animate-spin" />生成中... {taskId ? `(${taskId.slice(0, 8)}...)` : ""}</>
+              ) : (
+                <><Mic className="w-5 h-5" />生成数字人说话视频</>
+              )}
+            </button>
+
+            {submitting && taskId && (
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-cosmic-subtle border border-cosmic-border">
+                <Loader2 className="w-5 h-5 text-accent-cyan animate-spin" />
+                <div>
+                  <p className="text-sm text-text-accent-cyan">AI 正在驱动肖像开口说话...</p>
+                  <p className="text-xs text-text-secondary">任务 ID: {taskId.slice(0, 8)}...</p>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="mt-8 p-4 rounded-2xl surface-raised">
+        <h3 className="text-sm font-semibold text-text-accent-cyan mb-2 flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-accent-cyan" />使用技巧
+        </h3>
+        <ul className="space-y-1.5 text-xs text-text-secondary">
+          <li>• 清晰的正面肖像照效果最佳，避免遮挡面部</li>
+          <li>• 文字建议 10-100 字，支持中英文混合</li>
+          <li>• 也可直接上传自己的配音音频，获得更自然的效果</li>
+          <li>• 生成时间约 30-60 秒，完成后自动跳转结果页</li>
+        </ul>
+      </motion.div>
     </div>
   );
 }

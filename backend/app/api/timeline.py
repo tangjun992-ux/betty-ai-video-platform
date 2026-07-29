@@ -203,6 +203,10 @@ async def get_project(project_id: str):
 
 class ComposeClip(BaseModel):
     url: str = Field(..., description="片段 URL（本地 /api/v1/media 视频）")
+    start: Optional[float] = Field(None, ge=0, description="裁剪起点(秒)，省略=从头")
+    end: Optional[float] = Field(None, gt=0, description="裁剪终点(秒)，省略=到尾")
+    transition: Optional[str] = Field(
+        "cut", description="进入本片段的转场: cut | fade | dissolve | slide | zoom | wipe")
 
 
 class ComposeRequest(BaseModel):
@@ -214,23 +218,28 @@ class ComposeRequest(BaseModel):
 @router.post("/timeline/compose", summary="合成时间线为成片（同步）")
 async def compose_timeline(req: ComposeRequest):
     """Stitch the ordered clips into one film using the proven ffmpeg composer.
+    Honours per-clip trim (start/end) and transition (fade/dissolve/slide/zoom).
     Synchronous (a few short clips finish in seconds); returns the local video."""
     import asyncio as _a
-    urls = [c.url for c in req.clips if c.url]
-    if not urls:
+    valid = [c for c in req.clips if c.url]
+    if not valid:
         raise HTTPException(status_code=400, detail="没有可合成的片段")
     from app.adapters.demo_provider import compose_final_video, _local_media_path
-    missing = [u for u in urls if not _local_media_path(u)]
+    missing = [c.url for c in valid if not _local_media_path(c.url)]
     if missing:
         raise HTTPException(status_code=400,
                             detail=f"{len(missing)} 个片段不是可访问的本地视频，无法合成")
+    clip_specs = [
+        {"url": c.url, "start": c.start, "end": c.end, "transition": c.transition or "cut"}
+        for c in valid
+    ]
     try:
         final_url, poster = await _a.to_thread(
-            compose_final_video, urls, None, req.with_audio, req.narration_url)
+            compose_final_video, None, None, req.with_audio, req.narration_url, clip_specs)
     except Exception as e:
         logger.error("timeline compose failed: %s", e)
         raise HTTPException(status_code=500, detail=f"合成失败: {e}")
-    return {"url": final_url, "thumbnail": poster, "clip_count": len(urls),
+    return {"url": final_url, "thumbnail": poster, "clip_count": len(clip_specs),
             "media_type": "video"}
 
 

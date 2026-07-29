@@ -4,14 +4,23 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Trash2, ChevronLeft, ChevronRight, Film, Loader2,
-  Sparkles, Download, Music, ImageIcon, Video as VideoIcon,
+  Sparkles, Download, Music, ImageIcon, Video as VideoIcon, Scissors,
 } from "lucide-react";
 import { listLibrary, composeTimeline, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
 interface LibItem { id: string; url: string; thumbnail?: string | null; title: string; media_type: string; }
-interface Clip { key: string; url: string; thumbnail?: string | null; title: string; }
+interface Clip { key: string; url: string; thumbnail?: string | null; title: string; transition: string; start?: number | null; end?: number | null; }
+
+const TRANSITIONS: { value: string; label: string }[] = [
+  { value: "cut", label: "硬切" },
+  { value: "fade", label: "淡入淡出" },
+  { value: "dissolve", label: "叠化" },
+  { value: "slide", label: "滑动" },
+  { value: "zoom", label: "缩放" },
+  { value: "wipe", label: "擦除" },
+];
 
 function resolveMedia(url: string): string {
   if (!url) return url;
@@ -48,10 +57,15 @@ export default function TimelinePage() {
   }, []);
 
   const addClip = useCallback((item: LibItem) => {
-    setTrack((t) => [...t, { key: `${item.id}-${Date.now()}`, url: item.url, thumbnail: item.thumbnail, title: item.title }]);
+    // New clips default to a hard cut; user can pick a transition per clip.
+    setTrack((t) => [...t, { key: `${item.id}-${Date.now()}`, url: item.url, thumbnail: item.thumbnail, title: item.title, transition: "cut", start: null, end: null }]);
     setResult(null);
   }, []);
   const removeClip = (key: string) => { setTrack((t) => t.filter((c) => c.key !== key)); setResult(null); };
+  const updateClip = (key: string, patch: Partial<Clip>) => {
+    setTrack((t) => t.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+    setResult(null);
+  };
   const move = (idx: number, dir: -1 | 1) => {
     setTrack((t) => {
       const n = [...t]; const j = idx + dir;
@@ -68,7 +82,7 @@ export default function TimelinePage() {
     setResult(null);
     try {
       const res = await composeTimeline(
-        track.map((c) => ({ url: c.url })),
+        track.map((c) => ({ url: c.url, start: c.start, end: c.end, transition: c.transition })),
         { with_audio: withAudio, narration_url: narration?.url },
       );
       setResult({ url: resolveMedia(res.url), thumbnail: resolveMedia(res.thumbnail) });
@@ -133,16 +147,43 @@ export default function TimelinePage() {
         ) : (
           <div className="flex gap-2 overflow-x-auto pb-2">
             {track.map((c, i) => (
-              <div key={c.key} className="relative flex-shrink-0 w-40 group">
-                <div className="aspect-video rounded-lg overflow-hidden ring-1 ring-cosmic-border bg-black">
-                  {c.thumbnail ? <img src={resolveMedia(c.thumbnail)} alt="" className="w-full h-full object-cover" />
-                    : <video src={resolveMedia(c.url)} muted className="w-full h-full object-cover" />}
+              <div key={c.key} className="flex-shrink-0 w-40">
+                <div className="relative group">
+                  <div className="aspect-video rounded-lg overflow-hidden ring-1 ring-cosmic-border bg-black">
+                    {c.thumbnail ? <img src={resolveMedia(c.thumbnail)} alt="" className="w-full h-full object-cover" />
+                      : <video src={resolveMedia(c.url)} muted className="w-full h-full object-cover" />}
+                  </div>
+                  <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-[10px] text-white font-semibold">#{i + 1}</div>
+                  <div className="absolute inset-x-0 bottom-1 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => move(i, -1)} disabled={i === 0} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => removeClip(c.key)} className="w-6 h-6 rounded bg-black/70 text-white hover:bg-red-500 flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => move(i, 1)} disabled={i === track.length - 1} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5" /></button>
+                  </div>
                 </div>
-                <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-[10px] text-white font-semibold">#{i + 1}</div>
-                <div className="absolute inset-x-0 bottom-1 flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => move(i, -1)} disabled={i === 0} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => removeClip(c.key)} className="w-6 h-6 rounded bg-black/70 text-white hover:bg-red-500 flex items-center justify-center"><Trash2 className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => move(i, 1)} disabled={i === track.length - 1} className="w-6 h-6 rounded bg-black/70 text-white flex items-center justify-center disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5" /></button>
+                {/* Per-clip editing: transition (only for non-first clips) + trim */}
+                <div className="mt-1.5 space-y-1.5">
+                  {i > 0 && (
+                    <div className="flex items-center gap-1" title="进入本片段的转场效果">
+                      <Scissors className="w-3 h-3 text-text-tertiary flex-shrink-0" />
+                      <select
+                        value={c.transition}
+                        onChange={(e) => updateClip(c.key, { transition: e.target.value })}
+                        className="flex-1 min-w-0 h-6 rounded bg-cosmic-subtle border border-cosmic-border text-[11px] text-text-secondary px-1"
+                      >
+                        {TRANSITIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1" title="裁剪起止(秒)，留空=整段">
+                    <input type="number" min={0} step={0.1} placeholder="起"
+                      value={c.start ?? ""}
+                      onChange={(e) => updateClip(c.key, { start: e.target.value === "" ? null : Math.max(0, parseFloat(e.target.value)) })}
+                      className="w-1/2 min-w-0 h-6 rounded bg-cosmic-subtle border border-cosmic-border text-[11px] text-text-secondary px-1.5" />
+                    <input type="number" min={0} step={0.1} placeholder="止"
+                      value={c.end ?? ""}
+                      onChange={(e) => updateClip(c.key, { end: e.target.value === "" ? null : Math.max(0, parseFloat(e.target.value)) })}
+                      className="w-1/2 min-w-0 h-6 rounded bg-cosmic-subtle border border-cosmic-border text-[11px] text-text-secondary px-1.5" />
+                  </div>
                 </div>
               </div>
             ))}
