@@ -7,25 +7,31 @@ import { useState } from "react";
 import { useToast } from "@/components/Toast";
 import { PayModal, type PayTarget } from "@/components/PayModal";
 import { useLocale } from "@/i18n/LocaleProvider";
+import { checkout, API_BASE } from "@/lib/api";
+import { useEffect } from "react";
+import { cn } from "@/lib/utils";
 
-// 前 3 档固定：Starter / Personal / Creator
+// 前 3 档固定：Starter / Personal / Creator（价格/额度语言无关；特性按 locale）
 const PLANS = [
-  {
-    id: "starter", name: "Starter", priceMonthly: 9.99, priceYearly: 7.99, credits: 1000, popular: false,
-    color: "from-slate-500 to-slate-400",
-    features: ["1,000 Credits / 月", "已验证图片模型", "1080p 分辨率", "标准生成速度", "高级唇形同步", "个人使用许可"],
-  },
-  {
-    id: "personal", name: "Personal", priceMonthly: 24.99, priceYearly: 19.99, credits: 3000, popular: false,
-    color: "from-teal-500 to-emerald-600",
-    features: ["3,000 Credits / 月", "已验证视频模型", "Seedance 2.0 全模态", "4K 分辨率", "高级运动控制", "图片 & 视频放大"],
-  },
-  {
-    id: "creator", name: "Creator", priceMonthly: 49.99, priceYearly: 39.99, credits: 7000, popular: true,
-    color: "from-brand to-accent-violet",
-    features: ["7,000 Credits / 月", "全部已验证模型", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
-  },
+  { id: "starter", name: "Starter", priceMonthly: 9.99, priceYearly: 7.99, credits: 1000, popular: false, color: "from-slate-500 to-slate-400" },
+  { id: "personal", name: "Personal", priceMonthly: 24.99, priceYearly: 19.99, credits: 3000, popular: false, color: "from-teal-500 to-emerald-600" },
+  { id: "creator", name: "Creator", priceMonthly: 49.99, priceYearly: 39.99, credits: 7000, popular: true, color: "from-brand to-accent-violet" },
 ];
+
+const PLAN_FEATURES: Record<string, { zh: string[]; en: string[] }> = {
+  starter: {
+    zh: ["1,000 Credits / 月", "已验证图片模型", "1080p 分辨率", "标准生成速度", "高级唇形同步", "个人使用许可"],
+    en: ["1,000 credits / mo", "Verified image models", "1080p resolution", "Standard speed", "Advanced lip-sync", "Personal-use license"],
+  },
+  personal: {
+    zh: ["3,000 Credits / 月", "已验证视频模型", "Seedance 2.0 全模态", "4K 分辨率", "高级运动控制", "图片 & 视频放大"],
+    en: ["3,000 credits / mo", "Verified video models", "Seedance 2.0 omni", "4K resolution", "Advanced motion control", "Image & video upscale"],
+  },
+  creator: {
+    zh: ["7,000 Credits / 月", "全部已验证模型", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
+    en: ["7,000 credits / mo", "All verified models", "4K · fastest speed", "Commercial license", "Team collaboration", "API access", "Priority support"],
+  },
+};
 
 // 第 4 档 Max：credits 滑块
 const MAX_TIERS = [
@@ -36,35 +42,97 @@ const MAX_TIERS = [
   { credits: 150000, monthly: 749.99, yearly: 599.99 },
 ];
 
-// Credits table = active shelf only（lab 品牌不标价，避免虚标货架）
+const MAX_FEATURES = {
+  zh: ["全部已验证模型 + 实验室抢先体验", "最高并发 · 高分辨率", "无限团队座位", "API + Webhook", "专属客户经理 · SLA"],
+  en: ["All verified models + Lab early access", "Highest concurrency · high resolution", "Unlimited team seats", "API + Webhooks", "Dedicated CSM · SLA"],
+};
+
 const CREDIT_USAGE = [
-  { model: "Nano Banana 2", type: "图片", quality: "标准", credits: 2 },
-  { model: "GPT Image 2 / Nano Banana Pro", type: "图片", quality: "高清", credits: 5 },
-  { model: "Imagen 4", type: "图片", quality: "摄影级", credits: 4 },
-  { model: "Seedance 2.0 Fast", type: "视频", quality: "5s 1080p", credits: 3 },
-  { model: "Seedance 2.0 / Kling 2.5", type: "视频", quality: "5s 1080p", credits: 7 },
-  { model: "Kling 2.1 Master / Pro", type: "视频", quality: "5s 高质", credits: 8 },
+  { model: "Nano Banana 2", type: "image", qualityZh: "标准", qualityEn: "Standard", credits: 2 },
+  { model: "GPT Image 2 / Nano Banana Pro", type: "image", qualityZh: "高清", qualityEn: "HD", credits: 5 },
+  { model: "Imagen 4", type: "image", qualityZh: "摄影级", qualityEn: "Photographic", credits: 4 },
+  { model: "Seedance 2.0 Fast", type: "video", qualityZh: "5s 1080p", qualityEn: "5s 1080p", credits: 3 },
+  { model: "Seedance 2.0 / Kling 2.5", type: "video", qualityZh: "5s 1080p", qualityEn: "5s 1080p", credits: 7 },
+  { model: "Kling 2.1 Master / Pro", type: "video", qualityZh: "5s 高质", qualityEn: "5s premium", credits: 8 },
 ];
 
-const FAQS = [
-  { q: "Credits 是什么？", a: "Credits 是媒体生成的计费单位，消耗量取决于模型、时长、分辨率等。生成前会明确显示所需 Credits。图片通常比视频便宜。" },
-  { q: "未用完的 Credits 会累积吗？", a: "会。订阅套餐的 plan credits 在计费周期发放，未使用部分可结转至下月，上限为月额度的 2 倍；一次性购买的 Credits 单独累计、不受该上限限制。" },
-  { q: "如何获得更多 Credits？", a: "Credits 按订阅档位每月发放。升级更高档位可立即获得新旧档位差额的 Credits（按比例计费）。也可随时在定价页购买一次性 Credits 充值包。" },
-  { q: "可以随时升级或降级吗？", a: "可以。升级按剩余时间比例计费并立即生效，降级在下个计费周期生效。随时可在账户页调整。" },
-  { q: "支付安全吗？", a: "我们使用 Stripe 处理支付，不存储任何卡片信息，享受银行级安全标准，支付后自动开具收据与发票。" },
-  { q: "我的数据和作品是私密的吗？", a: "是。你创建的视频、上传的模型均保持私密，安全存储，受保护免遭未授权访问。" },
-];
+const FAQS = {
+  zh: [
+    { q: "Credits 是什么？", a: "Credits 是媒体生成的计费单位，消耗量取决于模型、时长、分辨率等。生成前会明确显示所需 Credits。图片通常比视频便宜。" },
+    { q: "未用完的 Credits 会累积吗？", a: "会。订阅套餐的 plan credits 在计费周期发放，未使用部分可结转至下月，上限为月额度的 2 倍；一次性购买的 Credits 单独累计、不受该上限限制。" },
+    { q: "如何获得更多 Credits？", a: "Credits 按订阅档位每月发放。升级更高档位可立即获得新旧档位差额的 Credits（按比例计费）。也可随时在定价页购买一次性 Credits 充值包。" },
+    { q: "可以随时升级或降级吗？", a: "可以。升级按剩余时间比例计费并立即生效，降级在下个计费周期生效。随时可在账户页调整。" },
+    { q: "支付安全吗？", a: "我们使用 Stripe 处理支付，不存储任何卡片信息，享受银行级安全标准，支付后自动开具收据与发票。" },
+    { q: "我的数据和作品是私密的吗？", a: "是。你创建的视频、上传的模型均保持私密，安全存储，受保护免遭未授权访问。" },
+  ],
+  en: [
+    { q: "What are credits?", a: "Credits are the billing unit for generation; the cost depends on model, duration, and resolution. The exact cost is always shown before you generate. Images are usually cheaper than video." },
+    { q: "Do unused credits roll over?", a: "Yes. Subscription plan credits are granted each cycle and unused amounts roll over up to 2× the monthly allowance; one-time credit packs accumulate separately without that cap." },
+    { q: "How do I get more credits?", a: "Credits are granted monthly by plan tier. Upgrading grants the prorated difference immediately. You can also buy one-time top-up packs anytime on this page." },
+    { q: "Can I upgrade or downgrade anytime?", a: "Yes. Upgrades are prorated and take effect immediately; downgrades apply next cycle. Adjust anytime from your account." },
+    { q: "Is payment secure?", a: "Payments are processed by Stripe. We never store card details — bank-grade security, with automatic receipts and invoices." },
+    { q: "Are my data and creations private?", a: "Yes. Your videos and uploads stay private, securely stored, and protected from unauthorized access." },
+  ],
+};
+
+const PRICING_UI = {
+  zh: {
+    monthly: "月付", yearly: "年付", save: "省 20%", cycleLabel: "计费周期",
+    perMonth: "/月", billedYearly: (n: string) => `按年计费 $${n}/年`, creditsMo: (c: string) => `${c} Credits / 月`,
+    allInclude: "所有计划均包含：", include: ["Seedance 2.0 Omni", "已验证图片模型", "已验证视频模型", "唇形同步 & 运动控制", "商业使用授权", "按用量计费"],
+    mostPopular: "最受欢迎", bestValue: "超值之选", choose: (n: string) => `选择 ${n}`, chooseMax: "选择 Max",
+    usageTitle: "Credits 消耗参考", th: ["模型", "类型", "规格", "Credits"], image: "图片", video: "视频",
+    usageNote: "生成前始终显示精确 Credits 成本；实际消耗随模型与时长浮动",
+    faqTitle: "常见问题", addonTitle: "积分加购包（Max 专属）",
+    paidTitle: "订阅成功", paidDesc: "积分已到账",
+  },
+  en: {
+    monthly: "Monthly", yearly: "Yearly", save: "Save 20%", cycleLabel: "Billing cycle",
+    perMonth: "/mo", billedYearly: (n: string) => `Billed $${n}/yr`, creditsMo: (c: string) => `${c} credits / mo`,
+    allInclude: "Every plan includes:", include: ["Seedance 2.0 Omni", "Verified image models", "Verified video models", "Lip-sync & motion control", "Commercial-use license", "Usage-based billing"],
+    mostPopular: "Most Popular", bestValue: "Best Value", choose: (n: string) => `Choose ${n}`, chooseMax: "Choose Max",
+    usageTitle: "Credit usage reference", th: ["Model", "Type", "Spec", "Credits"], image: "Image", video: "Video",
+    usageNote: "The exact credit cost is always shown before generating; actual usage varies by model and duration.",
+    faqTitle: "Frequently asked questions", addonTitle: "Credit top-up packs (Max)",
+    paidTitle: "Subscribed", paidDesc: "Credits added",
+  },
+};
 
 export default function PricingPage() {
   const router = useRouter();
   const toast = useToast();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const L = PRICING_UI[locale];
+  const faqs = FAQS[locale];
   const [busy, setBusy] = useState<string | null>(null);
   const [yearly, setYearly] = useState(false);
   const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
+  const [stripeEnabled, setStripeEnabled] = useState(false);
 
-  const subscribe = (planId: string) =>
+  useEffect(() => {
+    fetch(`${API_BASE}/billing/stripe-status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d && typeof d.api_key_configured === "boolean") setStripeEnabled(d.api_key_configured); })
+      .catch(() => {});
+  }, []);
+
+  // International, card-first checkout (Stripe/USD) when the UI is English or
+  // Stripe is configured — matching Yapper/Dzine global default; the WeChat /
+  // Alipay QR modal remains the China path.
+  const subscribe = async (planId: string) => {
+    if (locale === "en" || stripeEnabled) {
+      setBusy(planId);
+      try {
+        await checkout("plan", planId, yearly ? "yearly" : "monthly");
+      } catch (e: any) {
+        toast.error(locale === "en" ? "Checkout failed" : "结算失败", e?.message || "");
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
     setPayTarget({ kind: "plan", id: planId, cycle: yearly ? "yearly" : "monthly" });
+  };
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [maxIdx, setMaxIdx] = useState(1);
   const maxTier = MAX_TIERS[maxIdx];
@@ -76,12 +144,12 @@ export default function PricingPage() {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
         <h1 className="text-3xl md:text-4xl font-display font-bold mb-3 text-text-accent-cyan">{t("pricing.title")}</h1>
         <p className="text-text-secondary max-w-lg mx-auto mb-8">{t("pricing.subtitle")}</p>
-        <div role="radiogroup" aria-label="计费周期" className="inline-flex items-center gap-3 p-1 rounded-full bg-cosmic-subtle border border-cosmic-border">
+        <div role="radiogroup" aria-label={L.cycleLabel} className="inline-flex items-center gap-3 p-1 rounded-full bg-cosmic-subtle border border-cosmic-border">
           <button role="radio" aria-checked={!yearly} onClick={() => setYearly(false)}
-            className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${!yearly ? "bg-brand text-white shadow-button-glow" : "text-text-secondary hover:text-brand"}`}>月付</button>
+            className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${!yearly ? "bg-brand text-white shadow-button-glow" : "text-text-secondary hover:text-brand"}`}>{L.monthly}</button>
           <button role="radio" aria-checked={yearly} onClick={() => setYearly(true)}
             className={`px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-1.5 ${yearly ? "bg-brand text-white shadow-button-glow" : "text-text-secondary hover:text-brand"}`}>
-            年付<span className="badge-success text-[10px]">省 20%</span>
+            {L.yearly}<span className="badge-success text-[10px]">{L.save}</span>
           </button>
         </div>
       </motion.div>
@@ -89,14 +157,9 @@ export default function PricingPage() {
       {/* "All plans include" Banner */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
         className="mb-10 p-6 rounded-2xl border border-cosmic-border bg-cosmic-subtle">
-        <p className="text-sm text-text-secondary text-center">所有计划均包含：</p>
+        <p className="text-sm text-text-secondary text-center">{L.allInclude}</p>
         <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-3 text-sm text-text-primary font-medium">
-          <span>✅ Seedance 2.0 Omni</span>
-          <span>✅ 已验证图片模型</span>
-          <span>✅ 已验证视频模型</span>
-          <span>✅ 唇形同步 & 运动控制</span>
-          <span>✅ 商业使用授权</span>
-          <span>✅ 按用量计费</span>
+          {L.include.map((f) => <span key={f}>✅ {f}</span>)}
         </div>
       </motion.div>
 
@@ -107,7 +170,7 @@ export default function PricingPage() {
             className={`relative rounded-2xl border p-6 flex flex-col transition-all ${
               plan.popular ? "border-brand bg-brand-soft ring-1 ring-brand/20 shadow-button-glow" : "border-cosmic-border bg-cosmic-surface hover:border-cosmic-border-hover"}`}>
             {plan.popular && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-brand text-white text-xs font-semibold shadow-button-glow">Most Popular</div>
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-brand text-white text-xs font-semibold shadow-button-glow">{L.mostPopular}</div>
             )}
             <div className="flex items-center gap-2.5 mb-4">
               <div className={`w-2 h-2 rounded-full bg-gradient-to-br ${plan.color}`} />
@@ -115,12 +178,12 @@ export default function PricingPage() {
             </div>
             <div className="flex items-baseline gap-1 mb-1">
               <span className="text-3xl font-bold text-text-accent-cyan">{fmt(yearly ? plan.priceYearly : plan.priceMonthly)}</span>
-              <span className="text-sm text-text-secondary">/月</span>
+              <span className="text-sm text-text-secondary">{L.perMonth}</span>
             </div>
-            {yearly && <p className="text-xs text-brand mb-2">按年计费 ${(plan.priceYearly * 12).toFixed(0)}/年</p>}
-            <p className="text-sm text-text-secondary mb-4">{plan.credits.toLocaleString()} Credits / 月</p>
+            {yearly && <p className="text-xs text-brand mb-2">{L.billedYearly((plan.priceYearly * 12).toFixed(0))}</p>}
+            <p className="text-sm text-text-secondary mb-4">{L.creditsMo(plan.credits.toLocaleString())}</p>
             <ul className="space-y-2.5 mb-6 flex-1">
-              {plan.features.map((f) => (
+              {PLAN_FEATURES[plan.id][locale].map((f) => (
                 <li key={f} className="flex items-start gap-2 text-sm">
                   <Check className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" /><span className="text-text-secondary">{f}</span>
                 </li>
@@ -130,7 +193,7 @@ export default function PricingPage() {
               className={`w-full py-2.5 rounded-xl text-sm font-semibold text-center transition-all active:scale-[0.98] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 ${
               plan.popular ? "bg-brand text-white hover:bg-brand-strong shadow-button-glow" : "bg-cosmic-subtle border border-cosmic-border text-text-primary hover:bg-cosmic-border"}`}>
               {busy === plan.id && <Loader2 className="w-4 h-4 animate-spin" />}
-              {plan.popular ? t("pricing.cta") : `选择 ${plan.name}`}
+              {plan.popular ? t("pricing.cta") : L.choose(plan.name)}
             </button>
           </motion.div>
         ))}
@@ -138,17 +201,17 @@ export default function PricingPage() {
         {/* Max — credits slider */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}
           className="relative rounded-2xl border border-amber-500/25 bg-amber-500/[0.03] p-6 flex flex-col">
-          <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-amber-500 text-black text-xs font-semibold shadow-lg">Best Value</div>
+          <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-amber-500 text-black text-xs font-semibold shadow-lg">{L.bestValue}</div>
           <div className="flex items-center gap-2.5 mb-4">
             <div className="w-2 h-2 rounded-full bg-gradient-to-br from-amber-500 to-orange-500" />
             <h3 className="text-lg font-bold text-text-accent-cyan">Max</h3>
           </div>
           <div className="flex items-baseline gap-1 mb-1">
             <span className="text-3xl font-bold text-text-accent-cyan">{fmt(yearly ? maxTier.yearly : maxTier.monthly)}</span>
-            <span className="text-sm text-text-secondary">/月</span>
+            <span className="text-sm text-text-secondary">{L.perMonth}</span>
           </div>
-          {yearly && <p className="text-xs text-amber-600 mb-2">按年计费 ${(maxTier.yearly * 12).toFixed(0)}/年</p>}
-          <p className="text-sm text-text-secondary mb-3">{maxTier.credits.toLocaleString()} Credits / 月</p>
+          {yearly && <p className="text-xs text-amber-600 mb-2">{L.billedYearly((maxTier.yearly * 12).toFixed(0))}</p>}
+          <p className="text-sm text-text-secondary mb-3">{L.creditsMo(maxTier.credits.toLocaleString())}</p>
           {/* Slider */}
           <input type="range" min={0} max={MAX_TIERS.length - 1} step={1} value={maxIdx}
             onChange={(e) => setMaxIdx(+e.target.value)}
@@ -157,7 +220,7 @@ export default function PricingPage() {
             {MAX_TIERS.map((t) => <span key={t.credits}>{t.credits >= 1000 ? `${t.credits / 1000}k` : t.credits}</span>)}
           </div>
           <ul className="space-y-2.5 mb-6 flex-1">
-            {["全部已验证模型 + 实验室抢先体验", "最高并发 · 高分辨率", "无限团队座位", "API + Webhook", "专属客户经理 · SLA"].map((f) => (
+            {MAX_FEATURES[locale].map((f) => (
               <li key={f} className="flex items-start gap-2 text-sm">
                 <Check className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" /><span className="text-text-secondary">{f}</span>
               </li>
@@ -166,13 +229,13 @@ export default function PricingPage() {
           <button onClick={() => subscribe("max")} disabled={!!busy}
             className="w-full py-2.5 rounded-xl text-sm font-semibold text-center bg-amber-500/[0.06] border border-amber-500/30 text-amber-600 hover:bg-amber-500/[0.12] transition-all active:scale-[0.98] inline-flex items-center justify-center gap-1.5 disabled:opacity-60">
             {busy === "max" && <Loader2 className="w-4 h-4 animate-spin" />}
-            选择 Max
+            {L.chooseMax}
           </button>
         </motion.div>
 
         {/* 积分加购包（Max 专属） */}
         <div className="mt-8 text-center lg:col-span-4">
-          <p className="text-sm text-text-secondary mb-3">积分加购包（Max 专属）</p>
+          <p className="text-sm text-text-secondary mb-3">{L.addonTitle}</p>
           <div className="flex flex-wrap justify-center gap-2">
             {["15k", "22k", "37k", "75k", "150k"].map(s => (
               <span key={s} className="px-3 py-1.5 rounded-lg border border-cosmic-border text-sm text-text-secondary">{s} Credits</span>
@@ -183,15 +246,14 @@ export default function PricingPage() {
 
       {/* Credit Usage Table */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="max-w-3xl mx-auto mb-16">
-        <h2 className="text-xl font-bold mb-4 text-center text-text-accent-cyan">Credits 消耗参考</h2>
+        <h2 className="text-xl font-bold mb-4 text-center text-text-accent-cyan">{L.usageTitle}</h2>
         <div className="rounded-2xl border border-cosmic-border overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-cosmic-border bg-cosmic-subtle">
-                <th className="text-left px-5 py-3 font-medium text-text-secondary">模型</th>
-                <th className="text-left px-5 py-3 font-medium text-text-secondary">类型</th>
-                <th className="text-left px-5 py-3 font-medium text-text-secondary">规格</th>
-                <th className="text-right px-5 py-3 font-medium text-text-secondary">Credits</th>
+                {L.th.map((h) => (
+                  <th key={h} className={cn("px-5 py-3 font-medium text-text-secondary", h === "Credits" ? "text-right" : "text-left")}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -199,9 +261,9 @@ export default function PricingPage() {
                 <tr key={i} className="border-b border-cosmic-border last:border-0 hover:bg-cosmic-subtle transition-colors">
                   <td className="px-5 py-3 text-text-accent-cyan font-medium">{item.model}</td>
                   <td className="px-5 py-3">
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${item.type === "图片" ? "bg-accent-violet/10 text-accent-violet" : "bg-amber-500/10 text-amber-600"}`}>{item.type}</span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${item.type === "image" ? "bg-accent-violet/10 text-accent-violet" : "bg-amber-500/10 text-amber-600"}`}>{item.type === "image" ? L.image : L.video}</span>
                   </td>
-                  <td className="px-5 py-3 text-text-secondary">{item.quality}</td>
+                  <td className="px-5 py-3 text-text-secondary">{locale === "en" ? item.qualityEn : item.qualityZh}</td>
                   <td className="px-5 py-3 text-right text-text-accent-cyan font-mono">{item.credits}</td>
                 </tr>
               ))}
@@ -209,15 +271,15 @@ export default function PricingPage() {
           </table>
         </div>
         <p className="text-xs text-text-secondary text-center mt-3 flex items-center justify-center gap-1">
-          <Info className="w-3 h-3" />生成前始终显示精确 Credits 成本；实际消耗随模型与时长浮动
+          <Info className="w-3 h-3" />{L.usageNote}
         </p>
       </motion.div>
 
       {/* FAQ */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="max-w-2xl mx-auto">
-        <h2 className="text-xl font-bold mb-6 text-center text-text-accent-cyan">常见问题</h2>
+        <h2 className="text-xl font-bold mb-6 text-center text-text-accent-cyan">{L.faqTitle}</h2>
         <div className="space-y-3">
-          {FAQS.map((faq, i) => (
+          {faqs.map((faq, i) => (
             <div key={i} className="border border-cosmic-border rounded-xl overflow-hidden hover:border-cosmic-border-hover transition-colors">
               <button onClick={() => setOpenFaq(openFaq === i ? null : i)} aria-expanded={openFaq === i}
                 className="flex items-center justify-between w-full px-5 py-4 text-left text-sm font-semibold text-text-accent-cyan hover:bg-cosmic-subtle transition-colors">
@@ -233,7 +295,7 @@ export default function PricingPage() {
       <PayModal
         target={payTarget}
         onClose={() => setPayTarget(null)}
-        onPaid={() => { toast.success("订阅成功", "积分已到账"); setTimeout(() => router.push("/billing"), 1200); }}
+        onPaid={() => { toast.success(L.paidTitle, L.paidDesc); setTimeout(() => router.push("/billing"), 1200); }}
       />
     </div>
   );
