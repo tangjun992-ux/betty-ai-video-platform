@@ -112,10 +112,11 @@ export function TopBar() {
           />
         </button>
 
-        {/* Logo + brand */}
-        <Link href="/" className="flex items-center gap-2 shrink-0">
+        {/* Logo + brand — only on small screens; the sidebar owns the brand on
+            desktop, so we avoid a duplicate "betty" lockup next to it. */}
+        <Link href="/" className="flex items-center gap-2 shrink-0 md:hidden">
           <BrandMark className="w-7 h-7" />
-          <span className="font-semibold text-base tracking-[-0.02em] text-text-primary hidden sm:inline">
+          <span className="font-semibold text-base tracking-[-0.02em] text-text-primary">
             betty
           </span>
         </Link>
