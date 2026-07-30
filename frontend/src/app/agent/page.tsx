@@ -111,6 +111,20 @@ const SCENARIOS: Scenario[] = [
     brief: "一个竖屏数字人口播视频，自然口型同步，正面棚拍形象，讲解产品卖点", duration: 15, vertical: true },
 ];
 
+// English copy for scenario cards (title/desc) keyed by id; briefs stay in the
+// original language (they are model prompts and work in either language).
+const SCENARIO_EN: Record<string, { title: string; desc: string }> = {
+  product_ad: { title: "Product Ad", desc: "Turn a product, its benefits, or a rough idea into a high-converting ad" },
+  product_commercial: { title: "Brand Commercial", desc: "Cinematic product films and brand campaigns for launches" },
+  ugc: { title: "UGC", desc: "Authentic, native creator-style short videos for social feeds" },
+  micro_drama: { title: "Micro-drama", desc: "From a premise/twist/arc into a bingeable vertical short" },
+  anime: { title: "Anime", desc: "From a story or mood into cinematic anime scenes and motion" },
+  product_photo: { title: "Product Photography", desc: "Studio-grade product shots — lighting, scene, props, commercial finish" },
+  ai_portrait: { title: "AI Headshots", desc: "Professional portraits for LinkedIn, resumes, and social avatars" },
+  talking_avatar: { title: "Talking Avatar", desc: "Image + script into a talking digital-human explainer video" },
+};
+const CAT_EN: Record<string, string> = { "视频": "Video", "图片": "Image", "工具": "Tools" };
+
 const intentLabel: Record<string, string> = {
   campaign: "营销宣传片", talking: "数字人口播", video_from_text: "文生视频",
   video_from_image: "图生视频", image_series: "系列图", image: "单图创作",
@@ -123,7 +137,8 @@ const isMediaStep = (a: string) => ["image", "video", "lipsync"].includes(a);
 const isSkippable = (a: string) => ["audio", "subtitle"].includes(a);
 
 export default function AgentPage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const en = locale === "en";
   const [sessions, setSessions] = useState<Session[]>([{ id: "1", title: "新导演会话", lastMessage: "不写提示词，只做导演" }]);
   const [activeSession, setActiveSession] = useState("1");
   const [brief, setBrief] = useState("");
@@ -1125,10 +1140,10 @@ export default function AgentPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-semibold text-text-primary">{sc.title}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cosmic-subtle text-text-tertiary">{sc.cat}</span>
+                        <span className="text-sm font-semibold text-text-primary">{en ? (SCENARIO_EN[sc.id]?.title ?? sc.title) : sc.title}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cosmic-subtle text-text-tertiary">{en ? (CAT_EN[sc.cat] ?? sc.cat) : sc.cat}</span>
                       </div>
-                      <p className="text-[11px] text-text-secondary leading-snug line-clamp-2">{sc.desc}</p>
+                      <p className="text-[11px] text-text-secondary leading-snug line-clamp-2">{en ? (SCENARIO_EN[sc.id]?.desc ?? sc.desc) : sc.desc}</p>
                     </div>
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[11px] font-medium text-brand opacity-0 group-hover:opacity-100 transition-opacity">
                       试用 <ArrowRight className="w-3 h-3" />

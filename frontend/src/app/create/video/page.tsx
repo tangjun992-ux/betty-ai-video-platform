@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useCreationStore } from "@/lib/stores";
 import { submitGeneration, getTaskStatus, uploadMedia, runStoryboard, enhancePrompt, type TaskResult, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { useLocale } from "@/i18n/LocaleProvider";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { ResultGrid } from "@/components/ResultGrid";
 import { VideoComposer } from "@/components/VideoComposer";
@@ -50,6 +51,8 @@ function formatTime(s: number) {
 export default function CreateVideoPage() {
   const router = useRouter();
   const toast = useToast();
+  const { locale } = useLocale();
+  const en = locale === "en";
   const {
     prompt, setPrompt, selectedModel, setSelectedModel,
     quality, setQuality, resolution, setResolution,
@@ -236,12 +239,12 @@ export default function CreateVideoPage() {
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex-1 flex flex-col max-w-3xl mx-auto w-full">
           {/* Title + pills */}
           <div className="text-center mb-5">
-            <h1 className="text-2xl font-bold tracking-tight text-text-primary">Prompt · 编辑 · 混剪专业视频</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-text-primary">{en ? "Prompt · Edit · Compose pro video" : "Prompt · 编辑 · 混剪专业视频"}</h1>
             <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
               {[
-                { label: "视频灵感", href: "/agent" },
-                { label: "唇形同步", href: "/create/lipsync" },
-                { label: "动态控制", href: "/create/motion" },
+                { label: en ? "Video ideas" : "视频灵感", href: "/agent" },
+                { label: en ? "Lip Sync" : "唇形同步", href: "/create/lipsync" },
+                { label: en ? "Motion" : "动态控制", href: "/create/motion" },
               ].map((pill) => (
                 <button key={pill.label} onClick={() => router.push(pill.href)} className="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-cosmic-surface/50 border border-cosmic-border/60 text-text-secondary hover:text-text-primary hover:border-accent-cyan/40 transition-colors">
                   <Sparkles className="w-3.5 h-3.5 text-accent-cyan/80" />
@@ -330,7 +333,7 @@ export default function CreateVideoPage() {
           {/* Empty */}
           {!submitting && !error && videoResults.length === 0 && (
             <div className="mt-4">
-              <Empty title="开始创作视频" description="输入 prompt 描述画面与运镜，AI 将为你生成。支持多镜头编排、参考素材（图/视频/音频）引导与 AI 优化。" />
+              <Empty title={en ? "Start creating video" : "开始创作视频"} description={en ? "Describe the scene and camera moves and AI will generate it — with multi-shot sequencing, reference media (image/video/audio) guidance, and AI enhancement." : "输入 prompt 描述画面与运镜，AI 将为你生成。支持多镜头编排、参考素材（图/视频/音频）引导与 AI 优化。"} />
             </div>
           )}
 

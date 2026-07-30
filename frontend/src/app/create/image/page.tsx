@@ -16,6 +16,7 @@ import type { CreativityLevel } from "@/components/CreativitySlider";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
+import { useLocale } from "@/i18n/LocaleProvider";
 import {
   submitGeneration, getTaskStatus, uploadImage, trackOnboarding, cancelTask,
   listCreativeSessions, createCreativeSession, getCreativeSession,
@@ -63,6 +64,8 @@ const SUGGESTIONS = [
 export default function CreateImagePage() {
   const router = useRouter();
   const toast = useToast();
+  const { locale } = useLocale();
+  const en = locale === "en";
   const user = useAuthStore((s) => s.user);
   const completeOnboarding = useOnboardingStore((s) => s.completeFor);
 
@@ -667,18 +670,18 @@ export default function CreateImagePage() {
       {/* ── Left: Sessions ──────────────────────────── */}
       <div className="hidden lg:block w-56 p-4 pt-6 border-r border-cosmic-border/40 overflow-y-auto flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">会话</p>
+          <p className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">{en ? "Sessions" : "会话"}</p>
           <button
             onClick={handleNewSession}
             className="inline-flex items-center gap-0.5 text-[11px] text-accent-cyan hover:opacity-80"
-            title="新建会话"
+            title={en ? "New session" : "新建会话"}
           >
-            <Plus className="w-3.5 h-3.5" /> 新建
+            <Plus className="w-3.5 h-3.5" /> {en ? "New" : "新建"}
           </button>
         </div>
         {sessions.length === 0 ? (
           <p className="text-[11px] text-text-secondary/50 leading-relaxed">
-            生成后自动创建会话，历史作品按会话归档。
+            {en ? "A session is created automatically after you generate; past works are archived by session." : "生成后自动创建会话，历史作品按会话归档。"}
           </p>
         ) : (
           <div className="space-y-1">
@@ -718,13 +721,13 @@ export default function CreateImagePage() {
           {/* ═══════════ Title + tool pills (Yapper-style) ═══════════ */}
           <div className="text-center mb-5">
             <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-              Prompt · 编辑 · 合成专业图像
+              {en ? "Prompt · Edit · Compose pro images" : "Prompt · 编辑 · 合成专业图像"}
             </h1>
             <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
               {[
-                { label: "创意构思", href: "/agent", badge: "App" },
-                { label: "图片编辑器", href: "/create/image-editor", badge: "App" },
-                { label: "产品图", href: "/create/product", badge: "App" },
+                { label: en ? "Ideate" : "创意构思", href: "/agent", badge: "App" },
+                { label: en ? "Image Editor" : "图片编辑器", href: "/create/image-editor", badge: "App" },
+                { label: en ? "Product Shots" : "产品图", href: "/create/product", badge: "App" },
               ].map((pill) => (
                 <button
                   key={pill.label}
@@ -886,20 +889,20 @@ export default function CreateImagePage() {
               >
                 <Empty
                   icon={<Wand2 className="w-7 h-7 text-text-secondary/40" />}
-                  title={hasSubmitted ? "没有生成结果" : "开始创作"}
+                  title={hasSubmitted ? (en ? "No results" : "没有生成结果") : (en ? "Start creating" : "开始创作")}
                   description={
                     hasSubmitted
-                      ? "生成已完成但未返回图片，请尝试调整参数后重试"
-                      : "输入 prompt 描述你想要的画面，AI 将为你生成精美图片"
+                      ? (en ? "Generation finished but returned no image — adjust the parameters and retry." : "生成已完成但未返回图片，请尝试调整参数后重试")
+                      : (en ? "Describe the image you want and AI will generate it for you." : "输入 prompt 描述你想要的画面，AI 将为你生成精美图片")
                   }
                   action={
                     hasSubmitted
-                      ? { label: "重新生成", onClick: handleRetry }
+                      ? { label: en ? "Regenerate" : "重新生成", onClick: handleRetry }
                       : undefined
                   }
                   secondaryAction={
                     !hasSubmitted
-                      ? { label: "试试推荐词", onClick: () => setPrompt(SUGGESTIONS[0]) }
+                      ? { label: en ? "Try a suggestion" : "试试推荐词", onClick: () => setPrompt(SUGGESTIONS[0]) }
                       : undefined
                   }
                 />
@@ -920,7 +923,7 @@ export default function CreateImagePage() {
                 {/* Header + batch toolbar */}
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs font-semibold text-text-secondary/60 uppercase tracking-wider">
-                    生成结果 ({imageResults.length})
+                    {en ? "Results" : "生成结果"} ({imageResults.length})
                   </p>
                   <div className="flex items-center gap-2">
                     <button
