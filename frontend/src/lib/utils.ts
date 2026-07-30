@@ -6,7 +6,14 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatDate(date: string | Date) {
-  return new Intl.DateTimeFormat("zh-CN", {
+  // Locale-aware: follow the active UI language (set on <html lang> by the
+  // LocaleProvider) instead of always formatting as zh-CN.
+  let bcp47 = "zh-CN";
+  if (typeof document !== "undefined") {
+    const lang = document.documentElement.lang || "zh-CN";
+    bcp47 = lang.startsWith("en") ? "en-US" : "zh-CN";
+  }
+  return new Intl.DateTimeFormat(bcp47, {
     month: "short",
     day: "numeric",
     hour: "2-digit",

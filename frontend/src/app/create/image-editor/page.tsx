@@ -10,6 +10,10 @@ export default function ImageEditorPage() {
       title="AI 图片编辑器"
       subtitle="Nano Banana 指令编辑 · 换背景 / 改风格 / 加元素 / 局部修改"
       cta="应用编辑"
+      titleKey="tool.edit.title"
+      subtitleKey="tool.edit.subtitle"
+      ctaKey="tool.edit.cta"
+      promptKey="tool.edit.ph"
       needsPrompt
       promptPlaceholder="用一句话描述修改，例如：把背景换成星空夜景，给人物加一副墨镜"
       ratios={["auto", "1:1", "16:9", "9:16", "4:3", "3:4"]}

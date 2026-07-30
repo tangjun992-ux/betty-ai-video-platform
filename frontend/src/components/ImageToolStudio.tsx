@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Upload, Loader2, Download, RefreshCw, Sparkles, ArrowRight } from "lucide-react";
 import { editImageTool, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { useLocale, type TranslationKey } from "@/i18n/LocaleProvider";
 import { cn } from "@/lib/utils";
 
 type Op = "edit" | "upscale" | "bg-remove" | "extend";
@@ -26,13 +27,28 @@ export interface ImageToolStudioProps {
   promptPlaceholder?: string;
   factors?: string[];
   ratios?: string[];
+  // Optional i18n keys — when provided, title/subtitle/cta/placeholder are
+  // translated via the active locale; the literal props remain the fallback.
+  titleKey?: TranslationKey;
+  subtitleKey?: TranslationKey;
+  ctaKey?: TranslationKey;
+  promptKey?: TranslationKey;
 }
 
 export default function ImageToolStudio({
   operation, emoji, title, subtitle, cta,
   needsPrompt = false, promptPlaceholder = "", factors, ratios,
+  titleKey, subtitleKey, ctaKey, promptKey,
 }: ImageToolStudioProps) {
   const toast = useToast();
+  const { t } = useLocale();
+  const tt = (k: TranslationKey | undefined, fallback: string) => (k ? t(k) : fallback);
+  const L = {
+    title: tt(titleKey, title),
+    subtitle: tt(subtitleKey, subtitle),
+    cta: tt(ctaKey, cta),
+    placeholder: tt(promptKey, promptPlaceholder),
+  };
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -50,16 +66,16 @@ export default function ImageToolStudio({
   }, []);
 
   const run = async () => {
-    if (!file) { toast.error("请上传图片", "先选择一张要处理的图片"); return; }
-    if (needsPrompt && !prompt.trim()) { toast.error("请输入指令", "描述你想要的修改"); return; }
+    if (!file) { toast.error(t("tool.needImage"), t("tool.needImageDesc")); return; }
+    if (needsPrompt && !prompt.trim()) { toast.error(t("tool.needPrompt"), t("tool.needPromptDesc")); return; }
     setLoading(true);
     setResult(null);
     try {
       const res = await editImageTool({ operation, file, prompt, factor, ratio });
       setResult({ url: resolveMedia(res.url), model: res.model });
-      toast.success("处理完成", "结果已生成，可对比 / 下载");
+      toast.success(t("tool.done"), t("tool.doneDesc"));
     } catch (e: any) {
-      toast.error("处理失败", e.message || "请稍后重试");
+      toast.error(t("tool.failed"), e.message || t("tool.failedDesc"));
     } finally {
       setLoading(false);
     }
@@ -70,8 +86,8 @@ export default function ImageToolStudio({
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3 mb-8">
         <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-brand-50 border border-cosmic-border text-2xl">{emoji}</span>
         <div>
-          <h1 className="text-2xl font-bold gradient-text-static">{title}</h1>
-          <p className="text-text-secondary text-sm">{subtitle}</p>
+          <h1 className="text-2xl font-bold gradient-text-static">{L.title}</h1>
+          <p className="text-text-secondary text-sm">{L.subtitle}</p>
         </div>
       </motion.div>
 
@@ -79,7 +95,7 @@ export default function ImageToolStudio({
         {/* Left: input */}
         <div className="space-y-4">
           <label className="block">
-            <span className="text-sm font-medium text-text-primary mb-2 block">上传图片</span>
+            <span className="text-sm font-medium text-text-primary mb-2 block">{t("tool.upload")}</span>
             <div className="relative aspect-square rounded-2xl border-2 border-dashed border-cosmic-border hover:border-brand/40 bg-cosmic-subtle flex items-center justify-center cursor-pointer overflow-hidden transition-all group">
               {preview ? (
                 <>
@@ -91,8 +107,8 @@ export default function ImageToolStudio({
               ) : (
                 <div className="text-center p-8">
                   <Upload className="w-10 h-10 text-text-secondary mx-auto mb-3 group-hover:text-brand transition-colors" />
-                  <p className="text-sm text-text-secondary">点击上传图片</p>
-                  <p className="text-xs text-text-tertiary/60 mt-1">支持 JPG / PNG / WEBP，≤10MB</p>
+                  <p className="text-sm text-text-secondary">{t("tool.clickUpload")}</p>
+                  <p className="text-xs text-text-tertiary/60 mt-1">{t("tool.supported")}</p>
                 </div>
               )}
               <input type="file" accept="image/*" onChange={onUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
@@ -101,11 +117,11 @@ export default function ImageToolStudio({
 
           {needsPrompt && (
             <div>
-              <span className="text-sm font-medium text-text-primary mb-2 block">编辑指令</span>
+              <span className="text-sm font-medium text-text-primary mb-2 block">{t("tool.instruction")}</span>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder={promptPlaceholder}
+                placeholder={L.placeholder}
                 rows={3}
                 className="w-full px-4 py-3 rounded-2xl bg-cosmic-subtle border border-cosmic-border text-sm text-text-primary placeholder:text-text-tertiary/50 focus:outline-none focus:ring-2 focus:ring-brand/25 focus:border-brand/30 resize-none transition-all"
               />
@@ -114,7 +130,7 @@ export default function ImageToolStudio({
 
           {factors && (
             <div>
-              <span className="text-sm font-medium text-text-primary mb-2 block">放大倍率</span>
+              <span className="text-sm font-medium text-text-primary mb-2 block">{t("tool.factor")}</span>
               <div className="flex gap-2">
                 {factors.map((f) => (
                   <button key={f} onClick={() => setFactor(f)}
@@ -129,7 +145,7 @@ export default function ImageToolStudio({
 
           {ratios && (
             <div>
-              <span className="text-sm font-medium text-text-primary mb-2 block">目标画幅</span>
+              <span className="text-sm font-medium text-text-primary mb-2 block">{t("tool.ratio")}</span>
               <div className="flex flex-wrap gap-2">
                 {ratios.map((r) => (
                   <button key={r} onClick={() => setRatio(r)}
@@ -143,33 +159,33 @@ export default function ImageToolStudio({
           )}
 
           <button onClick={run} disabled={loading || !file} className="btn-primary w-full">
-            {loading ? (<><Loader2 className="w-5 h-5 animate-spin" />处理中...</>) : (<><Sparkles className="w-5 h-5" />{cta}</>)}
+            {loading ? (<><Loader2 className="w-5 h-5 animate-spin" />{t("tool.processing")}</>) : (<><Sparkles className="w-5 h-5" />{L.cta}</>)}
           </button>
         </div>
 
         {/* Right: result */}
         <div className="space-y-3">
-          <span className="text-sm font-medium text-text-primary block">处理结果</span>
+          <span className="text-sm font-medium text-text-primary block">{t("tool.result")}</span>
           <div className="relative aspect-square rounded-2xl border border-cosmic-border bg-cosmic-subtle overflow-hidden flex items-center justify-center"
             style={{ backgroundImage: "repeating-conic-gradient(#2a2a35 0% 25%, #1e1e28 0% 50%)", backgroundSize: "24px 24px" }}>
             {loading ? (
               <div className="text-center">
                 <Loader2 className="w-8 h-8 text-brand animate-spin mx-auto mb-2" />
-                <p className="text-sm text-text-secondary">AI 正在处理...</p>
+                <p className="text-sm text-text-secondary">{t("tool.processing")}</p>
               </div>
             ) : result ? (
-              <img src={result.url} alt="结果" className="w-full h-full object-contain" />
+              <img src={result.url} alt={L.title} className="w-full h-full object-contain" />
             ) : (
               <div className="text-center text-text-tertiary/50">
                 <ArrowRight className="w-8 h-8 mx-auto mb-2" />
-                <p className="text-sm">结果将显示在这里</p>
+                <p className="text-sm">{t("tool.resultHere")}</p>
               </div>
             )}
           </div>
           {result && (
             <div className="flex items-center justify-between gap-2">
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-cosmic-surface border border-cosmic-border text-text-tertiary truncate">{result.model}</span>
-              <a href={result.url} download className="btn-secondary text-sm"><Download className="w-4 h-4" />下载</a>
+              <a href={result.url} download className="btn-secondary text-sm"><Download className="w-4 h-4" />{t("tool.download")}</a>
             </div>
           )}
         </div>

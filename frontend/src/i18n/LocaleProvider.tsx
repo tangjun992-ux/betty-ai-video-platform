@@ -41,6 +41,22 @@ export const dictionaries = {
     "library.title": "我的素材库",
     "library.subtitle": "上传、生成与管理你的创作资产",
     "library.cta": "上传素材",
+    // ── Image tool studio (upscale / bg-remove / extend / edit) ──
+    "tool.upload": "上传图片", "tool.result": "处理结果", "tool.factor": "放大倍率",
+    "tool.ratio": "目标画幅", "tool.clickUpload": "点击上传图片",
+    "tool.supported": "支持 JPG / PNG / WEBP，≤10MB", "tool.instruction": "编辑指令",
+    "tool.processing": "AI 正在处理...", "tool.resultHere": "结果将显示在这里",
+    "tool.download": "下载", "tool.needImage": "请上传图片",
+    "tool.needImageDesc": "先选择一张要处理的图片", "tool.needPrompt": "请输入指令",
+    "tool.needPromptDesc": "描述你想要的修改", "tool.done": "处理完成",
+    "tool.doneDesc": "结果已生成，可对比 / 下载", "tool.failed": "处理失败",
+    "tool.failedDesc": "请稍后重试",
+    "tool.edit.title": "AI 图片编辑器", "tool.edit.subtitle": "Nano Banana 指令编辑 · 换背景 / 改风格 / 加元素 / 局部修改",
+    "tool.edit.cta": "应用编辑", "tool.edit.ph": "用一句话描述修改，例如：把背景换成星空夜景，给人物加一副墨镜",
+    "tool.upscale.title": "AI 放大", "tool.upscale.subtitle": "Topaz 超分辨率 · 2x / 4x 无损画质提升", "tool.upscale.cta": "开始放大",
+    "tool.bg.title": "AI 去背景", "tool.bg.subtitle": "一键抠图 · 生成透明背景 PNG", "tool.bg.cta": "去除背景",
+    "tool.extend.title": "AI 扩图", "tool.extend.subtitle": "智能外扩 / 改画幅 · 竖屏转横屏、补全画面边缘",
+    "tool.extend.cta": "扩展画面", "tool.extend.ph": "可选：描述扩展区域的内容（留空则自然延展），例如：向两侧延展出更多草地与天空",
   },
   en: {
     "nav.home": "Home", "nav.explore": "Explore", "nav.feed": "Feed", "nav.library": "Library",
@@ -78,6 +94,22 @@ export const dictionaries = {
     "library.title": "My library",
     "library.subtitle": "Upload, generate, and manage your creative assets",
     "library.cta": "Upload",
+    // ── Image tool studio ──
+    "tool.upload": "Upload image", "tool.result": "Result", "tool.factor": "Scale",
+    "tool.ratio": "Aspect ratio", "tool.clickUpload": "Click to upload",
+    "tool.supported": "JPG / PNG / WEBP, up to 10MB", "tool.instruction": "Edit instruction",
+    "tool.processing": "AI is processing...", "tool.resultHere": "Result will appear here",
+    "tool.download": "Download", "tool.needImage": "Please upload an image",
+    "tool.needImageDesc": "Select an image to process first", "tool.needPrompt": "Enter an instruction",
+    "tool.needPromptDesc": "Describe the change you want", "tool.done": "Done",
+    "tool.doneDesc": "Result ready — compare / download", "tool.failed": "Failed",
+    "tool.failedDesc": "Please try again later",
+    "tool.edit.title": "AI Image Editor", "tool.edit.subtitle": "Instruction editing · replace background / restyle / add elements / local edits",
+    "tool.edit.cta": "Apply edit", "tool.edit.ph": "Describe the change in one line, e.g. replace the background with a starry night and add sunglasses",
+    "tool.upscale.title": "AI Upscale", "tool.upscale.subtitle": "Topaz super-resolution · 2x / 4x lossless enhancement", "tool.upscale.cta": "Upscale",
+    "tool.bg.title": "AI Remove Background", "tool.bg.subtitle": "One-click cutout · transparent PNG output", "tool.bg.cta": "Remove background",
+    "tool.extend.title": "AI Extend", "tool.extend.subtitle": "Smart outpaint / reframe · portrait→landscape, fill edges",
+    "tool.extend.cta": "Extend", "tool.extend.ph": "Optional: describe the extended area (leave blank for natural fill), e.g. extend more grass and sky on both sides",
   },
 } as const;
 
@@ -96,6 +128,16 @@ const LocaleContext = createContext<LocaleContextValue>({
 export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("zh");
   useEffect(() => {
+    // A `?lang=` query wins (real per-locale entry point for hreflang/SEO and
+    // shareable localized links), then the persisted preference.
+    try {
+      const q = new URLSearchParams(window.location.search).get("lang");
+      if (q === "en" || q === "zh") {
+        setLocaleState(q);
+        localStorage.setItem("betty-locale", q);
+        return;
+      }
+    } catch { /* ignore */ }
     const stored = localStorage.getItem("betty-locale");
     if (stored === "en" || stored === "zh") setLocaleState(stored);
   }, []);

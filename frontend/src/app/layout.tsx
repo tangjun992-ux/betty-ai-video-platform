@@ -27,8 +27,8 @@ export const metadata: Metadata = {
     template: "%s | betty",
   },
   description:
-    "AI 驱动的图片与视频生成平台。支持 GPT Image 2、Seedance 2.0 等多模型智能路由，轻松创作高质量视觉内容。",
-  keywords: ["AI图片生成", "AI视频生成", "AI创作", "Seedance", "GPT Image"],
+    "AI 驱动的图片与视频生成平台。支持 GPT Image 2、Seedance 2.0 等多模型智能路由，轻松创作高质量视觉内容。 | Betty — the AI image & video creation studio: verified top models, one-line directing, generate and refine.",
+  keywords: ["AI图片生成", "AI视频生成", "AI创作", "Seedance", "GPT Image", "AI image generator", "AI video generator", "AI creative studio"],
   authors: [{ name: "betty", url: baseUrl }],
   creator: "betty",
   publisher: "betty",
@@ -55,13 +55,21 @@ export const metadata: Metadata = {
   },
   alternates: {
     canonical: baseUrl,
+    // hreflang — `?lang=` is a real per-locale entry point (LocaleProvider reads
+    // it on mount), so search engines can index both languages.
+    languages: {
+      "zh-CN": baseUrl,
+      "en": `${baseUrl}/?lang=en`,
+      "x-default": baseUrl,
+    },
   },
   openGraph: {
-    title: "betty — AI 内容创作平台",
-    description: "AI 驱动的图片与视频生成平台",
+    title: "betty — AI 内容创作平台 · AI image & video studio",
+    description: "AI 驱动的图片与视频生成平台 · Betty AI image & video creation studio",
     url: baseUrl,
     siteName: "betty",
     locale: "zh_CN",
+    alternateLocale: ["en_US"],
     type: "website",
     images: [
       {
