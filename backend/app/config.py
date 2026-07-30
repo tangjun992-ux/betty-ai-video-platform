@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # Celery
     CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1")
     CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
+    # UTC by default so schedules/logs are locale-neutral for international ops.
+    CELERY_TIMEZONE: str = os.getenv("CELERY_TIMEZONE", "UTC")
 
     # JWT
     JWT_SECRET: str = os.getenv("JWT_SECRET", "dev-secret-change-in-production-please!")
@@ -102,6 +104,11 @@ class Settings(BaseSettings):
     STRIPE_PRICE_MAX_MONTHLY: str = os.getenv("STRIPE_PRICE_MAX_MONTHLY", "") or os.getenv("STRIPE_PRICE_PRO_MONTHLY", "")
     STRIPE_PRICE_MAX_YEARLY: str = os.getenv("STRIPE_PRICE_MAX_YEARLY", "") or os.getenv("STRIPE_PRICE_PRO_YEARLY", "")
     STRIPE_PRICE_TEAM_SEAT_MONTHLY: str = os.getenv("STRIPE_PRICE_TEAM_SEAT_MONTHLY", "")
+
+    # Rate limiting — global baseline safety net across all /api/v1 routes.
+    RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+    RATE_LIMIT_GLOBAL_RPM: int = int(os.getenv("RATE_LIMIT_GLOBAL_RPM", "180"))
+    RATE_LIMIT_GLOBAL_RPH: int = int(os.getenv("RATE_LIMIT_GLOBAL_RPH", "3000"))
 
     # Observability
     SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")

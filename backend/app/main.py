@@ -38,6 +38,13 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("JWT_SECRET must be set to a strong value in production")
     # Production payment + storage gates (fail fast rather than silent misconfig).
     if settings.is_production:
+        # SQLite (esp. the StaticPool dev default) cannot serve multi-worker /
+        # multi-replica production traffic — require a real Postgres DSN.
+        if settings.DATABASE_URL.startswith("sqlite"):
+            raise RuntimeError(
+                "SQLite is not allowed in production — set DATABASE_URL to a "
+                "Postgres DSN (postgresql+asyncpg://…)."
+            )
         from app.services.stripe_ready import assert_stripe_production_ready
         from app.services.storage_ready import assert_storage_production_ready
         assert_stripe_production_ready()
@@ -100,8 +107,13 @@ app = FastAPI(
 )
 
 from app.observability import RequestContextMiddleware
+from app.rate_limiter import GlobalRateLimitMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestContextMiddleware)
+# Baseline per-subject throttle across all /api/v1 routes (hot routes keep their
+# stricter per-route limits). Added before CORS so CORS ends up outermost and
+# preflight/headers are always applied.
+app.add_middleware(GlobalRateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.CORS_ORIGINS,

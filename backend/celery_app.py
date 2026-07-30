@@ -1,10 +1,23 @@
 from celery import Celery
 import os
 
+# Read broker/backend from settings so containerized / multi-host deploys point
+# at the real Redis service (env CELERY_BROKER_URL / CELERY_RESULT_BACKEND) —
+# hardcoding localhost silently broke task dispatch inside Docker.
+try:
+    from app.config import settings
+    _BROKER = settings.CELERY_BROKER_URL
+    _BACKEND = settings.CELERY_RESULT_BACKEND
+    _TZ = settings.CELERY_TIMEZONE
+except Exception:  # pragma: no cover — fall back to env then localhost
+    _BROKER = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/1")
+    _BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/2")
+    _TZ = os.getenv("CELERY_TIMEZONE", "UTC")
+
 app = Celery(
     "aivideo",
-    broker="redis://localhost:6379/1",
-    backend="redis://localhost:6379/2",
+    broker=_BROKER,
+    backend=_BACKEND,
     # Every module that defines an @app.task MUST be listed here, otherwise the
     # worker process never registers the task and dispatched jobs hang forever
     # (the API process imports them, but the worker does not import the API).
@@ -27,7 +40,7 @@ app.conf.update(
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-    timezone="Asia/Shanghai",
+    timezone=_TZ,
     enable_utc=True,
     worker_concurrency=4,
     worker_prefetch_multiplier=1,

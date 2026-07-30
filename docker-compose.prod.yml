@@ -41,6 +41,22 @@ services:
           memory: 256M
     restart: unless-stopped
 
+  # One-shot schema upgrade — runs `alembic upgrade head` once and exits, so the
+  # (possibly multi-replica) api/worker never race on migrations. It bypasses
+  # the migration-aware entrypoint and calls alembic directly.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    entrypoint: ["alembic", "upgrade", "head"]
+    environment:
+      - ENV=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: ./backend
@@ -49,6 +65,8 @@ services:
       - "${API_PORT:-8000}:8000"
     environment:
       - ENV=production
+      # Migrations run by the dedicated `migrate` service, not per-replica.
+      - RUN_MIGRATIONS=0
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/1
@@ -80,6 +98,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - media_storage:/app/storage
     restart: unless-stopped
@@ -99,6 +119,7 @@ services:
     command: celery -A celery_app worker --loglevel=info --concurrency=4 -Q celery,image_q,video_q,director_q,pipeline_q,collector_q
     environment:
       - ENV=production
+      - RUN_MIGRATIONS=0
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
@@ -123,6 +144,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
     # Scale workers horizontally for generation throughput: `--scale worker=N`.
     deploy:
@@ -135,6 +158,7 @@ services:
     command: celery -A celery_app beat --loglevel=info --max-interval 60
     environment:
       - ENV=production
+      - RUN_MIGRATIONS=0
       - CELERY_BROKER_URL=redis://redis:6379/1
       - CELERY_RESULT_BACKEND=redis://redis:6379/2
     depends_on:
