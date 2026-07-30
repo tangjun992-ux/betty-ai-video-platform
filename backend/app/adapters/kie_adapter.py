@@ -833,10 +833,13 @@ class KieAdapter(BaseModelAdapter):
                     last_err = e
                     msg = str(e).lower()
                     logger.warning("[KIE] lipsync %s attempt %d failed: %s", mid, attempt + 1, e)
-                    if "internal error" in msg or "try again" in msg or "timed out" in msg:
+                    # Only retry the SAME model on a genuine transient provider
+                    # blip. A poll timeout means the model is stuck/congested —
+                    # retrying it just doubles the wait, so fall through instead.
+                    if "internal error" in msg or "try again" in msg:
                         await asyncio.sleep(4)
                         continue
-                    break  # non-transient → try next model
+                    break  # timeout / non-transient → try next model (or fail)
         raise RuntimeError(f"lip-sync failed on all models: {last_err}")
 
     # ── core: submit + poll ─────────────────────────────────
