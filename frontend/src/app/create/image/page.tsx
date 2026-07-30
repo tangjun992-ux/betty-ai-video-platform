@@ -7,6 +7,7 @@ import {
   Sparkles, ImagePlus, Upload, X, Clock, RefreshCw,
   Download, Video, ExternalLink, ImageIcon, Wand2, CheckCircle2,
   Copy, Maximize2, XCircle, Plus, Trash2, Coins, CheckSquare, Square,
+  ZoomIn, Scissors, Loader2,
 } from "lucide-react";
 import { ImageComposer } from "@/components/ImageComposer";
 import { ImageAppsRow } from "@/components/ImageAppsRow";
@@ -18,7 +19,7 @@ import { useToast } from "@/components/Toast";
 import {
   submitGeneration, getTaskStatus, uploadImage, trackOnboarding, cancelTask,
   listCreativeSessions, createCreativeSession, getCreativeSession,
-  updateCreativeSession, deleteCreativeSession,
+  updateCreativeSession, deleteCreativeSession, editImageTool,
   type GenerateResponse, type TaskResult, type CreativeSession, API_BASE,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -465,6 +466,40 @@ export default function CreateImagePage() {
       setSubmitting(false); setTaskId(null); setProgress(0); setProgressStage("");
     }
   }, [submitting, quality, addResult, toast]);
+
+  // ── In-place refine loop (Dzine-style): upscale / bg-remove a result and
+  //    append the refined image; or push a result back as a reference. ──
+  const [refiningUrl, setRefiningUrl] = useState<string | null>(null);
+  const refine = useCallback(async (
+    op: "upscale" | "bg-remove",
+    src: { url: string; prompt: string; model: string },
+  ) => {
+    if (refiningUrl) return;
+    setRefiningUrl(src.url);
+    const label = op === "upscale" ? "放大" : "去背景";
+    try {
+      const r = await editImageTool({ operation: op, imageUrl: src.url, factor: "2" });
+      const resolved = r.url.startsWith("http")
+        ? r.url
+        : `${API_BASE.replace(/\/api\/v1$/, "")}${r.url}`;
+      addResult({
+        url: resolved, type: "image",
+        prompt: `${src.prompt} · ${label}`, model: r.model,
+        credits: (r as any).cost,
+      } as any);
+      toast.success(`${label}完成`, "已追加到结果，可继续精修");
+    } catch (e: any) {
+      toast.error(`${label}失败`, e.message || "请稍后重试");
+    } finally {
+      setRefiningUrl(null);
+    }
+  }, [refiningUrl, addResult, toast]);
+
+  const useAsReference = useCallback((url: string) => {
+    addRemoteRef(url);
+    toast.success("已作为参考图", "将用于下一次生成（见输入框上方）");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [addRemoteRef, toast]);
 
   const handleRetry = useCallback(() => {
     setError(null);
@@ -976,6 +1011,32 @@ export default function CreateImagePage() {
                           title={item.seed != null ? `按种子复现 (${item.seed})` : "无种子信息"}
                         >
                           <RefreshCw className="w-4 h-4" />
+                        </button>
+                        {/* 放大 (upscale in place) */}
+                        <button
+                          onClick={() => refine("upscale", { url: item.url, prompt: item.prompt, model: item.model })}
+                          disabled={refiningUrl != null}
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan disabled:opacity-40 pointer-events-auto"
+                          title="放大 2x（Topaz 超分）"
+                        >
+                          {refiningUrl === item.url ? <Loader2 className="w-4 h-4 animate-spin" /> : <ZoomIn className="w-4 h-4" />}
+                        </button>
+                        {/* 去背景 (bg-remove in place) */}
+                        <button
+                          onClick={() => refine("bg-remove", { url: item.url, prompt: item.prompt, model: item.model })}
+                          disabled={refiningUrl != null}
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan disabled:opacity-40 pointer-events-auto"
+                          title="去背景（透明）"
+                        >
+                          <Scissors className="w-4 h-4" />
+                        </button>
+                        {/* 作为参考再创作 */}
+                        <button
+                          onClick={() => useAsReference(item.url)}
+                          className="btn-icon bg-white/10 hover:bg-white/20 backdrop-blur-sm text-text-accent-cyan pointer-events-auto"
+                          title="作为参考图再创作"
+                        >
+                          <ImagePlus className="w-4 h-4" />
                         </button>
                         {/* Copy prompt */}
                         <button
