@@ -21,7 +21,15 @@ export const useUIStore = create<UIState>()(
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
     }),
-    { name: "ui-store" }
+    {
+      name: "ui-store",
+      version: 2,
+      // Don't persist the sidebar flags: the labeled sidebar should be the
+      // default on every load (a stale persisted `collapsed:true` from the old
+      // focus-route auto-collapse otherwise kept hiding the nav). Collapse is
+      // still available as an in-session toggle.
+      partialize: () => ({}),
+    }
   )
 );
 
