@@ -29,6 +29,8 @@ export const useUIStore = create<UIState>()(
       // focus-route auto-collapse otherwise kept hiding the nav). Collapse is
       // still available as an in-session toggle.
       partialize: () => ({}),
+      // Discard any legacy v1 blob without a console error.
+      migrate: () => ({}) as Partial<UIState>,
     }
   )
 );
