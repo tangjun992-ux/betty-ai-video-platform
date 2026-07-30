@@ -197,7 +197,12 @@ function TimelineEditorContent() {
       }
     })();
     return () => { cancelled = true; };
-  }, [deepLinkProject, loadProjectById, refreshProjects, toast]);
+    // Load the media library once on mount. Depending on toast / callback
+    // identities re-fired this effect every render, flooding /library/ with
+    // requests (ERR_INSUFFICIENT_RESOURCES). deepLinkProject changes are handled
+    // by the dedicated effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!deepLinkProject || loading || loadedProjectRef.current === deepLinkProject) return;
