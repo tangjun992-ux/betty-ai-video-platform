@@ -54,8 +54,11 @@ app.conf.update(
     task_max_retries=3,
     worker_max_tasks_per_child=100,
     worker_max_memory_per_child=500000,
-    task_soft_time_limit=600,
-    task_time_limit=900,
+    # Long video providers (Kling ai-avatar ~3-5min, Seedance/veo video polls up
+    # to 900s) must not be killed mid-flight. These are the global defaults; the
+    # director pipeline overrides to 3600/3900 for full multi-step jobs.
+    task_soft_time_limit=1200,
+    task_time_limit=1500,
     beat_schedule={
         # Reddit: every 10 minutes (tech)
         "collect-reddit-tech": {

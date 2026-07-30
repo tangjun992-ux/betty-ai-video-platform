@@ -9,7 +9,7 @@ import { useToast } from "@/components/Toast";
 import { CapabilityNotice } from "@/components/CapabilityNotice";
 import { cn } from "@/lib/utils";
 
-import { API_BASE } from "@/lib/api";
+import { API_BASE, apiAuthHeaders } from "@/lib/api";
 
 const SAMPLE_VOICES = [
   { id: "zh-CN-XiaoxiaoNeural", name: "晓晓", gender: "女", desc: "温柔自然" },
@@ -35,6 +35,8 @@ export default function LipsyncPage() {
   const [audioName, setAudioName] = useState("");
   const [tier, setTier] = useState<"demo" | "studio">("demo");
   const [offlineDemo, setOfflineDemo] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [stage, setStage] = useState("");
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -68,6 +70,8 @@ export default function LipsyncPage() {
 
     setSubmitting(true);
     setError(null);
+    setElapsed(0);
+    setStage("提交中");
 
     try {
       const formData = new FormData();
@@ -81,7 +85,7 @@ export default function LipsyncPage() {
       formData.append("voice_id", voiceId);
       formData.append("tier", tier);
 
-      const res = await fetch(`${API_BASE}/lipsync`, { method: "POST", body: formData });
+      const res = await fetch(`${API_BASE}/lipsync`, { method: "POST", body: formData, headers: apiAuthHeaders() });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "唇形同步请求失败");
@@ -89,15 +93,22 @@ export default function LipsyncPage() {
 
       const data = await res.json();
       setTaskId(data.task_id);
+      setStage("生成中");
 
-      // Poll
-      const maxPolls = 90;
-      let polls = 0;
+      // Kling AI-Avatar 数字人生成通常需要 2-5 分钟，给足轮询窗口（最长 ~9 分钟），
+      // 与后端任务时限对齐，避免前端提前判定"超时"。
+      const started = Date.now();
+      const maxMs = 9 * 60 * 1000;
       const poll = async (): Promise<any> => {
-        if (polls++ > maxPolls) throw new Error("生成超时");
-        const status = await fetch(`${API_BASE}/tasks/${data.task_id}`).then(r => r.json());
+        const el = Math.floor((Date.now() - started) / 1000);
+        setElapsed(el);
+        if (Date.now() - started > maxMs) throw new Error("生成超时，请稍后重试或改用 Studio 档位");
+        const status = await fetch(`${API_BASE}/tasks/${data.task_id}`, {
+          headers: apiAuthHeaders(),
+        }).then(r => r.json()).catch(() => ({}));
+        if (status.current_stage) setStage(status.current_stage);
         if (status.status === "completed" || status.status === "failed") return status;
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 3000));
         return poll();
       };
 
@@ -306,15 +317,25 @@ export default function LipsyncPage() {
               )}
             </button>
 
-            {/* Generating status */}
+            {/* Generating status — Kling 数字人约需 2-5 分钟，展示阶段与已用时长 */}
             {submitting && taskId && (
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-cosmic-subtle border border-cosmic-border">
-                <div className="relative">
-                  <Loader2 className="w-5 h-5 text-accent-cyan animate-spin" />
+              <div className="p-3 rounded-xl bg-cosmic-subtle border border-cosmic-border space-y-2">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-5 h-5 text-accent-cyan animate-spin flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm text-text-accent-cyan">
+                      AI 正在生成唇形同步视频 · {stage || "生成中"}
+                    </p>
+                    <p className="text-xs text-text-secondary">
+                      已用 {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, "0")} · 数字人通常需 2-5 分钟，请耐心等待
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-text-accent-cyan">AI 正在生成唇形同步视频...</p>
-                  <p className="text-xs text-text-secondary">任务 ID: {taskId.slice(0, 8)}...</p>
+                <div className="h-1.5 rounded-full bg-cosmic-border/50 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-accent-cyan to-teal-400 transition-all duration-500"
+                    style={{ width: `${Math.min(95, 10 + (elapsed / 300) * 85)}%` }}
+                  />
                 </div>
               </div>
             )}
