@@ -4,7 +4,14 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { API_BASE, getTaskStatus, listTasks } from "@/lib/api";
 
-
+/** Relative media paths (/api/v1/media/…) are served by the API host, not the
+    frontend origin — prefix them so results render regardless of where we run. */
+function resolveMedia(url: string): string {
+  if (!url) return url;
+  if (url.startsWith("http")) return url;
+  const origin = API_BASE.replace(/\/api\/v1\/?$/, "");
+  return `${origin}${url}`;
+}
 
 export default function TaskDetailPage() {
   const params = useParams();
@@ -153,9 +160,9 @@ export default function TaskDetailPage() {
               <div key={idx} className="bg-dark-900/50 border border-dark-800 rounded-xl overflow-hidden">
                 {r.url ? (
                   r.type === "video" ? (
-                    <video src={r.url} controls className="w-full" />
+                    <video src={resolveMedia(r.url)} controls className="w-full" />
                   ) : (
-                    <img src={r.url} alt="result" className="w-full h-64 object-cover" />
+                    <img src={resolveMedia(r.url)} alt="result" className="w-full h-64 object-cover" />
                   )
                 ) : (
                   <div className="w-full h-40 flex items-center justify-center bg-dark-800 text-dark-500">无预览</div>

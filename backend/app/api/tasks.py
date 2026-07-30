@@ -2,8 +2,9 @@
 Task management API — query status, cancel, list.
 Scoped by authenticated user (or shared guest account when not logged in).
 """
+import json as _json
 from typing import Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -18,10 +19,39 @@ class TaskResultResponse(BaseModel):
     task_id: str
     status: str
     results: Optional[list] = None
+    # Convenience: first result's media URL (absolute), so clients that render a
+    # single output (motion / lipsync / timeline / image tools) don't need to
+    # dig into ``results``. Absolute so it resolves regardless of frontend origin.
+    result_url: Optional[str] = None
     cost_credits: Optional[float] = None
     completed_at: Optional[str] = None
     error_message: Optional[str] = None
     webhook: Optional[dict] = None
+
+
+def _coerce_results(raw) -> Optional[list]:
+    """``task.results`` is usually a list, but defend against a JSON string."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        try:
+            raw = _json.loads(raw)
+        except Exception:
+            return None
+    return raw if isinstance(raw, list) else None
+
+
+def _first_result_url(results: Optional[list], request: Request) -> Optional[str]:
+    if not results:
+        return None
+    first = results[0] if isinstance(results[0], dict) else {}
+    url = first.get("url") or first.get("media_url") or ""
+    if not url:
+        return None
+    if url.startswith("/"):
+        # Relative media path → absolute using the API host serving it.
+        return str(request.base_url).rstrip("/") + url
+    return url
 
 
 async def _owned_task(db: AsyncSession, task_id: str, user_id: int) -> Task:
@@ -41,6 +71,7 @@ async def _owned_task(db: AsyncSession, task_id: str, user_id: int) -> Task:
 )
 async def get_task_status(
     task_id: str,
+    request: Request,
     user_id: int = Depends(resolve_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -50,14 +81,15 @@ async def get_task_status(
         params = task.parameters if isinstance(task.parameters, dict) else {}
         if isinstance(task.parameters, str):
             try:
-                import json as _json
                 params = _json.loads(task.parameters) or {}
             except Exception:
                 params = {}
+        results = _coerce_results(task.results)
         return TaskResultResponse(
             task_id=task.task_id,
             status=task.status,
-            results=task.results,
+            results=results,
+            result_url=_first_result_url(results, request),
             cost_credits=task.actual_cost,
             completed_at=task.completed_at.isoformat() if task.completed_at else None,
             error_message=task.error_message,
