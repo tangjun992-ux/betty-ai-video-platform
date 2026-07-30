@@ -89,16 +89,16 @@ function NavItem({
     <Link
       href={href}
       className={cn(
-        "group relative flex items-center rounded-lg transition-all duration-200",
-        collapsed ? "justify-center w-10 h-10 mx-auto" : "gap-3 px-3 py-2.5 mx-2",
+        "group relative flex items-center rounded-xl transition-all duration-200",
+        collapsed ? "justify-center w-10 h-10 mx-auto" : "gap-3 px-3 py-2 mx-2.5",
         active
-          ? "bg-brand/[0.08] text-brand"
+          ? "bg-brand/[0.10] text-brand font-medium shadow-[inset_0_0_0_1px_hsl(var(--brand)/0.14)]"
           : "text-text-secondary hover:text-text-primary hover:bg-cosmic-subtle"
       )}
     >
       {/* Active indicator bar — left edge 3px bg-brand */}
-      {active && (
-        <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 rounded-r-full bg-brand" />
+      {active && !collapsed && (
+        <span className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-brand" />
       )}
       <Icon
         className={cn(
