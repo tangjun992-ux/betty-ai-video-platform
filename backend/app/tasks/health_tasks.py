@@ -45,12 +45,19 @@ def smoke_live_video_weekly(self):
         return report
 
     os.environ.setdefault("MODEL_SMOKE_LIVE_VIDEO", "1")
-    from app.services.model_smoke import run_live_video_sample
+    from app.services.model_smoke import merge_smoke_reports, run_beta_video_probe, run_live_video_sample
+    from app.services.model_promotion import maybe_auto_promote_from_smoke
 
     report = run_live_video_sample()
+    beta_report = run_beta_video_probe()
+    combined = merge_smoke_reports(report, beta_report)
+    promote = maybe_auto_promote_from_smoke(combined)
+    report["beta_probe"] = beta_report
+    report["auto_promote"] = promote
     logger.info(
-        "live_video weekly smoke: probed=%s outframe_ok=%s skipped=%s failed=%s",
-        report["probed"], report["outframe_ok"], report.get("outframe_skipped"), report["failed"],
+        "live_video weekly smoke: probed=%s outframe_ok=%s beta_probed=%s promoted=%s failed=%s",
+        report["probed"], report["outframe_ok"], beta_report.get("probed", 0),
+        promote.get("promoted", []), report["failed"],
     )
     return report
 
@@ -72,10 +79,13 @@ def smoke_live_image_weekly(self):
         }
     os.environ.setdefault("MODEL_SMOKE_LIVE", "1")
     from app.services.model_smoke import run_live_image_sample
+    from app.services.model_promotion import maybe_auto_promote_from_smoke
 
     report = run_live_image_sample()
+    promote = maybe_auto_promote_from_smoke(report)
+    report["auto_promote"] = promote
     logger.info(
-        "live_image weekly smoke: probed=%s outframe_ok=%s failed=%s",
-        report["probed"], report["outframe_ok"], report["failed"],
+        "live_image weekly smoke: probed=%s outframe_ok=%s failed=%s promoted=%s",
+        report["probed"], report["outframe_ok"], report["failed"], promote.get("promoted", []),
     )
     return report

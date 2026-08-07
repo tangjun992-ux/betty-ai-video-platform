@@ -1129,9 +1129,22 @@ export default function AgentPage() {
           {variantCards.length > 0 && (phase === "idle" || phase === "planned") && !variantRunning && (
             <div className="mt-3" data-testid="agent-variant-cards">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
-                  创意变体 · 钩子 / CTA / seed
-                </p>
+                <div>
+                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wider">
+                    创意变体 · 钩子 / CTA / seed
+                  </p>
+                  {(() => {
+                    const total = variantCards.reduce(
+                      (n, v) => n + (v.plan?.total_credits || v.plan?.steps?.filter((s) => !s.skip).reduce((a, s) => a + s.est_credits, 0) || 0),
+                      0,
+                    );
+                    return total > 0 ? (
+                      <p className="text-[10px] text-amber-500/90 mt-0.5" data-testid="agent-variant-total-credits">
+                        单变体约 {Math.round(total / variantCards.length)} 积分 · 并行 {variantCards.length} 套合计约 {total} 积分
+                      </p>
+                    ) : null;
+                  })()}
+                </div>
                 <div className="flex gap-2">
                   <button type="button" disabled={variantRunning}
                     onClick={() => runVariantGallery(variantCards, true)}
