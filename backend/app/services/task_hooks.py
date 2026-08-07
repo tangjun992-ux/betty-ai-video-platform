@@ -89,6 +89,14 @@ def persist_webhook_status(db_task_id: str, delivery: dict[str, Any]) -> None:
             {"p": json.dumps(params, ensure_ascii=False), "tid": db_task_id},
         )
         session.commit()
+    if not delivery.get("delivered"):
+        try:
+            from app.services.ops_alerts import alert_webhook_failure
+
+            row_task = _load_task_row(db_task_id)
+            alert_webhook_failure(db_task_id, delivery, task=row_task)
+        except Exception as e:
+            logger.debug("ops webhook alert skipped task=%s: %s", db_task_id, e)
 
 
 def list_failed_webhooks(*, limit: int = 50, scan: int = 500) -> list[dict[str, Any]]:

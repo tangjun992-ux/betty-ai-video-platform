@@ -1308,6 +1308,16 @@ export interface SystemReadiness {
     last_mode?: string;
     outframe_ok?: number;
     failed_count?: number;
+    last_auto_promote?: {
+      promoted: string[];
+      count: number;
+      skipped?: boolean;
+      reason?: string;
+    };
+  };
+  ops_alerts?: {
+    webhook_failure_alerts: boolean;
+    env: string;
   };
 }
 
