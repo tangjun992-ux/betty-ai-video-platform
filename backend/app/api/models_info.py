@@ -137,7 +137,7 @@ MODELS = [
         id="veo-3.1", provider="KIE.ai → Google", display_name="Veo 3.1",
         description="Google 旗舰，原生带声/物理真实",
         capabilities=ModelCapability(media_types=["video"], max_resolution="4K", max_duration_s=60, avg_latency_s=150, styles=["cinematic", "realistic", "nature"], cost_per_image_credits=0, cost_per_5s_video_credits=12),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="active",
     ),
     ModelInfo(
         id="veo-3.1-fast", provider="KIE.ai → Google", display_name="Veo 3.1 Fast",
@@ -149,7 +149,7 @@ MODELS = [
         id="veo-3", provider="KIE.ai → Google", display_name="Veo 3",
         description="上一代旗舰，稳定可靠",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=30, avg_latency_s=80, styles=["cinematic", "realistic"], cost_per_image_credits=0, cost_per_5s_video_credits=7),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="active",
     ),
     ModelInfo(
         id="sora-2", provider="KIE.ai → OpenAI", display_name="Sora 2",

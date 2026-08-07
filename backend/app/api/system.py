@@ -197,7 +197,10 @@ async def readiness():
     from app.services.model_smoke import get_last_smoke
     from app.config import settings
 
+    from app.services.stripe_ready import stripe_bootstrap_status
+
     stripe = stripe_status().public_dict()
+    stripe["bootstrap"] = stripe_bootstrap_status()
     storage = storage_status().public_dict()
     sso = oidc_status(discover=False).public_dict()
     catalog = catalog_integrity()
@@ -218,7 +221,7 @@ async def readiness():
         "catalog": {
             "active_count": catalog["active_count"],
             "beta_count": catalog["beta_count"],
-            "active_target": 15,
+            "active_target": 17,
             "active_outside_verified_set": catalog.get("active_outside_verified_set") or [],
         },
         "smoke": {

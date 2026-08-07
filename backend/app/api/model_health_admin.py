@@ -25,6 +25,17 @@ class PromoteRequest(BaseModel):
     note: str | None = Field(None, description="Audit note for promotion")
 
 
+@router.get("/webhook-failures", summary="Webhook 投递失败任务")
+async def list_webhook_failures(
+    limit: int = 30,
+    _: User = Depends(require_admin),
+):
+    from app.services.task_hooks import list_failed_webhooks
+
+    items = list_failed_webhooks(limit=min(max(limit, 1), 100))
+    return {"total": len(items), "failures": items}
+
+
 @router.get("/promotable", summary="可晋升 active 的 beta 模型")
 async def list_promotable(_: User = Depends(require_admin)):
     from app.api.models_info import MODELS
@@ -56,7 +67,7 @@ async def list_promotable(_: User = Depends(require_admin)):
     active = [m for m in MODELS if m.status == "active"]
     return {
         "verified_active_count": len(active),
-        "active_target": 15,
+        "active_target": 17,
         "promotable": items,
         "verified_set_size": len(GATEWAY_VERIFIED_IDS),
         "last_smoke_ts": (report or {}).get("ts"),

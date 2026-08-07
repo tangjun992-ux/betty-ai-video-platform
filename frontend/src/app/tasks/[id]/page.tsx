@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { API_BASE, cancelTask, getTaskStatus, listTasks, retryTask } from "@/lib/api";
+
+const WS_BASE = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000").replace(/^http/, "ws");
 
 /** Relative media paths (/api/v1/media/…) are served by the API host, not the
     frontend origin — prefix them so results render regardless of where we run. */
@@ -21,6 +23,10 @@ export default function TaskDetailPage() {
   const [loading, setLoading] = useState(true);
   const [similarTasks, setSimilarTasks] = useState<any[]>([]);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [liveProgress, setLiveProgress] = useState<number | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const fetchTask = useCallback(async () => {
     try {
@@ -48,20 +54,85 @@ export default function TaskDetailPage() {
 
   useEffect(() => { fetchTask(); }, [fetchTask]);
 
-  // Auto-refresh active tasks
+  // WebSocket real-time progress (fallback to polling below)
+  useEffect(() => {
+    if (!taskId) return;
+    let ws: WebSocket | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    const applyPayload = (data: Record<string, unknown>) => {
+      if (data.type === "progress" || typeof data.progress === "number") {
+        setLiveProgress(Number(data.progress) || 0);
+      }
+      setTask((prev: any) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        if (typeof data.progress === "number") next.progress = data.progress;
+        if (data.current_stage) next.current_stage = data.current_stage;
+        if (data.status) next.status = data.status;
+        if (data.results) next.results = data.results;
+        if (data.error_message) next.error_message = data.error_message;
+        return next;
+      });
+      const st = data.status as string | undefined;
+      if (st === "completed" || st === "failed" || data.type === "completed" || data.type === "failed") {
+        void fetchTask();
+        ws?.close();
+      }
+    };
+
+    const connect = () => {
+      try {
+        ws = new WebSocket(`${WS_BASE}/api/v1/ws/tasks/${taskId}`);
+        wsRef.current = ws;
+        ws.onopen = () => {
+          setWsConnected(true);
+          ws?.send("ping");
+        };
+        ws.onmessage = (event) => {
+          try {
+            applyPayload(JSON.parse(event.data));
+          } catch { /* ignore */ }
+        };
+        ws.onclose = () => {
+          setWsConnected(false);
+          if (task?.status && !["completed", "failed", "cancelled"].includes(task.status)) {
+            reconnectTimer = setTimeout(connect, 3000);
+          }
+        };
+        ws.onerror = () => ws?.close();
+      } catch {
+        setWsConnected(false);
+      }
+    };
+
+    connect();
+    return () => {
+      ws?.close();
+      clearTimeout(reconnectTimer);
+      wsRef.current = null;
+    };
+  }, [taskId, fetchTask, task?.status]);
+
+  // Polling fallback when WS unavailable or task still active
   useEffect(() => {
     if (!task || ["completed", "failed", "cancelled"].includes(task.status)) return;
-    const interval = setInterval(async () => {
+    if (wsConnected) return;
+
+    const poll = async () => {
       try {
         const data = await getTaskStatus(taskId);
         setTask((prev: any) => ({ ...prev, ...data }));
         if (data.status === "completed" || data.status === "failed") {
-          clearInterval(interval);
+          if (pollRef.current) clearInterval(pollRef.current);
         }
-      } catch {}
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [task, taskId]);
+      } catch { /* ignore */ }
+    };
+
+    poll();
+    pollRef.current = setInterval(poll, 2000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [task, taskId, wsConnected]);
 
   if (loading) {
     return (
@@ -111,11 +182,16 @@ export default function TaskDetailPage() {
             {task.sla.hints.map((h: string) => <p key={h}>{h}</p>)}
           </div>
         )}
-        {task.status === "generating" && task.progress > 0 && (
-          <div className="w-full bg-dark-700 rounded-full h-2 mb-4">
+        {!["completed", "failed", "cancelled"].includes(task.status) && (liveProgress ?? task.progress) > 0 && (
+          <div className="w-full bg-dark-700 rounded-full h-2 mb-4" data-testid="task-progress-bar">
             <div className="bg-gradient-to-r from-accent-cyan to-teal-400 h-2 rounded-full transition-all"
-              style={{ width: `${Math.min(task.progress, 100)}%` }} />
+              style={{ width: `${Math.min(liveProgress ?? task.progress, 100)}%` }} />
           </div>
+        )}
+        {!["completed", "failed", "cancelled"].includes(task.status) && (
+          <p className="text-[11px] text-dark-500 mb-2" data-testid="task-live-source">
+            {wsConnected ? "⚡ 实时进度（WebSocket）" : "🔄 轮询刷新"}
+          </p>
         )}
 
         {/* Meta grid */}

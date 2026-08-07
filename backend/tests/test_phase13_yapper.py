@@ -44,6 +44,7 @@ def test_mapping_promote_on_mapping_ok():
     from app.services.model_promotion import demote_model, maybe_promote_from_mapping_smoke
 
     mid = "veo-3.1"
+    demote_model(mid, note="phase14 test setup")
     assert next(m for m in MODELS if m.id == mid).status == "beta"
     with patch.dict(os.environ, {"MODEL_SMOKE_MAPPING_PROMOTE": "1"}):
         r = maybe_promote_from_mapping_smoke({
@@ -55,7 +56,7 @@ def test_mapping_promote_on_mapping_ok():
             }],
         })
     assert mid in r["promoted"]
-    demote_model(mid, note="phase13 cleanup")
+    # veo-3.1 stays active in catalog after promote (phase 14 shelf)
 
 
 def test_run_mapping_beta_probe():

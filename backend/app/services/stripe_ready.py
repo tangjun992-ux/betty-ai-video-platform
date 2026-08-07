@@ -22,6 +22,9 @@ PLAN_PRICE_ENVS = (
     "STRIPE_PRICE_MAX_YEARLY",
 )
 
+# All env keys emitted by scripts/bootstrap_stripe_prices.py (incl. team seat).
+BOOTSTRAP_PRICE_ENVS = PLAN_PRICE_ENVS + ("STRIPE_PRICE_TEAM_SEAT_MONTHLY",)
+
 # Minimum monthly prices that unlock real subscription Checkout mode.
 _SUBSCRIPTION_MONTHLY_ENVS = (
     "STRIPE_PRICE_STARTER_MONTHLY",
@@ -92,3 +95,49 @@ def assert_stripe_production_ready() -> None:
     st = stripe_status()
     if settings.is_production and not st.production_ok:
         raise RuntimeError("Stripe production blockers: " + "; ".join(st.blockers))
+
+
+def stripe_bootstrap_status() -> dict:
+    """Report bootstrap Price env coverage (scripts/bootstrap_stripe_prices.py)."""
+    price_envs = {name: bool(_env_price(name)) for name in BOOTSTRAP_PRICE_ENVS}
+    configured = sum(1 for v in price_envs.values() if v)
+    monthly_ok = any(price_envs[k] for k in _SUBSCRIPTION_MONTHLY_ENVS)
+    return {
+        "price_envs": price_envs,
+        "price_envs_configured": configured,
+        "price_envs_total": len(BOOTSTRAP_PRICE_ENVS),
+        "subscription_prices_ready": monthly_ok,
+        "bootstrap_complete": monthly_ok and price_envs.get("STRIPE_PRICE_TEAM_SEAT_MONTHLY", False),
+        "script": "scripts/bootstrap_stripe_prices.py",
+        "validate_cmd": "python scripts/bootstrap_stripe_prices.py --validate",
+        "dry_run_cmd": "python scripts/bootstrap_stripe_prices.py --dry-run",
+    }
+
+
+def validate_stripe_bootstrap() -> dict:
+    """One-shot validation for CI/ops — no Stripe API calls."""
+    st = stripe_status()
+    bs = stripe_bootstrap_status()
+    blockers: list[str] = []
+    if not st.api_key_configured:
+        blockers.append("STRIPE_API_KEY missing (optional in dev dry-run)")
+    if not bs["subscription_prices_ready"]:
+        blockers.append(
+            "configure at least one STRIPE_PRICE_*_MONTHLY via bootstrap_stripe_prices.py"
+        )
+    ok = bs["subscription_prices_ready"]
+    if settings.is_production:
+        ok = st.production_ok and bs["bootstrap_complete"]
+        if not st.webhook_secret_configured:
+            blockers.append("STRIPE_WEBHOOK_SECRET missing")
+        if not bs["bootstrap_complete"]:
+            blockers.append("run bootstrap_stripe_prices.py for all plan + seat Price IDs")
+    else:
+        # Dev/test: structural validation passes without live Price env injection.
+        ok = True
+    return {
+        "ok": ok,
+        "bootstrap": bs,
+        "stripe": st.public_dict(),
+        "blockers": blockers,
+    }
