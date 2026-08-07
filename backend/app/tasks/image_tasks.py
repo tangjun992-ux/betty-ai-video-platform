@@ -233,16 +233,23 @@ def generate_image_task(
     except RuntimeError as e:
         from app.fallback_handler import is_retryable_error
         model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
-        return _handle_retryable(self, db_task_id, model, str(e), "image", prompt, size, style, count)
+        return _handle_retryable(
+            self, db_task_id, model, str(e), "image", prompt,
+            {
+                "size": size, "style": style, "count": count, "seed": seed,
+                "negative_prompt": negative_prompt, "reference_images": ref_images,
+            },
+        )
     except Exception as e:
         from app.fallback_handler import is_retryable_error
         model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
         return _mark_failed(db_task_id, str(e))
 
 
-def _handle_retryable(self, db_task_id, model, error, media_type, *args):
-    """Check if error is retryable and try fallback."""
+def _handle_retryable(self, db_task_id, model, error, media_type, prompt, params: dict):
+    """Check if error is retryable and try fallback (Gateway or legacy adapter)."""
     from app.fallback_handler import get_fallback, is_retryable_error
+    from app.gateway import gateway_enabled
 
     if not is_retryable_error(error):
         return _mark_failed(db_task_id, error)
@@ -251,41 +258,84 @@ def _handle_retryable(self, db_task_id, model, error, media_type, *args):
     if not fallback_id:
         return _mark_failed(db_task_id, f"{error} (no fallback available)")
 
-    logger.info(f"Retrying with fallback {fallback_id} for {model} failed: {error}")
+    logger.info("Retrying with fallback %s for %s failed: %s", fallback_id, model, error)
     _update_task(db_task_id, current_stage="fallback_used", selected_model=fallback_id)
     self.update_state(state="PROGRESS", meta={"current_stage": "fallback", "progress": 40})
 
-    get_adapter = _load_adapters()
-    fb_adapter = get_adapter(fallback_id)
-    if not fb_adapter:
-        return _mark_failed(db_task_id, f"Fallback adapter not found: {fallback_id}")
-
     started = time.monotonic()
     try:
-        kwargs = model.split("/")
-        # Reconstruct call for fallback
-        if media_type == "image":
-            results = _run_async(
-                fb_adapter.generate_image(
-                    prompt=args[0], model_id=fallback_id,
-                    size=args[1] if len(args) > 1 else "1024x1024",
-                    style=args[2] if len(args) > 2 else "auto",
-                    count=args[3] if len(args) > 3 else 1,
+        if gateway_enabled() and media_type == "image":
+            from app.gateway import gateway
+            from app.tasks.gateway_context import gateway_call_kwargs
+            ref_images = [
+                u for u in (params.get("reference_images") or [])
+                if isinstance(u, str) and u.strip()
+            ]
+            gw = _run_async(gateway.generate_image(
+                model=fallback_id,
+                prompt=prompt,
+                size=params.get("size", "1024x1024"),
+                style=params.get("style", "auto"),
+                count=params.get("count", 1),
+                seed=params.get("seed"),
+                negative_prompt=params.get("negative_prompt"),
+                image_url=ref_images[0] if ref_images else None,
+                image_urls=ref_images or None,
+                **gateway_call_kwargs(db_task_id),
+            ))
+            result = gw.result
+            results = [result] if not isinstance(result, list) else result
+        elif media_type == "image":
+            get_adapter = _load_adapters()
+            fb_adapter = get_adapter(fallback_id)
+            if not fb_adapter:
+                return _mark_failed(db_task_id, f"Fallback adapter not found: {fallback_id}")
+            ref_images = params.get("reference_images") or []
+            if ref_images:
+                edit_fn = getattr(fb_adapter, "edit_image", None)
+                if callable(edit_fn):
+                    results = _run_async(
+                        edit_fn(
+                            image_urls=ref_images,
+                            prompt=prompt,
+                            image_size=params.get("size") or "auto",
+                        )
+                    )
+                else:
+                    results = _run_async(
+                        fb_adapter.generate_image(
+                            prompt=prompt, model_id=fallback_id,
+                            size=params.get("size", "1024x1024"),
+                            style=params.get("style", "auto"),
+                            count=params.get("count", 1),
+                            image_url=ref_images[0],
+                            image_urls=ref_images,
+                        )
+                    )
+            else:
+                results = _run_async(
+                    fb_adapter.generate_image(
+                        prompt=prompt, model_id=fallback_id,
+                        size=params.get("size", "1024x1024"),
+                        style=params.get("style", "auto"),
+                        count=params.get("count", 1),
+                    )
                 )
-            )
         else:
+            get_adapter = _load_adapters()
+            fb_adapter = get_adapter(fallback_id)
+            if not fb_adapter:
+                return _mark_failed(db_task_id, f"Fallback adapter not found: {fallback_id}")
             results = _run_async(
-                fb_adapter.generate_video(prompt=args[0], model_id=fallback_id)
+                fb_adapter.generate_video(prompt=prompt, model_id=fallback_id)
             )
 
-        # Normalize single-result adapters (e.g. KIE) to a list.
         if not isinstance(results, list):
             results = [results]
         quality_ok, quality_error = validate_generation_results(results, media_type)
         if not quality_ok:
             raise RuntimeError(quality_error)
 
-        # ... process results (simplified)
         output = []
         total_cost = 0
         for r in results:

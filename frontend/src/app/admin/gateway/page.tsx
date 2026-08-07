@@ -114,6 +114,64 @@ export default function GatewayAdminPage() {
             />
           </div>
 
+          {/* Budget + backpressure */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <section className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4">
+              <h2 className="text-sm font-medium mb-2">预算上限（Credits/日）</h2>
+              <dl className="text-sm space-y-1 text-text-secondary">
+                <div className="flex justify-between">
+                  <dt>用户</dt>
+                  <dd className="font-mono">
+                    {data.budget_caps.user_daily_cap > 0
+                      ? data.budget_caps.user_daily_cap
+                      : "未限制"}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>团队</dt>
+                  <dd className="font-mono">
+                    {data.budget_caps.team_daily_cap > 0
+                      ? data.budget_caps.team_daily_cap
+                      : "未限制"}
+                  </dd>
+                </div>
+              </dl>
+            </section>
+            <section className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4">
+              <h2 className="text-sm font-medium mb-2">Provider 背压</h2>
+              <dl className="text-sm space-y-1 text-text-secondary">
+                <div className="flex justify-between">
+                  <dt>最大并发</dt>
+                  <dd className="font-mono">
+                    {data.provider_limits.max_inflight > 0
+                      ? data.provider_limits.max_inflight
+                      : "未限制"}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>默认 RPM</dt>
+                  <dd className="font-mono">
+                    {data.provider_limits.rpm_default > 0
+                      ? data.provider_limits.rpm_default
+                      : "未限制"}
+                  </dd>
+                </div>
+              </dl>
+              {Object.keys(data.provider_limits.inflight).length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {Object.entries(data.provider_limits.inflight).map(([p, n]) => (
+                    <span
+                      key={p}
+                      className="text-xs px-2 py-0.5 rounded-full border border-cosmic-border"
+                    >
+                      {p}: {n} in-flight
+                    </span>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
           {/* Kill switch + reload */}
           <div className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4 flex flex-wrap gap-3 items-center">
             <span className="text-sm font-medium">紧急控制</span>

@@ -52,6 +52,10 @@ GATEWAY_CIRCUIT = Gauge(
     "betty_gateway_provider_circuit_open", "Gateway provider circuit (1=open)",
     ["provider", "remote_model"], registry=REGISTRY,
 )
+GATEWAY_PROVIDER_INFLIGHT = Gauge(
+    "betty_gateway_provider_inflight", "Gateway in-flight requests per provider",
+    ["provider"], registry=REGISTRY,
+)
 
 
 def record_gateway_request(
@@ -113,14 +117,18 @@ async def _refresh_runtime_gauges() -> None:
     except Exception:
         pass
 
-    # Gateway provider-level circuits
+    # Gateway provider-level circuits + in-flight backpressure
     try:
         from app.gateway.health import provider_health
+        from app.gateway.provider_limit import gateway_provider_limit
         for p in provider_health.all_snapshots():
             provider, _, remote = p.key.partition(":")
             GATEWAY_CIRCUIT.labels(provider=provider, remote_model=remote).set(
                 1 if p.circuit_open else 0,
             )
+        inflight = gateway_provider_limit.inflight_snapshot()
+        for provider in ("kie", "replicate", "seedance", "kling"):
+            GATEWAY_PROVIDER_INFLIGHT.labels(provider=provider).set(inflight.get(provider, 0))
     except Exception:
         pass
 

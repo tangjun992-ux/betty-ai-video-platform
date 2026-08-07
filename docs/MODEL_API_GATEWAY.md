@@ -338,6 +338,15 @@ KLING_SECRET_KEY=...
 - [x] 前端 Admin 侧栏入口 + `is_admin` 暴露于 auth/settings API
 - [x] lipsync publicize 统一走 Gateway assets
 
+### Phase 6 — 收尾硬化（本 PR）
+
+- [x] image/video Celery fallback 在 Gateway 模式下走 `gateway.generate_*`（不再旁路 registry adapter）
+- [x] face_swap Gateway-only（移除 `gateway_enabled=false` 时直连 KieAdapter）
+- [x] `validate_routes()` 启动校验 + Admin reload 前置校验
+- [x] Prometheus `betty_gateway_provider_inflight` + Admin 预算/背压展示
+- [x] Grafana 导入文档（`infra/grafana/README.md`）
+- [x] Phase 6 单元测试
+
 ---
 
 ## 9. 风险与决策

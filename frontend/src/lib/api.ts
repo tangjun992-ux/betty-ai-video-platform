@@ -1047,6 +1047,16 @@ export interface GatewayStatus {
   }[];
   backends: { name: string; configured: boolean }[];
   metrics: { counters: Record<string, number> };
+  budget_caps: {
+    user_daily_cap: number;
+    team_daily_cap: number;
+  };
+  provider_limits: {
+    max_inflight: number;
+    rpm_default: number;
+    rpm_per_provider: Record<string, number>;
+    inflight: Record<string, number>;
+  };
   kie_key_pool: { configured: number; pool_enabled: boolean; key_suffixes: string[] };
 }
 

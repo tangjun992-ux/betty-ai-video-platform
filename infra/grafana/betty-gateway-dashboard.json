@@ -45,6 +45,15 @@
     },
     {
       "type": "timeseries",
+      "title": "Provider In-Flight",
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 8},
+      "targets": [{
+        "expr": "betty_gateway_provider_inflight",
+        "legendFormat": "{{provider}}"
+      }]
+    },
+    {
+      "type": "timeseries",
       "title": "HTTP 429 Rate",
       "gridPos": {"h": 6, "w": 24, "x": 0, "y": 14},
       "targets": [{

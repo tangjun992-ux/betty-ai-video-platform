@@ -181,7 +181,15 @@ def generate_video_task(
         rd = result.to_dict() if hasattr(result, "to_dict") else result
         error = rd.get("error")
         if error:
-            return _handle_retryable(self, db_task_id, model, error, prompt, image_url, duration, resolution)
+            return _handle_retryable(
+                self, db_task_id, model, error, prompt,
+                {
+                    "image_url": image_url, "duration": duration, "resolution": resolution,
+                    "reference_images": ref_images, "reference_videos": ref_videos,
+                    "reference_audios": ref_audios, "omni": omni,
+                    "generate_audio": bool(params.get("generate_audio")),
+                },
+            )
 
         from app.services.demo_tag import demo_mode_active, tag_result
         output = [tag_result({
@@ -207,15 +215,24 @@ def generate_video_task(
     except RuntimeError as e:
         from app.fallback_handler import is_retryable_error
         model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
-        return _handle_retryable(self, db_task_id, model, str(e), prompt, image_url, duration, resolution)
+        return _handle_retryable(
+            self, db_task_id, model, str(e), prompt,
+            {
+                "image_url": image_url, "duration": duration, "resolution": resolution,
+                "reference_images": ref_images, "reference_videos": ref_videos,
+                "reference_audios": ref_audios, "omni": omni,
+                "generate_audio": bool(params.get("generate_audio")),
+            },
+        )
     except Exception as e:
         from app.fallback_handler import is_retryable_error
         model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
         return _mark_failed(db_task_id, str(e))
 
 
-def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duration, resolution):
+def _handle_retryable(self, db_task_id, model, error, prompt, params: dict):
     from app.fallback_handler import get_fallback, is_retryable_error
+    from app.gateway import gateway_enabled
 
     if not is_retryable_error(error):
         return _mark_failed(db_task_id, error)
@@ -224,22 +241,45 @@ def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duratio
     if not fallback_id:
         return _mark_failed(db_task_id, f"{error} (no fallback)")
 
-    logger.info(f"Fallback from {model} to {fallback_id}: {error}")
+    logger.info("Fallback from %s to %s: %s", model, fallback_id, error)
     _update_task(db_task_id, selected_model=fallback_id, current_stage="fallback_used")
 
-    get_adapter = _load_adapters()
-    fb = get_adapter(fallback_id)
-    if not fb:
-        return _mark_failed(db_task_id, f"Fallback not found: {fallback_id}")
+    image_url = params.get("image_url")
+    ref_images = params.get("reference_images") or []
+    duration = params.get("duration", 5)
+    resolution = params.get("resolution", "1080p")
 
     started = time.monotonic()
     try:
-        result = _run_async(
-            fb.generate_video(
-                prompt=prompt, model_id=fallback_id, image_url=image_url,
-                duration=duration, resolution=resolution,
+        if gateway_enabled():
+            from app.gateway import gateway
+            from app.tasks.gateway_context import gateway_call_kwargs
+            gw = _run_async(gateway.generate_video(
+                model=fallback_id,
+                prompt=prompt,
+                image_url=image_url or (ref_images[0] if ref_images else None),
+                duration=duration,
+                resolution=resolution,
+                reference_images=ref_images,
+                reference_videos=params.get("reference_videos") or [],
+                reference_audios=params.get("reference_audios") or [],
+                omni=bool(params.get("omni")),
+                generate_audio=bool(params.get("generate_audio")),
+                **gateway_call_kwargs(db_task_id),
+            ))
+            result = gw.result
+        else:
+            get_adapter = _load_adapters()
+            fb = get_adapter(fallback_id)
+            if not fb:
+                return _mark_failed(db_task_id, f"Fallback not found: {fallback_id}")
+            result = _run_async(
+                fb.generate_video(
+                    prompt=prompt, model_id=fallback_id, image_url=image_url,
+                    duration=duration, resolution=resolution,
+                )
             )
-        )
+
         rd = result.to_dict() if hasattr(result, "to_dict") else result
         quality_ok, quality_error = validate_generation_results(result, "video")
         if not quality_ok:

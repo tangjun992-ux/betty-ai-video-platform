@@ -94,3 +94,54 @@ def find_route(capability: Capability, model: str) -> Optional[RouteDefinition]:
 
 def routes_for_model(model: str) -> list[RouteDefinition]:
     return [r for r in get_routes() if r.model == model]
+
+
+def validate_routes(routes: list[RouteDefinition] | None = None) -> list[str]:
+    """Validate route table; return human-readable error messages (empty = ok)."""
+    from app.gateway.providers import list_backends
+
+    items = routes if routes is not None else load_routes()
+    known_providers = set(list_backends().keys())
+    errors: list[str] = []
+    seen: set[tuple[str, str]] = set()
+
+    if not items:
+        errors.append("No routes defined — routes.yaml is empty or missing")
+        return errors
+
+    for route in items:
+        key = (route.capability.value, route.model)
+        if key in seen:
+            errors.append(f"Duplicate route: {route.capability.value}/{route.model}")
+        seen.add(key)
+
+        if not route.model.strip():
+            errors.append(f"Empty model id for capability {route.capability.value}")
+
+        if not route.chain:
+            errors.append(f"Empty provider chain: {route.capability.value}/{route.model}")
+            continue
+
+        for hop in route.chain:
+            if hop.provider not in known_providers:
+                errors.append(
+                    f"Unknown provider {hop.provider!r} in "
+                    f"{route.capability.value}/{route.model}",
+                )
+            if not hop.remote_model.strip():
+                errors.append(
+                    f"Empty remote_model for {hop.provider} in "
+                    f"{route.capability.value}/{route.model}",
+                )
+            if hop.timeout_s <= 0:
+                errors.append(
+                    f"Invalid timeout_s={hop.timeout_s} for {hop.provider} in "
+                    f"{route.capability.value}/{route.model}",
+                )
+            if hop.canary_percent < 0 or hop.canary_percent > 100:
+                errors.append(
+                    f"Invalid canary_percent={hop.canary_percent} for {hop.provider} in "
+                    f"{route.model}",
+                )
+
+    return errors
