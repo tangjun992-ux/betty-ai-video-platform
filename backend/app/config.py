@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     GATEWAY_TEAM_DAILY_CREDIT_CAP: float = float(os.getenv("GATEWAY_TEAM_DAILY_CREDIT_CAP", "0"))
     # Production public health returns minimal fields (no key pool suffixes)
     GATEWAY_HEALTH_PUBLIC_MINIMAL: str = os.getenv("GATEWAY_HEALTH_PUBLIC_MINIMAL", "")
+    # Provider backpressure (0 = unlimited)
+    GATEWAY_PROVIDER_RPM: int = int(os.getenv("GATEWAY_PROVIDER_RPM", "0"))
+    GATEWAY_PROVIDER_MAX_INFLIGHT: int = int(os.getenv("GATEWAY_PROVIDER_MAX_INFLIGHT", "0"))
 
     # LiteLLM proxy (Phase 2 — LLM/chat only, not media generation)
     LITELLM_PROXY_URL: str = os.getenv("LITELLM_PROXY_URL", "")

@@ -1,0 +1,56 @@
+{
+  "title": "Betty Model API Gateway",
+  "uid": "betty-gateway",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["betty", "gateway"],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Gateway Requests / min",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{
+        "expr": "sum(rate(betty_gateway_requests_total[5m])) by (provider, status) * 60",
+        "legendFormat": "{{provider}} {{status}}"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Gateway Fallbacks / min",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{
+        "expr": "sum(rate(betty_gateway_fallback_total[5m])) by (provider) * 60",
+        "legendFormat": "{{provider}}"
+      }]
+    },
+    {
+      "type": "stat",
+      "title": "Open Provider Circuits",
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 8},
+      "targets": [{
+        "expr": "sum(betty_gateway_provider_circuit_open)",
+        "legendFormat": "open"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Celery Queue Depth",
+      "gridPos": {"h": 6, "w": 16, "x": 8, "y": 8},
+      "targets": [{
+        "expr": "betty_celery_queue_depth",
+        "legendFormat": "{{queue}}"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP 429 Rate",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 14},
+      "targets": [{
+        "expr": "sum(rate(betty_http_requests_total{status=\"429\"}[5m])) * 60",
+        "legendFormat": "429/min"
+      }]
+    }
+  ]
+}

@@ -130,6 +130,7 @@ export interface AuthUser {
   email: string;
   name?: string;
   credits: number;
+  is_admin?: boolean;
 }
 
 export interface LoginResponse {

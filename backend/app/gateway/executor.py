@@ -140,6 +140,21 @@ async def _execute_chain(
         if not backend:
             continue
 
+        from app.gateway.provider_limit import gateway_provider_limit
+        limit = gateway_provider_limit.check_and_acquire(target.provider)
+        if not limit.allowed:
+            attempts.append({
+                "provider": target.provider,
+                "remote_model": target.remote_model,
+                "fallback_only": target.fallback_only,
+                "success": False,
+                "error": limit.reason[:300],
+                "retryable": True,
+                "rate_limited": True,
+            })
+            logger.warning("[gateway] provider limit %s: %s", target.provider, limit.reason)
+            continue
+
         hop_started = time.monotonic()
         try:
             result = await backend.execute(
@@ -214,6 +229,8 @@ async def _execute_chain(
             if not is_retryable_error(err):
                 break
             continue
+        finally:
+            gateway_provider_limit.release_inflight(target.provider)
 
     raise RuntimeError(
         last_error or f"All gateway hops failed for {route.capability.value}/{model_requested}"
