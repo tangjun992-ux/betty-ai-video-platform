@@ -9,7 +9,7 @@ import { useToast } from "@/components/Toast";
 import { CapabilityNotice } from "@/components/CapabilityNotice";
 import { cn } from "@/lib/utils";
 
-import { API_BASE, apiAuthHeaders } from "@/lib/api";
+import { API_BASE, apiAuthHeaders, estimateTool } from "@/lib/api";
 
 const SAMPLE_VOICES = [
   { id: "zh-CN-XiaoxiaoNeural", name: "晓晓", gender: "女", desc: "温柔自然" },
@@ -37,6 +37,21 @@ export default function LipsyncPage() {
   const [offlineDemo, setOfflineDemo] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [stage, setStage] = useState("");
+  const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null);
+  const [estimatedSeconds, setEstimatedSeconds] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    estimateTool({ tool: "lipsync", tier })
+      .then((e) => {
+        if (!cancelled) {
+          setEstimatedCredits(e.estimated_cost_credits);
+          setEstimatedSeconds(e.estimated_time_seconds);
+        }
+      })
+      .catch(() => { if (!cancelled) { setEstimatedCredits(null); setEstimatedSeconds(null); } });
+    return () => { cancelled = true; };
+  }, [tier]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -312,10 +327,18 @@ export default function LipsyncPage() {
               ) : (
                 <>
                   <Mic className="w-5 h-5" />
-                  生成唇形同步视频
+                  生成唇形同步
+                  {estimatedCredits != null && (
+                    <span className="ml-1 opacity-80">· {estimatedCredits} 积分</span>
+                  )}
                 </>
               )}
             </button>
+            {estimatedSeconds != null && !submitting && (
+              <p className="text-[11px] text-text-tertiary text-center mt-1.5">
+                预计 {Math.ceil(estimatedSeconds / 60)}–5 分钟 · Kling 数字人出片
+              </p>
+            )}
 
             {/* Generating status — Kling 数字人约需 2-5 分钟，展示阶段与已用时长 */}
             {submitting && taskId && (

@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { Loader2, Upload, Clapperboard } from "lucide-react";
+import { Loader2, Upload, Clapperboard, Coins } from "lucide-react";
 import { CapabilityNotice } from "@/components/CapabilityNotice";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, apiAuthHeaders, estimateTool } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +24,16 @@ export default function PerformancePage() {
   const [withTalk, setWithTalk] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [tier, setTier] = useState<"demo" | "studio">("demo");
+  const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    estimateTool({ tool: "performance", tier, with_talk: withTalk })
+      .then((e) => { if (!cancelled) setEstimatedCredits(e.estimated_cost_credits); })
+      .catch(() => { if (!cancelled) setEstimatedCredits(null); });
+    return () => { cancelled = true; };
+  }, [tier, withTalk]);
 
   const onImage = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -42,7 +52,7 @@ export default function PerformancePage() {
   const uploadOne = async (file: File) => {
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: fd });
+    const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: fd, headers: apiAuthHeaders() });
     if (!res.ok) throw new Error("上传失败");
     const data = await res.json();
     return data.url || data.media_url || data.file_url;
@@ -63,14 +73,14 @@ export default function PerformancePage() {
       const video_url = await uploadOne(videoFile);
       const res = await fetch(`${API_BASE}/performance`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           image_url,
           video_url,
           prompt: prompt.trim() || undefined,
           with_talk: withTalk,
           voice_text: withTalk ? voiceText.trim() : undefined,
-          tier: "demo",
+          tier,
         }),
       });
       if (!res.ok) {
@@ -95,6 +105,16 @@ export default function PerformancePage() {
           原生 Kling Motion Control + 可选 Lipsync 口播分轨。对标「表演驱动」工作流，但不是 Runway Act-One 编码器。
         </p>
         <CapabilityNotice feature="motion" className="mb-4" />
+        <div className="grid grid-cols-2 gap-2 mb-4 max-w-md">
+          {(["demo", "studio"] as const).map((t) => (
+            <button key={t} type="button" onClick={() => setTier(t)}
+              className={cn("p-3 rounded-xl border text-left text-sm",
+                tier === t ? "border-brand/40 bg-brand/[0.06]" : "border-cosmic-border bg-cosmic-subtle")}>
+              <div className="font-semibold capitalize">{t}</div>
+              <div className="text-[10px] text-text-secondary">{t === "demo" ? "Motion+Lipsync 演示档" : "Studio · Personal+"}</div>
+            </button>
+          ))}
+        </div>
       </motion.div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
@@ -167,6 +187,11 @@ export default function PerformancePage() {
       >
         {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Clapperboard className="w-5 h-5" />}
         开始 Performance Drive
+        {estimatedCredits != null && !submitting && (
+          <span className="inline-flex items-center gap-0.5 opacity-90 text-sm">
+            <Coins className="w-4 h-4" /> {estimatedCredits}
+          </span>
+        )}
       </button>
     </div>
   );

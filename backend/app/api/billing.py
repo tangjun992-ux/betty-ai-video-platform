@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -186,8 +186,22 @@ async def billing_stripe_status():
 @router.get("/summary", summary="账户余额与消费概览")
 async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Depends(resolve_user_id)):
     bal = await _get_balance(db, user_id)
+    u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     await db.commit()
     total = await available_personal_credits(bal)
+    role = user_role(u.role if u else "guest")
+    plan_label = {
+        "guest": None,
+        "free": "Free",
+        "starter": "Starter",
+        "personal": "Personal",
+        "creator": "Creator",
+        "pro": "Pro",
+        "max": "Max",
+        "enterprise": "Enterprise",
+    }.get(role)
+    if role in ("pro", "max") and int(getattr(bal, "plan_monthly_allotment", 0) or 0) >= 15000:
+        plan_label = "Max"
     return {
         "credits": total,
         "purchased_credits": bal.credits,
@@ -200,7 +214,49 @@ async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Dep
         "total_purchased": bal.total_purchased,
         "stripe_enabled": bool(settings.STRIPE_API_KEY),
         "rollover_cap_multiplier": 2,
+        "role": role,
+        "plan": plan_label,
     }
+
+
+@router.post("/stripe/sync", summary="Stripe 成功页同步（webhook 延迟兜底）")
+async def stripe_sync_session(
+    session_id: str = Query(..., min_length=8),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    """Idempotently grant credits if checkout completed but webhook hasn't fired yet."""
+    if not settings.STRIPE_API_KEY:
+        raise HTTPException(status_code=503, detail="Stripe 未配置")
+    try:
+        import stripe
+        stripe.api_key = settings.STRIPE_API_KEY
+        sess = stripe.checkout.Session.retrieve(session_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"无法读取 Stripe session: {e}") from e
+
+    if sess.get("payment_status") not in ("paid", "no_payment_required"):
+        return {"synced": False, "status": sess.get("payment_status"), "reason": "not_paid_yet"}
+
+    meta = sess.get("metadata") or {}
+    order_no = meta.get("order_no")
+    if not order_no:
+        return {"synced": False, "reason": "missing order_no metadata"}
+
+    res = await db.execute(select(PaymentOrder).where(PaymentOrder.order_no == order_no))
+    order = res.scalar_one_or_none()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+    if order.user_id and int(order.user_id) != int(user_id):
+        raise HTTPException(status_code=403, detail="无权同步此订单")
+
+    if order.status != "paid":
+        order.status = "paid"
+        order.payment_id = sess.get("id") or order.payment_id
+    customer_email = (sess.get("customer_details") or {}).get("email")
+    balance = await _grant_order(db, order, email=customer_email)
+    summary = await billing_summary(db=db, user_id=user_id)
+    return {"synced": True, "balance": balance, "summary": summary}
 
 
 @router.get("/transactions", summary="积分流水")

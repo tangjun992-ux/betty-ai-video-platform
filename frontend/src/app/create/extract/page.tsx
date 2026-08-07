@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Upload, Loader2, Copy, ArrowRight, Sparkles, Video, Image as ImageIcon } from "lucide-react";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, apiAuthHeaders, estimateTool } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +28,9 @@ export default function ExtractPage() {
     mood?: string;
     honesty?: string;
     media_type_hint?: string;
+    charged_credits?: number;
+    social?: { platform?: string; honesty?: string; title?: string };
+    resolved_media_url?: string;
   } | null>(null);
 
   const onUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -59,6 +62,7 @@ export default function ExtractPage() {
       const res = await fetch(`${API_BASE}/generate/extract-prompt`, {
         method: "POST",
         body: fd,
+        headers: apiAuthHeaders(),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -163,9 +167,17 @@ export default function ExtractPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex items-center justify-between gap-2">
+              {result.mode === "heuristic" && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-200/90">
+                  本地启发式提取：未走 Vision，结果仅供起稿参考，不代表完整视频结构还原。
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-xs uppercase tracking-wide text-text-tertiary">
                   mode · {result.mode}
+                  {result.charged_credits != null && result.charged_credits > 0 && (
+                    <span className="ml-2 normal-case">−{result.charged_credits} 积分</span>
+                  )}
                 </span>
                 <button
                   type="button"
@@ -188,9 +200,14 @@ export default function ExtractPage() {
               {result.honesty && (
                 <p className="text-[11px] text-text-tertiary leading-relaxed">{result.honesty}</p>
               )}
+              {result.social?.honesty && (
+                <p className="text-[11px] text-text-secondary leading-relaxed border-l-2 border-brand/40 pl-2">
+                  {result.social.platform ? `[${result.social.platform}] ` : ""}{result.social.honesty}
+                </p>
+              )}
               <div className="flex flex-wrap gap-2 pt-2">
                 <Link
-                  href={`/create/${hint}?prompt=${encodeURIComponent(result.prompt)}`}
+                  href={`/create/${hint}?prompt=${encodeURIComponent(result.prompt)}${result.resolved_media_url ? `&image_url=${encodeURIComponent(result.resolved_media_url)}` : ""}`}
                   className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-white text-black text-sm font-medium"
                 >
                   {hint === "video" ? <Video className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}

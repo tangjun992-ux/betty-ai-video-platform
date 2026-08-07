@@ -259,6 +259,9 @@ export interface EstimateRequest {
   duration?: number;
   count?: number;
   post_lipsync?: boolean;
+  tool?: "lipsync" | "motion" | "performance";
+  tier?: "demo" | "studio";
+  with_talk?: boolean;
 }
 
 export interface EstimateResponse {
@@ -607,6 +610,37 @@ export async function estimateGeneration(req: EstimateRequest): Promise<Estimate
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
     throw new Error(e.detail || `估价失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Tool pages — lipsync / motion / performance pre-submit estimate */
+export async function estimateTool(req: Pick<EstimateRequest, "tool" | "tier" | "with_talk">): Promise<EstimateResponse> {
+  const res = await fetch(`${API_BASE}/generate/estimate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tool: req.tool,
+      tier: req.tier ?? "demo",
+      with_talk: req.with_talk ?? false,
+    }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `估价失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Stripe success page — idempotent grant if webhook lagged */
+export async function syncStripeSession(sessionId: string): Promise<{ synced: boolean; summary?: any; balance?: number }> {
+  const res = await fetch(`${API_BASE}/billing/stripe/sync?session_id=${encodeURIComponent(sessionId)}`, {
+    method: "POST",
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `同步失败: ${res.status}`);
   }
   return res.json();
 }

@@ -382,7 +382,26 @@ export default function AgentPage() {
     if (b) setBrief(b);
     setPhase("running"); setErr(null); setAssets([]); setPlan(null); pollStop.current = false;
     try {
-      const needed = 8;
+      const planRes = await fetch(`${API_BASE}/director/plan`, {
+        method: "POST",
+        headers: apiAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({
+          brief: b || "投放成片",
+          has_ref_image: refImage,
+          duration: dur,
+          ref_image_url: refImageUrl,
+          minimal: true,
+          scenario: sc || undefined,
+          identity_lock: identityLock,
+          export_placement: place || undefined,
+          template_id: opts?.templateId,
+        }),
+      });
+      let needed = 8;
+      if (planRes.ok) {
+        const pd = await planRes.json();
+        needed = pd.total_credits || pd.plan?.total_credits || needed;
+      }
       const ok = await ensureCreditsForReal(needed);
       if (!ok) { setPhase("idle"); return; }
       const res = await fetch(`${API_BASE}/director/run/oneclick`, {
@@ -563,7 +582,6 @@ export default function AgentPage() {
             if (cd.credits < needed) {
               setCreditNeeded(needed);
               setCreditGateOpen(true);
-              setPayTarget({ kind: "plan", id: "personal", cycle: "monthly" });
               setErr(`积分不足：并行变体约需 ${needed} 积分`);
               setVariantRunning(false);
               setPhase("idle");
@@ -638,9 +656,11 @@ export default function AgentPage() {
     if (v.final) {
       setAssets([v.final as Asset]);
       setPhase("done");
+      if (v.plan) saveSession(v.plan, [v.final as Asset]);
     } else if (v.plan) {
       setPhase("planned");
       setAssets([]);
+      saveSession(v.plan, []);
     }
     setErr(null);
   };
@@ -1140,6 +1160,7 @@ export default function AgentPage() {
                     </span>
                     <span className="text-[11px] text-text-secondary line-clamp-2">
                       {(v.axes_applied || []).join(" · ")}
+                      {v.plan?.total_credits ? ` · ${v.plan.total_credits} 积分` : ""}
                     </span>
                   </button>
                 ))}
@@ -1178,6 +1199,9 @@ export default function AgentPage() {
                       <div className="p-3 space-y-2">
                         <p className="text-xs font-semibold text-text-primary">{v.label || `变体 ${v.variant_id}`}</p>
                         <p className="text-[11px] text-text-secondary line-clamp-2">{(v.axes_applied || []).join(" · ")}</p>
+                        {v.plan?.total_credits != null && (
+                          <p className="text-[10px] text-text-tertiary">{v.plan.total_credits} 积分</p>
+                        )}
                         <button type="button" disabled={!v.final && !v.plan}
                           onClick={() => pickVariantWinner(v)}
                           className={cn(
@@ -1557,9 +1581,24 @@ export default function AgentPage() {
       </div>
       <PayModal
         target={payTarget}
-        onClose={() => setPayTarget(null)}
-        onPaid={() => { setShowUpgrade(false); void maybePromptUpgrade(); }}
+        onClose={() => { setPayTarget(null); setCreditGateOpen(false); }}
+        onPaid={() => { setShowUpgrade(false); setCreditGateOpen(false); void maybePromptUpgrade(); }}
       />
+      {creditGateOpen && creditNeeded > 0 && !payTarget && (
+        <div className="fixed inset-0 z-[55] flex items-center justify-center p-4 bg-black/60" onClick={() => setCreditGateOpen(false)}>
+          <div className="max-w-sm w-full rounded-2xl bg-cosmic-surface border border-cosmic-border p-6 text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="text-lg font-semibold text-text-primary mb-2">积分不足</p>
+            <p className="text-sm text-text-secondary mb-4">并行变体约需 <strong>{creditNeeded}</strong> 积分，请充值或升级套餐后继续。</p>
+            <button
+              className="btn-primary w-full mb-2"
+              onClick={() => setPayTarget({ kind: "plan", id: "personal", cycle: "monthly" })}
+            >
+              升级套餐
+            </button>
+            <button className="btn-secondary w-full" onClick={() => setCreditGateOpen(false)}>稍后</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
