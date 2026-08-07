@@ -31,6 +31,14 @@ export default function ExtractPage() {
     charged_credits?: number;
     social?: { platform?: string; honesty?: string; title?: string };
     resolved_media_url?: string;
+    viral_structure?: {
+      hook?: string;
+      cta?: string;
+      banner_hint?: string;
+      platform?: string;
+      agent_brief?: string;
+      honesty?: string;
+    };
   } | null>(null);
 
   const onUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,7 +99,7 @@ export default function ExtractPage() {
   const hint = result?.media_type_hint === "video" ? "video" : "image";
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-10">
+    <div className="max-w-5xl mx-auto px-4 py-10" data-testid="extract-page">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
         <h1 className="text-2xl md:text-3xl font-bold gradient-text-static mb-2">Prompt Extractor</h1>
         <p className="text-sm text-text-secondary max-w-xl">
@@ -166,7 +174,7 @@ export default function ExtractPage() {
               <p>提取结果将显示在这里</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4" data-testid="extract-result">
               {result.mode === "heuristic" && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-200/90">
                   本地启发式提取：未走 Vision，结果仅供起稿参考，不代表完整视频结构还原。
@@ -205,6 +213,32 @@ export default function ExtractPage() {
                   {result.social.platform ? `[${result.social.platform}] ` : ""}{result.social.honesty}
                 </p>
               )}
+              {result.viral_structure && (
+                <div
+                  className="rounded-lg border border-cosmic-border/60 bg-cosmic-subtle/40 p-3 space-y-2"
+                  data-testid="extract-viral-structure"
+                >
+                  <p className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide">
+                    URL-to-Viral 结构建议
+                  </p>
+                  {result.viral_structure.hook && (
+                    <p className="text-xs text-text-primary">
+                      <span className="text-text-tertiary">钩子 · </span>{result.viral_structure.hook}
+                    </p>
+                  )}
+                  {result.viral_structure.cta && (
+                    <p className="text-xs text-text-primary">
+                      <span className="text-text-tertiary">CTA · </span>{result.viral_structure.cta}
+                    </p>
+                  )}
+                  {result.viral_structure.banner_hint && (
+                    <p className="text-xs text-text-secondary">{result.viral_structure.banner_hint}</p>
+                  )}
+                  {result.viral_structure.honesty && (
+                    <p className="text-[10px] text-text-tertiary">{result.viral_structure.honesty}</p>
+                  )}
+                </div>
+              )}
               <div className="flex flex-wrap gap-2 pt-2">
                 <Link
                   href={`/create/${hint}?prompt=${encodeURIComponent(result.prompt)}${result.resolved_media_url ? `&image_url=${encodeURIComponent(result.resolved_media_url)}` : ""}`}
@@ -213,6 +247,13 @@ export default function ExtractPage() {
                   {hint === "video" ? <Video className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
                   用于生成
                   <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+                <Link
+                  href={`/agent?brief=${encodeURIComponent(result.viral_structure?.agent_brief || result.prompt)}`}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-brand/40 text-sm text-brand"
+                  data-testid="extract-agent-link"
+                >
+                  URL-to-Viral · Agent
                 </Link>
                 <Link
                   href={`/agent?brief=${encodeURIComponent(result.prompt)}`}

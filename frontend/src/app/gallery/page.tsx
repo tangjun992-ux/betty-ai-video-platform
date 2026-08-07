@@ -291,6 +291,7 @@ export default function GalleryPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="columns-2 md:columns-3 xl:columns-4 2xl:columns-5 gap-3 space-y-3"
+            data-testid="gallery-grid"
           >
             {filtered.map((item) => {
               const remixFallbackHref = (() => {
@@ -325,6 +326,7 @@ export default function GalleryPage() {
               return (
                 <div
                   key={item.id}
+                  data-testid="gallery-item"
                   className="group relative rounded-xl overflow-hidden break-inside-avoid bg-cosmic-deep ring-1 ring-cosmic-border hover:ring-brand/40 hover:shadow-card transition-all duration-300"
                   onMouseEnter={() => setHoveredId(item.id)}
                   onMouseLeave={() => setHoveredId(null)}
