@@ -24,8 +24,8 @@ def test_auto_promote_promotes_mapped_beta_on_outframe():
     from app.services.model_promotion import demote_model, maybe_auto_promote_from_smoke
 
     mid = "veo-3.1"
-    m = next(x for x in MODELS if x.id == mid)
-    assert m.status == "beta"
+    demote_model(mid, note="phase15 test setup")
+    assert next(x for x in MODELS if x.id == mid).status == "beta"
 
     with patch.dict(os.environ, {"MODEL_SMOKE_AUTO_PROMOTE": "1"}):
         report = {
@@ -45,8 +45,7 @@ def test_auto_promote_promotes_mapped_beta_on_outframe():
     assert r["skipped"] is False
     assert mid in r["promoted"]
     assert next(x for x in MODELS if x.id == mid).status == "active"
-
-    demote_model(mid, note="phase10 cleanup")
+    # veo-3.1 remains active in catalog after promote (phase 14 shelf)
 
 
 def test_auto_promote_ignores_non_outframe():

@@ -1275,6 +1275,13 @@ export interface SystemReadiness {
       validate_cmd: string;
       dry_run_cmd: string;
     };
+    checkout?: {
+      mode: string;
+      dev_grant: boolean;
+      checkout_ready: boolean;
+      note?: string;
+      blockers?: string[];
+    };
   };
   storage: {
     storage_type: string;
@@ -1372,6 +1379,27 @@ export async function getWebhookFailures(token: string, limit = 30): Promise<{ t
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Webhook failures: ${res.status}`);
+  return res.json();
+}
+
+export async function retryWebhookDelivery(token: string, taskId: string) {
+  const res = await fetch(`${API_BASE}/admin/model-health/webhook-failures/${encodeURIComponent(taskId)}/retry`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Webhook retry failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function retryAllWebhookFailures(token: string, limit = 10) {
+  const res = await fetch(`${API_BASE}/admin/model-health/webhook-failures/retry-all?limit=${limit}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Webhook retry-all failed: ${res.status}`);
   return res.json();
 }
 

@@ -12,6 +12,8 @@ import {
   getSystemReadiness,
   getWebhookFailures,
   promoteModel,
+  retryAllWebhookFailures,
+  retryWebhookDelivery,
   type PromotableResponse,
   type SystemReadiness,
   type WebhookFailure,
@@ -24,6 +26,7 @@ export default function AdminOpsPage() {
   const [promotable, setPromotable] = useState<PromotableResponse | null>(null);
   const [lastSmoke, setLastSmoke] = useState<{ available: boolean; report?: Record<string, unknown> } | null>(null);
   const [webhookFailures, setWebhookFailures] = useState<WebhookFailure[]>([]);
+  const [whBusy, setWhBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -123,6 +126,10 @@ export default function AdminOpsPage() {
                   k: "Price 环境变量",
                   v: `${readiness.stripe.bootstrap.price_envs_configured}/${readiness.stripe.bootstrap.price_envs_total}`,
                 }] : []),
+                ...(readiness.stripe.checkout ? [{
+                  k: "Checkout 模式",
+                  v: readiness.stripe.checkout.mode === "stripe" ? "Stripe" : readiness.stripe.checkout.dev_grant ? "dev-grant" : "blocked",
+                }] : []),
               ]}
             />
             <ReadinessCard
@@ -190,20 +197,66 @@ export default function AdminOpsPage() {
           </section>
 
           <section className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4">
-            <h2 className="text-sm font-medium mb-3 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500" />
-              Webhook 投递失败
-              <span className="text-text-tertiary font-normal">({webhookFailures.length})</span>
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h2 className="text-sm font-medium flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                Webhook 投递失败
+                <span className="text-text-tertiary font-normal">({webhookFailures.length})</span>
+              </h2>
+              {webhookFailures.length > 0 && (
+                <button
+                  type="button"
+                  disabled={whBusy === "all"}
+                  onClick={async () => {
+                    if (!token) return;
+                    setWhBusy("all");
+                    try {
+                      await retryAllWebhookFailures(token);
+                      const wh = await getWebhookFailures(token);
+                      setWebhookFailures(wh.failures);
+                    } catch (e: unknown) {
+                      setError(e instanceof Error ? e.message : "批量重试失败");
+                    } finally {
+                      setWhBusy(null);
+                    }
+                  }}
+                  className="px-2 py-1 rounded text-xs border border-cosmic-border hover:bg-cosmic-subtle disabled:opacity-50"
+                >
+                  {whBusy === "all" ? "重试中…" : "全部重试"}
+                </button>
+              )}
+            </div>
             {webhookFailures.length > 0 ? (
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {webhookFailures.map((f) => (
-                  <div key={f.task_id} className="text-xs border-t border-cosmic-border/50 pt-2 first:border-t-0 first:pt-0">
-                    <p className="font-mono text-text-primary">{f.task_id.slice(0, 12)}… · {f.status}</p>
-                    <p className="text-text-secondary truncate">{f.webhook_url}</p>
-                    <p className="text-amber-600/90">
-                      {f.status_code ? `HTTP ${f.status_code}` : "—"} · {f.attempts ?? "?"} 次 · {f.reason || "未知错误"}
-                    </p>
+                  <div key={f.task_id} className="text-xs border-t border-cosmic-border/50 pt-2 first:border-t-0 first:pt-0 flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-text-primary">{f.task_id.slice(0, 12)}… · {f.status}</p>
+                      <p className="text-text-secondary truncate">{f.webhook_url}</p>
+                      <p className="text-amber-600/90">
+                        {f.status_code ? `HTTP ${f.status_code}` : "—"} · {f.attempts ?? "?"} 次 · {f.reason || "未知错误"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={whBusy === f.task_id}
+                      onClick={async () => {
+                        if (!token) return;
+                        setWhBusy(f.task_id);
+                        try {
+                          await retryWebhookDelivery(token, f.task_id);
+                          const wh = await getWebhookFailures(token);
+                          setWebhookFailures(wh.failures);
+                        } catch (e: unknown) {
+                          setError(e instanceof Error ? e.message : "重试失败");
+                        } finally {
+                          setWhBusy(null);
+                        }
+                      }}
+                      className="shrink-0 px-2 py-1 rounded text-xs bg-brand/90 text-white hover:bg-brand disabled:opacity-50"
+                    >
+                      {whBusy === f.task_id ? "…" : "重试"}
+                    </button>
                   </div>
                 ))}
               </div>
