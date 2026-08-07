@@ -117,3 +117,28 @@ export async function submitImageTask(
   if (!body.task_id) throw new Error("submitImageTask: missing task_id");
   return body.task_id as string;
 }
+
+/** Poll task status until terminal or timeout (needs Celery for async generate). */
+export async function pollTaskUntilDone(
+  request: APIRequestContext,
+  guestId: string,
+  taskId: string,
+  timeoutMs = 120_000,
+): Promise<Record<string, unknown>> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const res = await request.get(`${API_BASE}/tasks/${taskId}`, {
+      headers: { "X-Guest-Id": guestId },
+    });
+    if (!res.ok()) {
+      throw new Error(`pollTaskUntilDone failed: ${res.status()} ${await res.text()}`);
+    }
+    const body = (await res.json()) as Record<string, unknown>;
+    const status = body.status as string;
+    if (status === "completed" || status === "failed" || status === "cancelled") {
+      return body;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(`Task ${taskId} did not finish within ${timeoutMs}ms`);
+}

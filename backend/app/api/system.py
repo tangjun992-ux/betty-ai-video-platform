@@ -232,5 +232,18 @@ async def readiness():
             "last_mode": (last_smoke or {}).get("mode"),
             "outframe_ok": (last_smoke or {}).get("outframe_ok", 0),
             "failed_count": len((last_smoke or {}).get("failed") or []),
+            "last_auto_promote": _last_auto_promote_summary(last_smoke),
         },
+        "ops_alerts": __import__("app.services.ops_alerts", fromlist=["ops_alerts_status"]).ops_alerts_status(),
+    }
+
+
+def _last_auto_promote_summary(last_smoke: dict | None) -> dict:
+    ap = (last_smoke or {}).get("auto_promote") or {}
+    promoted = list(ap.get("promoted") or [])
+    return {
+        "promoted": promoted,
+        "count": ap.get("count", len(promoted)),
+        "skipped": ap.get("skipped"),
+        "reason": ap.get("reason"),
     }

@@ -166,6 +166,12 @@ export default function AdminOpsPage() {
               {readiness.smoke.last_ts && (
                 <span>最近 smoke: {readiness.smoke.last_ts} · outframe {readiness.smoke.outframe_ok ?? 0}</span>
               )}
+              {readiness.smoke.last_auto_promote && readiness.smoke.last_auto_promote.count > 0 && (
+                <span>最近 auto-promote: {readiness.smoke.last_auto_promote.promoted.join(", ")}</span>
+              )}
+              {readiness.ops_alerts && (
+                <span>Webhook 告警: {readiness.ops_alerts.webhook_failure_alerts ? "已配置" : "未配置"}</span>
+              )}
             </div>
             {promotable && promotable.promotable.length > 0 ? (
               <div className="space-y-2">

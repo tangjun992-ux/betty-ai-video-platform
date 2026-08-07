@@ -106,15 +106,19 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
-      - name: Start API
+      - name: Start API + Celery worker
         working-directory: backend
         env:
           ENV: development
           DATABASE_URL: "sqlite+aiosqlite:////tmp/e2e.db"
           REDIS_URL: "redis://127.0.0.1:6379/0"
+          CELERY_BROKER_URL: "redis://127.0.0.1:6379/1"
+          CELERY_RESULT_BACKEND: "redis://127.0.0.1:6379/2"
         run: |
           python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 &
+          celery -A celery_app worker -Q video_q,image_q,pipeline_q,director_q,celery --concurrency=2 --loglevel=warning &
           for i in $(seq 1 45); do curl -sf http://127.0.0.1:8000/health && break; sleep 1; done
+          sleep 3
       - name: Start frontend
         working-directory: frontend
         env:
