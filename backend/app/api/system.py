@@ -193,7 +193,7 @@ async def readiness():
     from app.services.storage_ready import storage_status
     from app.services.oidc_ready import oidc_status
     from app.services.model_catalog import catalog_integrity
-    from app.services.model_promotion import auto_promote_enabled
+    from app.services.model_promotion import auto_promote_enabled, mapping_promote_enabled
     from app.services.model_smoke import get_last_smoke
     from app.config import settings
 
@@ -223,6 +223,7 @@ async def readiness():
         },
         "smoke": {
             "auto_promote_enabled": auto_promote_enabled(),
+            "mapping_promote_enabled": mapping_promote_enabled(),
             "last_ts": (last_smoke or {}).get("ts"),
             "last_mode": (last_smoke or {}).get("mode"),
             "outframe_ok": (last_smoke or {}).get("outframe_ok", 0),

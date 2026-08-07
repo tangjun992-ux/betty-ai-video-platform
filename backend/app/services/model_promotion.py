@@ -111,6 +111,43 @@ def maybe_auto_promote_from_smoke(report: dict[str, Any]) -> dict[str, Any]:
     return {"skipped": False, "promoted": promoted, "already_active": already, "count": len(promoted)}
 
 
+_MAPPING_PROMOTE_PATHS = frozenset({
+    "mapping_only", "demo_render",
+})
+
+
+def mapping_promote_enabled() -> bool:
+    return os.getenv("MODEL_SMOKE_MAPPING_PROMOTE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def maybe_promote_from_mapping_smoke(report: dict[str, Any]) -> dict[str, Any]:
+    """Promote mapped-beta models that passed mapping smoke (gated; not outframe)."""
+    if not mapping_promote_enabled():
+        return {"skipped": True, "reason": "MODEL_SMOKE_MAPPING_PROMOTE not enabled", "promoted": []}
+    if report.get("skipped"):
+        return {"skipped": True, "reason": report.get("reason") or "smoke skipped", "promoted": []}
+
+    promoted: list[str] = []
+    for detail in report.get("details") or []:
+        if not detail.get("ok"):
+            continue
+        path = (detail.get("evidence") or {}).get("path") or detail.get("path") or ""
+        if path not in _MAPPING_PROMOTE_PATHS:
+            continue
+        mid = detail.get("model_id")
+        if not mid or mid not in GATEWAY_MAPPED_BETA_IDS:
+            continue
+        try:
+            r = promote_model(mid, note="auto-promote from mapping smoke")
+            if not r.get("already"):
+                promoted.append(mid)
+                logger.info("mapping auto-promoted model %s (path=%s)", mid, path)
+        except HTTPException as e:
+            logger.warning("mapping auto-promote skipped %s: %s", mid, e.detail)
+
+    return {"skipped": False, "promoted": promoted, "count": len(promoted)}
+
+
 def demote_model(model_id: str, *, to: Literal["beta", "lab"] = "beta", note: str | None = None) -> dict:
     mid = model_id.strip()
     m = _find_model(mid)

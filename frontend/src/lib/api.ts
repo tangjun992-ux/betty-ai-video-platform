@@ -290,6 +290,15 @@ export interface TaskProgress {
   model?: string;
   started_at?: string;
   estimated_completion?: string;
+  sla?: TaskSla;
+}
+
+export interface TaskSla {
+  refund?: { refunded?: boolean; amount?: number; reason?: string; note?: string; at?: string };
+  webhook?: Record<string, unknown>;
+  webhook_note?: string;
+  hints?: string[];
+  retryable?: boolean;
 }
 
 export interface TaskResult {
@@ -304,6 +313,8 @@ export interface TaskResult {
   completed_at?: string;
   error_message?: string;
   parameters?: Record<string, any>;
+  webhook?: Record<string, unknown>;
+  sla?: TaskSla;
 }
 
 /** Submit a generation request to the backend */
@@ -359,6 +370,21 @@ export async function cancelTask(taskId: string): Promise<{ task_id: string; sta
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || `取消任务失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Retry a failed/cancelled image/video generation task (new task_id). */
+export async function retryTask(taskId: string): Promise<{
+  task_id: string; status: string; retry_from: string; poll_url: string; estimated_cost_credits?: number;
+}> {
+  const res = await fetch(`${API_BASE}/tasks/${encodeURIComponent(taskId)}/retry`, {
+    method: "POST",
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || `重试任务失败: ${res.status}`);
   }
   return res.json();
 }

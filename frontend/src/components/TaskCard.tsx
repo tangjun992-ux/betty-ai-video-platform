@@ -3,6 +3,7 @@
 interface TaskCardProps {
   task: any;
   onStatusChange?: () => void;
+  onRetry?: (taskId: string) => void | Promise<void>;
 }
 
 const STATUS_MAP: Record<string, { icon: string; color: string; label: string }> = {
@@ -16,14 +17,19 @@ const STATUS_MAP: Record<string, { icon: string; color: string; label: string }>
   cancelled: { icon: "🚫", color: "text-dark-500", label: "已取消" },
 };
 
-export function TaskCard({ task, onStatusChange }: TaskCardProps) {
+export function TaskCard({ task, onStatusChange, onRetry }: TaskCardProps) {
   const status = task.status || "queued";
   const { icon, color, label } = STATUS_MAP[status] || STATUS_MAP.queued;
 
   const results = task.results || [];
   const mediaResult = results.find((r: any) => !r.error);
 
-  const handleRetry = () => {
+  const handleRetry = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (onRetry) {
+      void onRetry(task.task_id);
+      return;
+    }
     if (onStatusChange) onStatusChange();
   };
 
@@ -68,6 +74,9 @@ export function TaskCard({ task, onStatusChange }: TaskCardProps) {
               <span className="text-xs text-accent-cyan">
                 {task.progress}%
               </span>
+            )}
+            {task.sla?.hints?.[0] && status === "queued" && (
+              <span className="text-xs text-text-tertiary">{task.sla.hints[0]}</span>
             )}
           </div>
 
@@ -138,12 +147,19 @@ export function TaskCard({ task, onStatusChange }: TaskCardProps) {
                 )}
               </>
             ) : status === "failed" ? (
-              <button
-                onClick={handleRetry}
-                className="px-3 py-1.5 bg-red-900/30 text-red-400 border border-red-800 rounded text-xs hover:bg-red-900/50 transition"
-              >
-                🔄 刷新状态
-              </button>
+              <>
+                {task.sla?.refund?.refunded && (
+                  <span className="text-xs text-emerald-500 self-center">已退 {task.sla.refund.amount} 积分</span>
+                )}
+                {task.sla?.retryable !== false && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRetry(); }}
+                    className="px-3 py-1.5 bg-red-900/30 text-red-400 border border-red-800 rounded text-xs hover:bg-red-900/50 transition"
+                  >
+                    🔄 重试
+                  </button>
+                )}
+              </>
             ) : status === "generating" ? (
               <div className="flex items-center gap-2 text-xs text-accent-cyan">
                 <div className="w-3 h-3 border-2 border-accent-cyan border-t-transparent rounded-full animate-spin" />

@@ -45,15 +45,19 @@ def smoke_live_video_weekly(self):
         return report
 
     os.environ.setdefault("MODEL_SMOKE_LIVE_VIDEO", "1")
-    from app.services.model_smoke import merge_smoke_reports, run_beta_video_probe, run_live_video_sample
-    from app.services.model_promotion import maybe_auto_promote_from_smoke
+    from app.services.model_smoke import merge_smoke_reports, run_beta_video_probe, run_live_video_sample, run_mapping_beta_probe
+    from app.services.model_promotion import maybe_auto_promote_from_smoke, maybe_promote_from_mapping_smoke
 
     report = run_live_video_sample()
     beta_report = run_beta_video_probe()
-    combined = merge_smoke_reports(report, beta_report)
+    mapping_report = run_mapping_beta_probe()
+    combined = merge_smoke_reports(report, beta_report, mapping_report)
     promote = maybe_auto_promote_from_smoke(combined)
+    mapping_promote = maybe_promote_from_mapping_smoke(mapping_report)
     report["beta_probe"] = beta_report
+    report["mapping_probe"] = mapping_report
     report["auto_promote"] = promote
+    report["mapping_promote"] = mapping_promote
     logger.info(
         "live_video weekly smoke: probed=%s outframe_ok=%s beta_probed=%s promoted=%s failed=%s",
         report["probed"], report["outframe_ok"], beta_report.get("probed", 0),

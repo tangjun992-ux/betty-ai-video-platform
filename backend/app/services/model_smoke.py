@@ -292,6 +292,43 @@ DEFAULT_LIVE_IMAGE_SAMPLE = ("gpt-image-2", "nano-banana", "nano-banana-pro", "i
 
 # Beta SKUs eligible for weekly rotation probe (mapped, not yet active).
 DEFAULT_BETA_VIDEO_PROBE = ("veo-3.1-fast", "wan-2.2", "hailuo-02", "veo-3.1", "veo-3")
+DEFAULT_MAPPING_BETA_PROBE = ("veo-3.1", "veo-3")
+
+
+def run_mapping_beta_probe(models: list[str] | None = None) -> dict:
+    """Mapping-only probe for remaining mapped-beta SKUs (no paid outframe)."""
+    from app.api.models_info import MODELS
+
+    models = list(models or DEFAULT_MAPPING_BETA_PROBE)
+    by_id = {m.id: m for m in MODELS}
+    report: dict[str, Any] = {
+        "mode": "mapping_beta_probe",
+        "probed": 0,
+        "ok": 0,
+        "failed": [],
+        "details": [],
+        "beta_models": models,
+    }
+    for mid in models:
+        m = by_id.get(mid)
+        if not m:
+            report["failed"].append(mid)
+            report["details"].append({"model_id": mid, "ok": False, "error": "not in catalog"})
+            continue
+        report["probed"] += 1
+        media = list(m.capabilities.media_types or ["video"])
+        probe = probe_model(mid, media, mode="mapping")
+        path = (probe.get("evidence") or {}).get("path") or ""
+        report["details"].append({"model_id": mid, **probe, "path": path})
+        if probe.get("ok"):
+            report["ok"] += 1
+            from app.services.model_health import model_health
+            model_health.clear_quarantine(mid)
+        else:
+            report["failed"].append(mid)
+
+    report["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    return report
 
 
 def beta_probe_rotation(*, media: str = "video", n: int = 2) -> list[str]:

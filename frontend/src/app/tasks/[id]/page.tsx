@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { API_BASE, getTaskStatus, listTasks } from "@/lib/api";
+import { API_BASE, cancelTask, getTaskStatus, listTasks, retryTask } from "@/lib/api";
 
 /** Relative media paths (/api/v1/media/…) are served by the API host, not the
     frontend origin — prefix them so results render regardless of where we run. */
@@ -20,6 +20,7 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [similarTasks, setSimilarTasks] = useState<any[]>([]);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
 
   const fetchTask = useCallback(async () => {
     try {
@@ -89,7 +90,7 @@ export default function TaskDetailPage() {
   const paramsData = task.parameters || {};
 
   return (
-    <main className="max-w-4xl mx-auto px-4 py-8">
+    <main className="max-w-4xl mx-auto px-4 py-8" data-testid="task-detail-page">
       {/* Back button + status */}
       <div className="flex items-center justify-between mb-6">
         <button onClick={() => router.back()}
@@ -104,7 +105,12 @@ export default function TaskDetailPage() {
         <h1 className="text-xl font-bold mb-3">{task.current_stage === "completed" ? "✅ 已完成" : task.current_stage === "failed" ? "❌ 失败" : `⚙️ ${task.current_stage || "处理中"}`}</h1>
         <p className="text-dark-300 leading-relaxed mb-4">{task.full_prompt || "无提示词"}</p>
 
-        {/* Progress */}
+        {/* Progress + SLA hints */}
+        {task.sla?.hints && task.sla.hints.length > 0 && !["completed", "failed", "cancelled"].includes(task.status) && (
+          <div className="mb-3 text-xs text-accent-cyan/90 space-y-0.5" data-testid="task-sla-hints">
+            {task.sla.hints.map((h: string) => <p key={h}>{h}</p>)}
+          </div>
+        )}
         {task.status === "generating" && task.progress > 0 && (
           <div className="w-full bg-dark-700 rounded-full h-2 mb-4">
             <div className="bg-gradient-to-r from-accent-cyan to-teal-400 h-2 rounded-full transition-all"
@@ -186,12 +192,71 @@ export default function TaskDetailPage() {
         </div>
       )}
 
-      {/* Error */}
+      {/* Error + refund + retry */}
       {task.status === "failed" && (
-        <div className="bg-red-900/20 border border-red-800 rounded-xl p-4 mb-6">
+        <div className="bg-red-900/20 border border-red-800 rounded-xl p-4 mb-6" data-testid="task-failed-panel">
           <div className="text-red-400 font-medium mb-1">❌ 生成失败</div>
           <div className="text-sm text-red-300">{task.error_message}</div>
+          {task.sla?.refund?.refunded && (
+            <p className="text-xs text-emerald-400/90 mt-2">
+              已退还 {task.sla.refund.amount ?? "—"} 积分
+            </p>
+          )}
+          {task.sla?.refund?.note && !task.sla?.refund?.refunded && (
+            <p className="text-xs text-text-secondary mt-2">{task.sla.refund.note}</p>
+          )}
+          {task.sla?.retryable && (
+            <button
+              type="button"
+              disabled={actionBusy === "retry"}
+              data-testid="task-retry-btn"
+              onClick={async () => {
+                setActionBusy("retry");
+                try {
+                  const r = await retryTask(taskId);
+                  router.push(`/tasks/${r.task_id}`);
+                } catch (e: unknown) {
+                  alert(e instanceof Error ? e.message : "重试失败");
+                } finally {
+                  setActionBusy(null);
+                }
+              }}
+              className="mt-3 px-4 py-2 rounded-lg bg-brand text-white text-sm hover:bg-brand-strong disabled:opacity-50"
+            >
+              {actionBusy === "retry" ? "重试中…" : "一键重试（新任务）"}
+            </button>
+          )}
         </div>
+      )}
+
+      {/* Active cancel */}
+      {!["completed", "failed", "cancelled"].includes(task.status) && (
+        <div className="mb-6">
+          <button
+            type="button"
+            disabled={actionBusy === "cancel"}
+            data-testid="task-cancel-btn"
+            onClick={async () => {
+              setActionBusy("cancel");
+              try {
+                await cancelTask(taskId);
+                await fetchTask();
+              } catch (e: unknown) {
+                alert(e instanceof Error ? e.message : "取消失败");
+              } finally {
+                setActionBusy(null);
+              }
+            }}
+            className="px-4 py-2 rounded-lg border border-red-500/40 text-red-400 text-sm hover:bg-red-500/10 disabled:opacity-50"
+          >
+            {actionBusy === "cancel" ? "取消中…" : "取消任务并退还积分"}
+          </button>
+        </div>
+      )}
+
+      {/* Webhook status */}
+      {task.sla?.webhook_note && (
+        <p className="text-xs text-text-tertiary mb-4" data-testid="task-webhook-note">{task.sla.webhook_note}</p>
       )}
 
       {/* Timestamps */}
