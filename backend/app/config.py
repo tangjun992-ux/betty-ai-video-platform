@@ -54,6 +54,8 @@ class Settings(BaseSettings):
     # Daily credit caps via gateway (0 = unlimited)
     GATEWAY_USER_DAILY_CREDIT_CAP: float = float(os.getenv("GATEWAY_USER_DAILY_CREDIT_CAP", "0"))
     GATEWAY_TEAM_DAILY_CREDIT_CAP: float = float(os.getenv("GATEWAY_TEAM_DAILY_CREDIT_CAP", "0"))
+    # Production public health returns minimal fields (no key pool suffixes)
+    GATEWAY_HEALTH_PUBLIC_MINIMAL: str = os.getenv("GATEWAY_HEALTH_PUBLIC_MINIMAL", "")
 
     # LiteLLM proxy (Phase 2 — LLM/chat only, not media generation)
     LITELLM_PROXY_URL: str = os.getenv("LITELLM_PROXY_URL", "")

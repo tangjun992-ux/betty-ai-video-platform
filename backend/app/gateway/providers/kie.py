@@ -112,4 +112,33 @@ class KieBackend(ProviderBackend):
                 )},
             )
 
+        if capability == Capability.IMAGE_FACE_SWAP:
+            return await adapter.face_swap(
+                face_url=kwargs.get("face_url", ""),
+                target_url=kwargs.get("target_url", ""),
+                prompt=kwargs.get("prompt"),
+                image_size=kwargs.get("image_size", "auto"),
+                model_id=remote_model,
+            )
+
+        if capability == Capability.IMAGE_UPSCALE:
+            return await adapter.upscale_image(
+                image_url=kwargs.get("image_url", ""),
+                factor=str(kwargs.get("factor", "2")),
+                model_id=remote_model,
+            )
+
+        if capability == Capability.IMAGE_REMOVE_BG:
+            return await adapter.remove_background(
+                image_url=kwargs.get("image_url", ""),
+                model_id=remote_model,
+            )
+
+        if capability == Capability.IMAGE_EXTEND:
+            return await adapter.extend_image(
+                image_url=kwargs.get("image_url", ""),
+                target_ratio=kwargs.get("target_ratio", "16:9"),
+                prompt=kwargs.get("prompt", ""),
+            )
+
         raise RuntimeError(f"KIE backend does not support capability: {capability.value}")

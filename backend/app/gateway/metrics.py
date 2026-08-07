@@ -52,6 +52,14 @@ class GatewayMetrics:
         self._incr(f"{PREFIX}:req:{capability}:{provider}:{status}")
         if fallback:
             self._incr(f"{PREFIX}:fallback:{capability}:{provider}")
+        try:
+            from app.metrics import record_gateway_request
+            record_gateway_request(
+                provider=provider, capability=capability,
+                success=success, fallback=fallback,
+            )
+        except Exception:
+            pass
 
     def snapshot(self) -> dict:
         client = self._client()

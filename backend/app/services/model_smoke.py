@@ -52,14 +52,53 @@ def probe_model(model_id: str, media_types: list[str], *, mode: str | None = Non
             # Mapping mode with key: validate adapter + map only (no paid gen).
             return _ok(started, mode, evidence={"kie_id": kie_id, "path": "mapping_only", "key": True})
 
-        # Live paid path
-        adapter = KieAdapter()
-        if not adapter.is_available():
-            return _fail(started, mode, "KIE_API_KEY not configured for live smoke")
+        # Live paid path — via Gateway when enabled (multi-provider + idempotency)
+        from app.gateway import gateway_enabled
 
         import asyncio
 
         async def _live():
+            if gateway_enabled():
+                from app.gateway import gateway
+                if "image" in media_types:
+                    gw = await gateway.generate_image(
+                        model=model_id,
+                        prompt="smoke test abstract color square",
+                        size="512x512",
+                        count=1,
+                        trace_id=f"smoke-{model_id}",
+                        estimated_cost=0,
+                    )
+                    url = getattr(gw.result, "media_url", "") or ""
+                    if not url:
+                        raise RuntimeError("live image smoke returned empty url")
+                    return {
+                        "kie_id": kie_id, "path": "live_image_gateway",
+                        "provider": gw.provider_used, "url_prefix": url[:48],
+                    }
+                if "video" in media_types:
+                    if mode != "live_video":
+                        return {"kie_id": kie_id, "path": "live_skipped_video", "note": "set MODEL_SMOKE_LIVE_VIDEO=1"}
+                    gw = await gateway.generate_video(
+                        model=model_id,
+                        prompt="smoke test short motion",
+                        duration=5,
+                        resolution="720p",
+                        trace_id=f"smoke-{model_id}",
+                        estimated_cost=0,
+                    )
+                    url = getattr(gw.result, "media_url", "") or ""
+                    if not url:
+                        raise RuntimeError("live video smoke returned empty url")
+                    return {
+                        "kie_id": kie_id, "path": "live_video_gateway",
+                        "provider": gw.provider_used, "url_prefix": url[:48],
+                    }
+                raise RuntimeError(f"unsupported media_types={media_types}")
+
+            adapter = KieAdapter()
+            if not adapter.is_available():
+                raise RuntimeError("KIE_API_KEY not configured for live smoke")
             if "image" in media_types:
                 res = await adapter.generate_image(
                     "smoke test abstract color square",
@@ -73,9 +112,7 @@ def probe_model(model_id: str, media_types: list[str], *, mode: str | None = Non
                 return {"kie_id": kie_id, "path": "live_image", "url_prefix": url[:48]}
             if "video" in media_types:
                 if mode != "live_video":
-                    # Live image-only day: video models get mapping+key check only.
                     return {"kie_id": kie_id, "path": "live_skipped_video", "note": "set MODEL_SMOKE_LIVE_VIDEO=1"}
-                # Seedance/Kling reject sub-5s durations (422 Invalid duration).
                 res = await adapter.generate_video(
                     "smoke test short motion",
                     model_id=model_id,
@@ -142,7 +179,7 @@ def run_active_smoke(*, mode: str | None = None) -> dict:
         results["details"].append({"model_id": m.id, **probe})
         path = (probe.get("evidence") or {}).get("path") or ""
         is_skip = path.startswith("live_skipped")
-        is_outframe = path in ("live_image", "live_video")
+        is_outframe = path in ("live_image", "live_video", "live_image_gateway", "live_video_gateway")
         is_mapping = path in ("mapping_only", "demo_render")
         if probe["ok"]:
             # Honesty: only paid outframe paths inflate success_rate used by Auto router.
@@ -283,7 +320,7 @@ def run_live_video_sample(models: list[str] | tuple[str, ...] | None = None) -> 
         probe = probe_model(mid, media, mode="live_video")
         report["details"].append({"model_id": mid, **probe})
         path = (probe.get("evidence") or {}).get("path") or ""
-        if probe.get("ok") and path == "live_video":
+        if probe.get("ok") and path in ("live_video", "live_video_gateway"):
             model_health.record_success(mid, probe.get("latency_ms") or 0)
             model_health.clear_quarantine(mid)
             report["ok"] += 1
@@ -335,7 +372,7 @@ def run_live_image_sample(models: list[str] | tuple[str, ...] | None = None) -> 
         probe = probe_model(mid, media, mode="live")
         report["details"].append({"model_id": mid, **probe})
         path = (probe.get("evidence") or {}).get("path") or ""
-        if probe.get("ok") and path == "live_image":
+        if probe.get("ok") and path in ("live_image", "live_image_gateway"):
             model_health.record_success(mid, probe.get("latency_ms") or 0)
             model_health.clear_quarantine(mid)
             report["ok"] += 1

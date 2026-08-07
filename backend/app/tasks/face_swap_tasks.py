@@ -80,14 +80,16 @@ def process_face_swap(self, db_task_id: str, face_url: str, target_url: str, pro
     try:
         import asyncio
         from app.gateway import gateway, gateway_enabled
+        from app.tasks.gateway_context import gateway_call_kwargs
         from app.services.media_store import persist_results
 
         async def _run():
             if gateway_enabled():
-                return await gateway.face_swap(
+                gw = await gateway.face_swap(
                     face_url=face_url, target_url=target_url, prompt=prompt or None,
-                    trace_id=db_task_id,
+                    **gateway_call_kwargs(db_task_id),
                 )
+                return gw.result
             from app.adapters.kie_adapter import KieAdapter
             from app.adapters.demo_provider import _local_media_path
 

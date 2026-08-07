@@ -92,6 +92,7 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
     _broadcast(db_task_id, 10, "motion", "Performance：原生 Motion Control…")
 
     from app.gateway import gateway
+    from app.tasks.gateway_context import gateway_call_kwargs
     from app.services.media_store import persist_results
 
     output = []
@@ -108,7 +109,7 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
             resolution="1080p" if studio else "720p",
             studio=studio,
             character_orientation="video",
-            trace_id=db_task_id,
+            **gateway_call_kwargs(db_task_id),
         ))
         motion = gw.result
         murl = getattr(motion, "media_url", "") or ""
@@ -140,7 +141,8 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
             talk_audio = audio_url
             if not talk_audio and voice_text:
                 tgw = _run_async(gateway.generate_speech(
-                    voice_text, voice=params.get("voice") or "Rachel", trace_id=db_task_id,
+                    voice_text, voice=params.get("voice") or "Rachel",
+                    **gateway_call_kwargs(db_task_id, include_cost=False),
                 ))
                 tts = tgw.result
                 talk_audio = getattr(tts, "media_url", "") or ""
@@ -163,7 +165,7 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
                     audio_url=aud_pub,
                     prompt="natural talking performance on camera",
                     resolution="720p" if studio else "480p",
-                    trace_id=db_task_id,
+                    **gateway_call_kwargs(db_task_id, include_cost=False),
                 ))
                 lip = lgw.result
                 lurl = getattr(lip, "media_url", "") or ""

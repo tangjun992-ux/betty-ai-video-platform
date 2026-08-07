@@ -138,6 +138,7 @@ def generate_video_task(
     try:
         if use_gateway:
             from app.gateway import gateway
+            from app.tasks.gateway_context import gateway_call_kwargs
             gw = _run_async(gateway.generate_video(
                 model=model,
                 prompt=prompt,
@@ -149,7 +150,7 @@ def generate_video_task(
                 reference_audios=ref_audios,
                 omni=omni,
                 generate_audio=bool(params.get("generate_audio")),
-                trace_id=db_task_id,
+                **gateway_call_kwargs(db_task_id),
             ))
             result = gw.result
             if gw.fallback_used:

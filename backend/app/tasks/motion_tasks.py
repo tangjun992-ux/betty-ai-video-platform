@@ -110,6 +110,7 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
         motion_prompt = f"{motion_prompt}, {style} style"
 
     from app.gateway import gateway, gateway_enabled
+    from app.tasks.gateway_context import gateway_call_kwargs
     motion_model = (
         model
         or params.get("model")
@@ -131,7 +132,7 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
                 studio=studio,
                 character_orientation=params.get("character_orientation") or "video",
                 background_source=params.get("background_source"),
-                trace_id=db_task_id,
+                **gateway_call_kwargs(db_task_id),
             ))
             result = gw.result
             rd = result.to_dict() if hasattr(result, "to_dict") else result
@@ -156,7 +157,7 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
                         tgw = _run_async(gateway.generate_speech(
                             voice_text,
                             voice=params.get("voice") or "Rachel",
-                            trace_id=db_task_id,
+                            **gateway_call_kwargs(db_task_id, include_cost=False),
                         ))
                         tts_d = tgw.result.to_dict() if hasattr(tgw.result, "to_dict") else tgw.result
                         audio_url_out = tts_d.get("media_url") or tts_d.get("url") or ""

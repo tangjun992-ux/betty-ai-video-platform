@@ -79,6 +79,28 @@ routes:
     chain:
       - { provider: kie, remote_model: google/nano-banana-edit, priority: 1, timeout_s: 240 }
 
+  # ── Image tools (routed — failover + budget + metrics) ───
+  - capability: image.face_swap
+    model: face-swap
+    description: "Face compose via nano-banana-edit i2i"
+    chain:
+      - { provider: kie, remote_model: google/nano-banana-edit, priority: 1, timeout_s: 240 }
+
+  - capability: image.upscale
+    model: image-upscale
+    chain:
+      - { provider: kie, remote_model: topaz/image-upscale, priority: 1, timeout_s: 300 }
+
+  - capability: image.remove_bg
+    model: remove-background
+    chain:
+      - { provider: kie, remote_model: recraft/remove-background, priority: 1, timeout_s: 180 }
+
+  - capability: image.extend
+    model: image-extend
+    chain:
+      - { provider: kie, remote_model: google/nano-banana-edit, priority: 1, timeout_s: 240 }
+
   # ── Lipsync / talking avatar ──────────────────────────────
   - capability: lipsync
     model: kling-ai-avatar

@@ -42,23 +42,41 @@ async def execute_route(
     Raises RuntimeError when all hops fail or no route/targets exist.
     """
     from app.gateway.budget import gateway_budget
+    from app.gateway.idempotency import gateway_idempotency
 
-    budget = gateway_budget.check(
-        user_id=user_id, team_id=team_id, estimated_cost=estimated_cost,
-    )
-    if not budget.allowed:
-        raise RuntimeError(budget.reason)
+    if trace_id:
+        cached = gateway_idempotency.load_completed(trace_id)
+        if cached:
+            logger.info("[gateway] idempotent skip — task %s already completed", trace_id[:8])
+            return cached
+        if not gateway_idempotency.acquire_lock(trace_id):
+            raise RuntimeError(
+                f"Gateway execution already in progress for task {trace_id[:8]}"
+            )
 
-    route = resolve_route(capability, model)
-    if not route:
-        raise RuntimeError(f"No gateway route for {capability.value}/{model}")
+    try:
+        budget = gateway_budget.check(
+            user_id=user_id, team_id=team_id, estimated_cost=estimated_cost,
+        )
+        if not budget.allowed:
+            raise RuntimeError(budget.reason)
 
-    result = await _execute_chain(
-        route, model, trace_id=trace_id, allow_fallback=allow_fallback, **kwargs,
-    )
-    gateway_budget.record(result.cost, user_id=user_id, team_id=team_id)
-    _persist_gateway_meta(trace_id, result)
-    return result
+        route = resolve_route(capability, model)
+        if not route:
+            raise RuntimeError(f"No gateway route for {capability.value}/{model}")
+
+        result = await _execute_chain(
+            route, model, trace_id=trace_id, allow_fallback=allow_fallback, **kwargs,
+        )
+        gateway_budget.record(result.cost, user_id=user_id, team_id=team_id)
+        _persist_gateway_meta(trace_id, result)
+        if trace_id:
+            gateway_idempotency.mark_done(trace_id)
+        return result
+    except Exception:
+        if trace_id:
+            gateway_idempotency.release_lock(trace_id)
+        raise
 
 
 async def _execute_chain(

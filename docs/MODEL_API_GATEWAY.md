@@ -317,7 +317,17 @@ KLING_SECRET_KEY=...
 - [x] 预算上限：`GATEWAY_USER_DAILY_CREDIT_CAP` / `GATEWAY_TEAM_DAILY_CREDIT_CAP`
 - [x] Gateway Metrics：Redis 请求 / fallback 计数
 - [x] Webhook 增强：task 完成回调 payload 含 `gateway` 元数据
-- [x] Direct Backends：`providers/seedance.py`、`providers/kling.py`
+### Phase 4 — 生产硬化（本 PR）
+
+- [x] Celery 任务传入 `user_id` / `team_id` / `estimated_cost`（预算真正生效）
+- [x] 图像工具全路由：`face_swap` / `upscale` / `remove_bg` / `extend` → `execute_route`
+- [x] Gateway Admin 操作接入 `record_audit()` 审计日志
+- [x] Prometheus 指标：`betty_gateway_requests_total` / `betty_gateway_fallback_total`
+- [x] 生成幂等：已完成任务跳过 + Redis 执行锁
+- [x] `GATEWAY_ROUTES_PATH` 支持自定义路由文件
+- [x] 生产公开 health 最小化（`GATEWAY_HEALTH_PUBLIC_MINIMAL`）
+- [x] `model_smoke` live 探测走 Gateway
+- [x] 生产 compose + `.env.example` 补全 Replicate / KIE backup / Gateway env
 
 ---
 

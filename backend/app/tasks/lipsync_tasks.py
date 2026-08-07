@@ -65,6 +65,7 @@ def process_lipsync(
     try:
         from app.adapters.demo_provider import demo_mode_active, _local_media_path, render_demo_video
         from app.gateway import gateway, gateway_enabled
+        from app.tasks.gateway_context import gateway_call_kwargs
 
         demo = demo_mode_active()
         tts_engine = None
@@ -116,13 +117,16 @@ def process_lipsync(
                             k in voice for k in ("Xiaoxiao", "Xiaoyi", "Jenny", "Nanami")
                         ) else "Adam"
                         gw = _run_async(gateway.generate_speech(
-                            text, voice=el_voice, trace_id=db_task_id,
+                            text, voice=el_voice,
+                            **gateway_call_kwargs(db_task_id, include_cost=False),
                             language_code="zh" if voice.startswith("zh-") else None,
                         ))
                         audio_public = gw.result.media_url
                         tts_engine = f"elevenlabs:{el_voice}"
                 else:
-                    gw = _run_async(gateway.generate_speech(text, voice=voice, trace_id=db_task_id))
+                    gw = _run_async(gateway.generate_speech(
+                        text, voice=voice, **gateway_call_kwargs(db_task_id, include_cost=False),
+                    ))
                     audio_public = gw.result.media_url
                     tts_engine = f"elevenlabs:{voice}"
         elif audio_url:
@@ -183,7 +187,7 @@ def process_lipsync(
                 prompt=LIPSYNC_PROMPT,
                 resolution=resolution,
                 prefer_infinitalk=(product_tier == "studio"),
-                trace_id=db_task_id,
+                **gateway_call_kwargs(db_task_id),
             ))
             res = gw.result
             _update_task(db_task_id, progress=85, current_stage="rendering")

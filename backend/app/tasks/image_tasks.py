@@ -143,6 +143,7 @@ def generate_image_task(
     try:
         if use_gateway:
             from app.gateway import gateway
+            from app.tasks.gateway_context import gateway_call_kwargs
             gw = _run_async(gateway.generate_image(
                 model=model,
                 prompt=prompt,
@@ -153,7 +154,7 @@ def generate_image_task(
                 negative_prompt=negative_prompt,
                 image_url=ref_images[0] if ref_images else None,
                 image_urls=ref_images or None,
-                trace_id=db_task_id,
+                **gateway_call_kwargs(db_task_id),
             ))
             result = gw.result
             if gw.fallback_used:

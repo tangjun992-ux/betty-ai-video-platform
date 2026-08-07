@@ -591,18 +591,28 @@ async def edit_image_tool(
         from app.services.media_store import persist_results
         pub = await gateway.upload_public_url(data, filename="src.png", content_type=ctype)
 
+        gkw = {
+            "trace_id": tool_task_id,
+            "user_id": user_id,
+            "team_id": team_id,
+            "estimated_cost": float(tool_cost),
+        }
+
         async def _run():
             if op == "upscale":
-                return await gateway.upscale_image(image_url=pub, factor=factor, trace_id=tool_task_id)
+                gw = await gateway.upscale_image(image_url=pub, factor=factor, **gkw)
+                return gw.result
             if op == "bg-remove":
-                return await gateway.remove_background(image_url=pub, trace_id=tool_task_id)
+                gw = await gateway.remove_background(image_url=pub, **gkw)
+                return gw.result
             if op == "extend":
-                return await gateway.extend_image(
-                    image_url=pub, target_ratio=ratio, prompt=prompt or "", trace_id=tool_task_id,
+                gw = await gateway.extend_image(
+                    image_url=pub, target_ratio=ratio, prompt=prompt or "", **gkw,
                 )
+                return gw.result
             gw = await gateway.edit_image(
                 image_urls=[pub], prompt=prompt or "",
-                image_size=ratio if ratio else "auto", trace_id=tool_task_id,
+                image_size=ratio if ratio else "auto", **gkw,
             )
             return gw.result
 

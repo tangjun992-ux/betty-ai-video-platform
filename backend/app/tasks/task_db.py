@@ -82,6 +82,41 @@ def update_task(db_task_id: str, **kwargs):
     return task_pk
 
 
+def get_task_gateway_context(db_task_id: str) -> dict:
+    """user_id, team_id (from consumption txn), estimated_cost for budget guards."""
+    engine = create_engine(get_db_url_sync())
+    with Session(engine) as session:
+        row = session.execute(
+            text(
+                "SELECT t.user_id, t.estimated_cost, t.status, t.parameters, "
+                "(SELECT team_id FROM transactions WHERE task_id = t.task_id "
+                " AND type = 'consumption' ORDER BY id DESC LIMIT 1) AS team_id "
+                "FROM tasks t WHERE t.task_id = :tid"
+            ),
+            {"tid": db_task_id},
+        ).mappings().first()
+        if not row:
+            return {}
+        params = row["parameters"]
+        if isinstance(params, str) and params:
+            try:
+                params = json.loads(params)
+            except Exception:
+                params = {}
+        elif not isinstance(params, dict):
+            params = {}
+        team_id = row.get("team_id")
+        if not team_id and isinstance(params, dict):
+            team_id = params.get("team_id")
+        return {
+            "user_id": row.get("user_id"),
+            "team_id": str(team_id) if team_id else None,
+            "estimated_cost": float(row.get("estimated_cost") or 0),
+            "status": row.get("status"),
+            "parameters": params,
+        }
+
+
 def update_task_parameters_gateway_meta(db_task_id: str, gateway_meta: dict) -> None:
     """Merge gateway routing metadata into tasks.parameters.gateway."""
     engine = create_engine(get_db_url_sync())

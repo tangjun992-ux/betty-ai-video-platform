@@ -40,6 +40,27 @@ MODEL_CIRCUIT = Gauge(
 ONBOARDING_EVENTS = Counter(
     "betty_onboarding_events_total", "First-work onboarding funnel events",
     ["event"], registry=REGISTRY)
+GATEWAY_REQUESTS = Counter(
+    "betty_gateway_requests_total", "Gateway provider requests",
+    ["capability", "provider", "status"], registry=REGISTRY,
+)
+GATEWAY_FALLBACK = Counter(
+    "betty_gateway_fallback_total", "Gateway fallback hops",
+    ["capability", "provider"], registry=REGISTRY,
+)
+GATEWAY_CIRCUIT = Gauge(
+    "betty_gateway_provider_circuit_open", "Gateway provider circuit (1=open)",
+    ["provider", "remote_model"], registry=REGISTRY,
+)
+
+
+def record_gateway_request(
+    *, provider: str, capability: str, success: bool, fallback: bool = False,
+) -> None:
+    status = "ok" if success else "fail"
+    GATEWAY_REQUESTS.labels(capability=capability, provider=provider, status=status).inc()
+    if fallback:
+        GATEWAY_FALLBACK.labels(capability=capability, provider=provider).inc()
 
 _ID_RE = re.compile(r"/(?:[0-9a-f]{8,}|\d+)(?=/|$)", re.IGNORECASE)
 _CELERY_QUEUES = ["celery", "image_q", "video_q", "director_q", "collector_q"]
@@ -89,6 +110,17 @@ async def _refresh_runtime_gauges() -> None:
             snapshot = model_health.snapshot(model.id)
             MODEL_HEALTH.labels(model=model.id).set(snapshot.score)
             MODEL_CIRCUIT.labels(model=model.id).set(1 if snapshot.circuit_open else 0)
+    except Exception:
+        pass
+
+    # Gateway provider-level circuits
+    try:
+        from app.gateway.health import provider_health
+        for p in provider_health.all_snapshots():
+            provider, _, remote = p.key.partition(":")
+            GATEWAY_CIRCUIT.labels(provider=provider, remote_model=remote).set(
+                1 if p.circuit_open else 0,
+            )
     except Exception:
         pass
 

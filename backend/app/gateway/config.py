@@ -37,9 +37,20 @@ def _parse_target(entry: dict) -> ProviderTarget:
     )
 
 
+def _routes_path() -> Path:
+    from app.config import settings
+    custom = (getattr(settings, "GATEWAY_ROUTES_PATH", "") or "").strip()
+    if custom:
+        p = Path(custom)
+        if p.is_file():
+            return p
+        logger.warning("[gateway] GATEWAY_ROUTES_PATH not found: %s — using default", custom)
+    return _DEFAULT_ROUTES
+
+
 def load_routes(path: Optional[Path] = None) -> list[RouteDefinition]:
     """Parse routes.yaml into RouteDefinition list."""
-    p = path or _DEFAULT_ROUTES
+    p = path or _routes_path()
     if not p.exists():
         logger.warning("[gateway] routes file not found: %s", p)
         return []
