@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     # KIE.ai Unified API
     KIE_API_KEY: str = os.getenv("KIE_API_KEY", "")
     KIE_BASE_URL: str = os.getenv("KIE_BASE_URL", "https://api.kie.ai")
+    # Optional backup key — gateway Key pool (Phase 2: round-robin).
+    KIE_API_KEY_BACKUP: str = os.getenv("KIE_API_KEY_BACKUP", "")
+
+    # Model API Gateway — multi-provider routing (see docs/MODEL_API_GATEWAY.md)
+    GATEWAY_ENABLED: bool = os.getenv("GATEWAY_ENABLED", "true").lower() in ("1", "true", "yes", "on")
+    GATEWAY_ROUTES_PATH: str = os.getenv("GATEWAY_ROUTES_PATH", "")
+    GATEWAY_CIRCUIT_FAILURES: int = int(os.getenv("GATEWAY_CIRCUIT_FAILURES", "3"))
+    GATEWAY_CIRCUIT_TTL_SECONDS: int = int(os.getenv("GATEWAY_CIRCUIT_TTL_SECONDS", "300"))
+
+    # LiteLLM proxy (Phase 2 — LLM/chat only, not media generation)
+    LITELLM_PROXY_URL: str = os.getenv("LITELLM_PROXY_URL", "")
+    LITELLM_MASTER_KEY: str = os.getenv("LITELLM_MASTER_KEY", "")
 
     # Replicate — stable/cheap image & video generation
     REPLICATE_API_KEY: str = os.getenv("REPLICATE_API_KEY", "")

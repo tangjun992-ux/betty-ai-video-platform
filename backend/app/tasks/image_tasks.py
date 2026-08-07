@@ -97,9 +97,15 @@ def generate_image_task(
 
     # Demo mode: render locally when no provider key is configured.
     from app.adapters.demo_provider import demo_mode_active, DemoAdapter
+    from app.gateway import gateway_enabled
     if demo_mode_active():
         adapter = DemoAdapter(model_label=model)
+        use_gateway = False
+    elif gateway_enabled():
+        use_gateway = True
+        adapter = None
     else:
+        use_gateway = False
         # Get adapter and fallback config
         get_adapter = _load_adapters()
         adapter = get_adapter(model)
@@ -135,7 +141,24 @@ def generate_image_task(
 
     started = time.monotonic()
     try:
-        if ref_images:
+        if use_gateway:
+            from app.gateway import gateway
+            gw = _run_async(gateway.generate_image(
+                model=model,
+                prompt=prompt,
+                size=size,
+                style=style,
+                count=count,
+                seed=seed,
+                negative_prompt=negative_prompt,
+                image_url=ref_images[0] if ref_images else None,
+                image_urls=ref_images or None,
+                trace_id=db_task_id,
+            ))
+            result = gw.result
+            if gw.fallback_used:
+                _update_task(db_task_id, current_stage="gateway_fallback", selected_model=model)
+        elif ref_images:
             edit_fn = getattr(adapter, "edit_image", None)
             if callable(edit_fn):
                 result = _run_async(

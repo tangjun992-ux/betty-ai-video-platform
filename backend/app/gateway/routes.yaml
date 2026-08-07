@@ -1,0 +1,96 @@
+# Betty Model Gateway — Provider Chain Configuration
+# Edit this file to add/remove providers without code changes.
+# Schema validated at startup; CI tests cover critical routes.
+#
+# Fields per chain entry:
+#   provider       — kie | replicate | seedance | kling | openai
+#   remote_model   — provider-native model id
+#   priority       — lower = tried first
+#   fallback_only  — true = only used after primary failure
+#   timeout_s      — poll/submit timeout for this hop
+
+routes:
+  # ── Image generation ──────────────────────────────────────
+  - capability: image.generate
+    model: gpt-image-2
+    description: "Primary GPT Image 2 via KIE; FLUX Pro fallback on Replicate"
+    chain:
+      - { provider: kie, remote_model: gpt-image-2-text-to-image, priority: 1, timeout_s: 240 }
+      - { provider: replicate, remote_model: black-forest-labs/flux-1.1-pro, priority: 2, fallback_only: true, timeout_s: 180 }
+
+  - capability: image.generate
+    model: nano-banana
+    chain:
+      - { provider: kie, remote_model: nano-banana-2, priority: 1, timeout_s: 240 }
+      - { provider: replicate, remote_model: black-forest-labs/flux-schnell, priority: 2, fallback_only: true, timeout_s: 120 }
+
+  - capability: image.generate
+    model: nano-banana-pro
+    chain:
+      - { provider: kie, remote_model: nano-banana-pro, priority: 1, timeout_s: 240 }
+      - { provider: replicate, remote_model: black-forest-labs/flux-dev, priority: 2, fallback_only: true, timeout_s: 180 }
+
+  - capability: image.generate
+    model: imagen-4
+    chain:
+      - { provider: kie, remote_model: google/imagen4, priority: 1, timeout_s: 240 }
+
+  - capability: image.generate
+    model: sdxl
+    chain:
+      - { provider: replicate, remote_model: stability-ai/sdxl, priority: 1, timeout_s: 120 }
+      - { provider: kie, remote_model: stability/sdxl, priority: 2, fallback_only: true, timeout_s: 240 }
+
+  # ── Video generation ──────────────────────────────────────
+  - capability: video.generate
+    model: seedance-2.0
+    description: "Seedance 2.0 — KIE primary, Wan 2.1 Replicate fallback"
+    chain:
+      - { provider: kie, remote_model: bytedance/seedance-2, priority: 1, timeout_s: 600 }
+      - { provider: replicate, remote_model: wavespeedai/wan-2.1-t2v-720p, priority: 2, fallback_only: true, timeout_s: 480 }
+
+  - capability: video.generate
+    model: seedance-2.0-fast
+    chain:
+      - { provider: kie, remote_model: bytedance/seedance-2-fast, priority: 1, timeout_s: 480 }
+      - { provider: kie, remote_model: bytedance/seedance-2, priority: 2, fallback_only: true, timeout_s: 600 }
+
+  - capability: video.generate
+    model: kling-2.5-turbo
+    chain:
+      - { provider: kie, remote_model: kling/v2-5-turbo-text-to-video-pro, priority: 1, timeout_s: 600 }
+
+  - capability: video.generate
+    model: kling-2.1-pro
+    chain:
+      - { provider: kie, remote_model: kling/v2-1-pro, priority: 1, timeout_s: 600 }
+
+  - capability: video.generate
+    model: kling-2.1-master
+    chain:
+      - { provider: kie, remote_model: kling/v2-1-master-text-to-video, priority: 1, timeout_s: 600 }
+
+  # ── Image edit / i2i ──────────────────────────────────────
+  - capability: image.edit
+    model: nano-banana-edit
+    chain:
+      - { provider: kie, remote_model: google/nano-banana-edit, priority: 1, timeout_s: 240 }
+
+  # ── Lipsync / talking avatar ──────────────────────────────
+  - capability: lipsync
+    model: kling-ai-avatar
+    chain:
+      - { provider: kie, remote_model: kling/ai-avatar-pro, priority: 1, timeout_s: 900 }
+      - { provider: kie, remote_model: infinitalk/from-audio, priority: 2, fallback_only: true, timeout_s: 900 }
+
+  # ── Motion control ──────────────────────────────────────────
+  - capability: motion
+    model: motion-control
+    chain:
+      - { provider: kie, remote_model: kling-3.0/motion-control, priority: 1, timeout_s: 600 }
+
+  # ── TTS ─────────────────────────────────────────────────────
+  - capability: tts
+    model: elevenlabs-multilingual
+    chain:
+      - { provider: kie, remote_model: elevenlabs/text-to-speech-multilingual-v2, priority: 1, timeout_s: 60 }
