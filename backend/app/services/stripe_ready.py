@@ -141,3 +141,29 @@ def validate_stripe_bootstrap() -> dict:
         "stripe": st.public_dict(),
         "blockers": blockers,
     }
+
+
+def stripe_checkout_readiness() -> dict:
+    """Report whether /billing/checkout uses Stripe or dev-grant."""
+    st = stripe_status()
+    if st.api_key_configured and st.subscription_ready:
+        return {
+            "mode": "stripe",
+            "dev_grant": False,
+            "checkout_ready": True,
+            "note": "Stripe Checkout 已启用（订阅/一次性）",
+        }
+    if settings.is_production:
+        return {
+            "mode": "blocked",
+            "dev_grant": False,
+            "checkout_ready": False,
+            "note": "生产环境需配置 STRIPE_API_KEY 与 Price IDs",
+            "blockers": st.blockers,
+        }
+    return {
+        "mode": "dev_grant",
+        "dev_grant": True,
+        "checkout_ready": True,
+        "note": "开发模式：/billing/checkout 直发积分（无 Stripe key）",
+    }

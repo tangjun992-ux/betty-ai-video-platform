@@ -63,3 +63,57 @@ export async function seedTimelineVideos(request: APIRequestContext): Promise<st
   }
   return urls;
 }
+
+/** Minimal PNG for demo image-tool (sync completes in demo mode). */
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** Create a completed image-tool task (demo mode, no Celery). */
+export async function seedCompletedImageTask(
+  request: APIRequestContext,
+  guestId: string,
+): Promise<string> {
+  const res = await request.post(`${API_BASE}/generate/edit`, {
+    headers: { "X-Guest-Id": guestId },
+    multipart: {
+      operation: "upscale",
+      image_file: {
+        name: "e2e-seed.png",
+        mimeType: "image/png",
+        buffer: TINY_PNG,
+      },
+    },
+  });
+  if (!res.ok()) {
+    throw new Error(`seedCompletedImageTask failed: ${res.status()} ${await res.text()}`);
+  }
+  const body = await res.json();
+  if (!body.task_id) throw new Error("seedCompletedImageTask: missing task_id");
+  return body.task_id as string;
+}
+
+/** Submit async image generation (may stay queued without Celery worker). */
+export async function submitImageTask(
+  request: APIRequestContext,
+  guestId: string,
+  prompt = "e2e task detail progress test",
+): Promise<string> {
+  const res = await request.post(`${API_BASE}/generate/`, {
+    headers: { "X-Guest-Id": guestId, "Content-Type": "application/json" },
+    data: {
+      prompt,
+      media_type: "image",
+      model: "nano-banana",
+      quality: "fast",
+      count: 1,
+    },
+  });
+  if (!res.ok()) {
+    throw new Error(`submitImageTask failed: ${res.status()} ${await res.text()}`);
+  }
+  const body = await res.json();
+  if (!body.task_id) throw new Error("submitImageTask: missing task_id");
+  return body.task_id as string;
+}

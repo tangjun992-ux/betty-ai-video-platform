@@ -36,6 +36,51 @@ async def list_webhook_failures(
     return {"total": len(items), "failures": items}
 
 
+@router.post("/webhook-failures/{task_id}/retry", summary="重试 Webhook 投递")
+async def retry_webhook_failure(
+    task_id: str,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.task_hooks import retry_webhook_delivery
+    from app.services.audit import record_audit
+
+    result = retry_webhook_delivery(task_id)
+    await record_audit(
+        db,
+        action="admin.webhook_retry",
+        actor_user_id=user.id,
+        target_type="task",
+        target_id=task_id,
+        meta={"delivered": result.get("delivered"), "reason": result.get("reason")},
+    )
+    await db.commit()
+    if result.get("reason") == "task_not_found":
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return result
+
+
+@router.post("/webhook-failures/retry-all", summary="批量重试 Webhook 投递")
+async def retry_all_webhook_failures(
+    limit: int = 10,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.task_hooks import retry_failed_webhooks
+    from app.services.audit import record_audit
+
+    result = retry_failed_webhooks(limit=min(max(limit, 1), 25))
+    await record_audit(
+        db,
+        action="admin.webhook_retry_all",
+        actor_user_id=user.id,
+        target_type="webhook",
+        meta={"attempted": result["attempted"], "delivered": result["delivered"]},
+    )
+    await db.commit()
+    return result
+
+
 @router.get("/promotable", summary="可晋升 active 的 beta 模型")
 async def list_promotable(_: User = Depends(require_admin)):
     from app.api.models_info import MODELS

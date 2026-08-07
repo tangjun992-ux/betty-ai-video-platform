@@ -124,6 +124,45 @@ def list_failed_webhooks(*, limit: int = 50, scan: int = 500) -> list[dict[str, 
     return out
 
 
+def retry_webhook_delivery(task_id: str) -> dict[str, Any]:
+    """Re-deliver webhook for a terminal task; persist outcome."""
+    task = _load_task_row(task_id)
+    if not task:
+        return {"ok": False, "delivered": False, "reason": "task_not_found"}
+    if not (task.get("webhook_url") or "").strip():
+        return {"ok": False, "delivered": False, "reason": "no_webhook"}
+    if task.get("status") not in ("completed", "failed", "cancelled"):
+        return {"ok": False, "delivered": False, "reason": "task_not_terminal"}
+
+    delivery = deliver_webhook(task_id, task=task)
+    try:
+        persist_webhook_status(task_id, delivery)
+    except Exception as e:
+        logger.warning("persist webhook retry status failed task=%s: %s", task_id, e)
+    return {
+        "ok": bool(delivery.get("delivered")),
+        "task_id": task_id,
+        **delivery,
+    }
+
+
+def retry_failed_webhooks(*, limit: int = 10) -> dict[str, Any]:
+    """Batch retry recent failed webhook deliveries (admin ops)."""
+    failures = list_failed_webhooks(limit=limit, scan=limit * 10)
+    results: list[dict[str, Any]] = []
+    ok_count = 0
+    for row in failures:
+        r = retry_webhook_delivery(row["task_id"])
+        results.append(r)
+        if r.get("delivered"):
+            ok_count += 1
+    return {
+        "attempted": len(results),
+        "delivered": ok_count,
+        "results": results,
+    }
+
+
 def _parse_results(raw) -> list:
     if isinstance(raw, list):
         return raw
