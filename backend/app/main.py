@@ -91,6 +91,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[LIFESPAN] WebSocket Redis listener skipped: {e}")
 
+    try:
+        from app.gateway import gateway_enabled
+        from app.gateway.config import get_routes, validate_routes
+        route_errors = validate_routes()
+        if route_errors:
+            msg = "Gateway routes validation failed:\n" + "\n".join(
+                f"  - {e}" for e in route_errors
+            )
+            if settings.is_production or gateway_enabled():
+                raise RuntimeError(msg)
+            print(f"[LIFESPAN] WARNING: {msg}")
+        else:
+            n = len(get_routes(reload=True))
+            print(f"[LIFESPAN] Gateway routes validated ({n} route(s))")
+    except RuntimeError:
+        raise
+    except Exception as e:
+        print(f"[LIFESPAN] Gateway routes check skipped: {e}")
+
     yield
     backfill_task.cancel()
     print("[LIFESPAN] Shutting down...")

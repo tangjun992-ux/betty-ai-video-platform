@@ -127,5 +127,36 @@ class GatewayProviderLimit:
             return rpm
         return self.acquire_inflight(provider)
 
+    def inflight_snapshot(self) -> dict[str, int]:
+        """Current in-flight request counts per provider (Redis + memory fallback)."""
+        counts: dict[str, int] = {}
+        client = self._client()
+        if client:
+            try:
+                for key in client.scan_iter(f"{PREFIX}:inflight:*", count=100):
+                    provider = key.rsplit(":", 1)[-1]
+                    counts[provider] = max(0, int(client.get(key) or 0))
+            except Exception:
+                pass
+        with self._lock:
+            for provider, n in self._memory_inflight.items():
+                counts[provider] = counts.get(provider, 0) + max(0, n)
+        return counts
+
+    def limits_status(self) -> dict:
+        cap = self._max_inflight()
+        rpm_default = int(getattr(settings, "GATEWAY_PROVIDER_RPM", 0) or 0)
+        per_provider_rpm = {}
+        for name in ("kie", "replicate", "seedance", "kling"):
+            specific = int(getattr(settings, f"GATEWAY_PROVIDER_RPM_{name.upper()}", 0) or 0)
+            if specific > 0:
+                per_provider_rpm[name] = specific
+        return {
+            "max_inflight": cap,
+            "rpm_default": rpm_default,
+            "rpm_per_provider": per_provider_rpm,
+            "inflight": self.inflight_snapshot(),
+        }
+
 
 gateway_provider_limit = GatewayProviderLimit()

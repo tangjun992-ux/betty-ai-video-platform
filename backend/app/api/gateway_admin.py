@@ -9,10 +9,11 @@ from app.config import settings
 from app.db import get_db
 from app.gateway import gateway_enabled
 from app.gateway.budget import gateway_budget
-from app.gateway.config import get_routes
+from app.gateway.config import get_routes, validate_routes
 from app.gateway.health import provider_health
 from app.gateway.kie_keys import kie_key_pool_status
 from app.gateway.metrics import gateway_metrics
+from app.gateway.provider_limit import gateway_provider_limit
 from app.gateway.registry import gateway_registry
 from app.gateway.router import route_summary
 from app.models.user import User
@@ -83,10 +84,8 @@ async def gateway_status(_: User = Depends(require_admin)):
         "enabled": gateway_enabled(),
         "kie_key_pool": kie_key_pool_status(),
         "registry": gateway_registry.snapshot(),
-        "budget_caps": {
-            "user_daily": gateway_budget.status().get("user_daily_cap"),
-            "team_daily": gateway_budget.status().get("team_daily_cap"),
-        },
+        "budget_caps": gateway_budget.status(),
+        "provider_limits": gateway_provider_limit.limits_status(),
         "metrics": gateway_metrics.snapshot(),
         "backends": backends,
         "routes": route_summary(),
@@ -112,6 +111,9 @@ async def reload_routes(
     user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    errs = validate_routes()
+    if errs:
+        return {"ok": False, "errors": errs, "route_count": 0}
     routes = get_routes(reload=True)
     await record_audit(
         db, action="admin.gateway.reload", actor_user_id=user.id,

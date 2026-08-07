@@ -84,25 +84,15 @@ def process_face_swap(self, db_task_id: str, face_url: str, target_url: str, pro
         from app.services.media_store import persist_results
 
         async def _run():
-            if gateway_enabled():
-                gw = await gateway.face_swap(
-                    face_url=face_url, target_url=target_url, prompt=prompt or None,
-                    **gateway_call_kwargs(db_task_id),
+            if not gateway_enabled():
+                raise RuntimeError(
+                    "换脸需要启用 Model Gateway（设置 GATEWAY_ENABLED=true）"
                 )
-                return gw.result
-            from app.adapters.kie_adapter import KieAdapter
-            from app.adapters.demo_provider import _local_media_path
-
-            adapter = KieAdapter()
-
-            async def _publicize(u: str) -> str:
-                return await gateway.publicize_url(u, trace_id=db_task_id)
-
-            face_pub = await _publicize(face_url)
-            target_pub = await _publicize(target_url)
-            return await adapter.face_swap(
-                face_url=face_pub, target_url=target_pub, prompt=prompt or None,
+            gw = await gateway.face_swap(
+                face_url=face_url, target_url=target_url, prompt=prompt or None,
+                **gateway_call_kwargs(db_task_id),
             )
+            return gw.result
 
         res = asyncio.run(_run())
         url = getattr(res, "media_url", "") or ""
