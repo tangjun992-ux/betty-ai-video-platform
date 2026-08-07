@@ -13,7 +13,7 @@ from sqlalchemy import select, func, and_, text
 from sqlalchemy.orm.attributes import flag_modified
 from typing import Optional
 from app.db import get_db
-from app.auth import resolve_user_id
+from app.auth import resolve_user_id, require_admin
 from app.models.task import Task
 from app.models.user import User
 from app.models.billing import Transaction, TransactionType
@@ -554,3 +554,24 @@ async def gallery_stats(db: AsyncSession = Depends(get_db)):
         "total_credits_consumed": total_credits,
         "style_options": STYLE_OPTIONS,
     }
+
+
+@router.post("/admin/seed", summary="管理员触发 Explore 精选种子（非生产或强制）")
+async def admin_seed_gallery(
+    force: bool = Query(default=False, description="生产环境需 force=true"),
+    _: User = Depends(require_admin),
+):
+    """Run curated gallery seed script — fills Explore when density is low."""
+    from app.config import settings
+
+    if settings.is_production and not force:
+        raise HTTPException(
+            status_code=403,
+            detail="生产环境请使用 force=true，或依赖用户发布内容填充 Explore",
+        )
+    try:
+        from scripts import seed_gallery as sg
+        sg.main()
+        return {"ok": True, "message": "gallery seed completed", "marker": sg.SEED_MARKER}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"seed failed: {e}") from e

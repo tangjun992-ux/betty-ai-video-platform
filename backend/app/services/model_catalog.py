@@ -20,6 +20,19 @@ GATEWAY_VERIFIED_IDS: frozenset[str] = frozenset({
     "kling-2.5-turbo",
     "kling-2.1-pro",
     "kling-2.1-master",
+    # Phase 8 — KIE-mapped beta promoted after mapping smoke (honest shelf growth)
+    "kling-1.6",
+    "wan-2.5",
+    "hailuo-2.3",
+})
+
+# Mapped in kie_adapter with concrete SKU — eligible for admin promote, stay beta until promoted.
+GATEWAY_MAPPED_BETA_IDS: frozenset[str] = frozenset({
+    "veo-3.1",
+    "veo-3.1-fast",
+    "veo-3",
+    "wan-2.2",
+    "hailuo-02",
 })
 
 # Explicit unverified guesses in kie_adapter — must stay beta until live test.

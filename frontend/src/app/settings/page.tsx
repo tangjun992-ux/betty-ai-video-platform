@@ -7,6 +7,7 @@ import {
   Save, Plus, Trash2, Check, AlertCircle, Loader2,
   Shield, Zap, Mail, Smartphone, Palette, Globe,
   Image, Video, Bot, Eye, EyeOff, Copy, ExternalLink,
+  Building2,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/stores";
 import { cn, formatDate, formatCredits } from "@/lib/utils";
@@ -16,7 +17,7 @@ import type {
   ApiKeyInfo, BillingInfo, SettingsProfile, SaveSettingsRequest,
 } from "@/lib/api";
 import {
-  getSettings, saveSettings, createApiKey, deleteApiKey,
+  getSettings, saveSettings, createApiKey, deleteApiKey, getOidcStatus, API_BASE,
 } from "@/lib/api";
 
 // ─── Section Definitions ────────────────────────────────
@@ -172,6 +173,11 @@ function AccountSection({ profile, onUpdate, saving }: {
   const [displayName, setDisplayName] = useState(profile.display_name || "");
   const [email, setEmail] = useState(profile.email || "");
   const [saved, setSaved] = useState(false);
+  const [ssoConfigured, setSsoConfigured] = useState(false);
+
+  useEffect(() => {
+    getOidcStatus().then((d) => setSsoConfigured(Boolean(d?.configured))).catch(() => setSsoConfigured(false));
+  }, []);
 
   const handleSave = async () => {
     setSaved(false);
@@ -210,6 +216,23 @@ function AccountSection({ profile, onUpdate, saving }: {
           </span>
         )}
       </div>
+
+      {ssoConfigured && (
+        <div className="mt-6 pt-6 border-t border-cosmic-border/40">
+          <h4 className="text-sm font-semibold mb-1 flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-brand" /> 企业 SSO
+          </h4>
+          <p className="text-xs text-text-secondary mb-3">
+            组织已启用 OIDC 单点登录。使用企业身份重新认证可同步角色与权限。
+          </p>
+          <a
+            href={`${API_BASE}/auth/oidc/login`}
+            className="btn-secondary inline-flex items-center gap-2 text-sm"
+          >
+            <Building2 className="w-4 h-4" /> 使用 SSO 重新登录
+          </a>
+        </div>
+      )}
     </SectionCard>
   );
 }

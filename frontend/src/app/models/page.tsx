@@ -199,7 +199,7 @@ function ModelCard({ model, i, health }: { model: ModelInfo; i: number; health?:
               active ? "bg-emerald-500/10 text-emerald-600" : "bg-brand/10 text-brand"
             }`}
           >
-            {active ? "可用" : "Beta"}
+            {active ? "已验证" : model.status === "lab" ? "实验室" : "Beta"}
           </span>
         </div>
       </div>

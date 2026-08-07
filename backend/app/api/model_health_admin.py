@@ -21,6 +21,72 @@ class QuarantineDecision(BaseModel):
     reason: str | None = Field(None, description="Optional review note")
 
 
+class PromoteRequest(BaseModel):
+    note: str | None = Field(None, description="Audit note for promotion")
+
+
+@router.get("/promotable", summary="可晋升 active 的 beta 模型")
+async def list_promotable(_: User = Depends(require_admin)):
+    from app.api.models_info import MODELS
+    from app.services.model_catalog import GATEWAY_MAPPED_BETA_IDS, GATEWAY_VERIFIED_IDS
+
+    items = []
+    for m in MODELS:
+        if m.status == "beta" and m.id in GATEWAY_MAPPED_BETA_IDS:
+            items.append({"model_id": m.id, "display_name": m.display_name, "status": m.status})
+    return {
+        "verified_active_count": sum(1 for m in MODELS if m.status == "active"),
+        "promotable": items,
+        "verified_set_size": len(GATEWAY_VERIFIED_IDS),
+    }
+
+
+@router.post("/{model_id}/promote", summary="晋升模型至 active（需 KIE 映射白名单）")
+async def promote_model_endpoint(
+    model_id: str,
+    body: PromoteRequest | None = None,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.model_promotion import promote_model
+    from app.services.audit import record_audit
+
+    result = promote_model(model_id, note=body.note if body else None)
+    await record_audit(
+        db,
+        action="admin.promote_model",
+        actor_user_id=user.id,
+        target_type="model",
+        target_id=model_id,
+        meta=result,
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/{model_id}/demote", summary="降级模型至 beta/lab")
+async def demote_model_endpoint(
+    model_id: str,
+    body: QuarantineDecision,
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.model_promotion import demote_model
+    from app.services.audit import record_audit
+
+    result = demote_model(model_id, note=body.reason)
+    await record_audit(
+        db,
+        action="admin.demote_model",
+        actor_user_id=user.id,
+        target_type="model",
+        target_id=model_id,
+        meta=result,
+    )
+    await db.commit()
+    return result
+
+
 @router.get("/quarantined", summary="隔离中的模型列表")
 async def list_quarantined(
     _: User = Depends(require_admin),

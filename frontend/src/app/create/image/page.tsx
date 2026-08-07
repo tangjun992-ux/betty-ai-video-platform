@@ -380,7 +380,8 @@ export default function CreateImagePage() {
       } else {
         const message = err.message || "生成失败，请重试";
         setError(message);
-        toast.error("生成失败", message);
+        if (err?.isConcurrentLimit) toast.warning("并发已满", message);
+        else toast.error("生成失败", message);
         console.error("Generation error:", err);
       }
     } finally {

@@ -29,6 +29,8 @@ from app.db import get_db
 from app.models.user import User
 from app.services.audit import record_audit
 from app.services.oidc_ready import oidc_configured, oidc_status as _oidc_status, resolve_endpoints, oidc_env
+from app.services.model_promotion import store_oidc_exchange, take_oidc_exchange
+from pydantic import BaseModel
 
 router = APIRouter()
 
@@ -157,6 +159,20 @@ async def oidc_callback(
     jwt_token = create_access_token({"sub": str(user.id), "role": user.role})
     origins = settings.CORS_ORIGINS or ["http://localhost:3000"]
     front = origins[0].rstrip("/")
-    redirect = RedirectResponse(f"{front}/auth/callback?token={jwt_token}", status_code=302)
+    exchange_code = secrets.token_urlsafe(32)
+    store_oidc_exchange(exchange_code, jwt_token)
+    redirect = RedirectResponse(f"{front}/auth/callback?code={exchange_code}", status_code=302)
     redirect.delete_cookie(_STATE_COOKIE)
     return redirect
+
+
+class OidcExchangeRequest(BaseModel):
+    code: str
+
+
+@router.post("/oidc/exchange", summary="用一次性 code 换取 JWT（避免 token 出现在 URL）")
+async def oidc_exchange(body: OidcExchangeRequest):
+    token = take_oidc_exchange(body.code.strip())
+    if not token:
+        raise HTTPException(status_code=400, detail="登录 code 无效或已过期，请重新 SSO 登录")
+    return {"access_token": token, "token_type": "bearer"}
