@@ -19,7 +19,7 @@ from app.tasks.pipeline_tasks import run_pipeline
 from app.router import router as prompt_router
 from app.prompt_enhancer import enhancer as prompt_enhancer
 from app.rate_limiter import rate_limit
-from app.services.cost_estimate import estimate_generation
+from app.services.cost_estimate import estimate_generation, estimate_tool
 from app.auth import resolve_user_id
 
 router = APIRouter()
@@ -27,11 +27,14 @@ logger = logging.getLogger(__name__)
 
 
 class EstimateRequest(BaseModel):
-    media_type: str = Field(default="video", description="image | video")
+    media_type: str = Field(default="video", description="image | video (generation tools)")
     model: str = Field(default="seedance-2.0")
     duration: int = Field(default=5, ge=1, le=60)
     count: int = Field(default=1, ge=1, le=4)
     post_lipsync: bool = Field(default=False)
+    tool: str | None = Field(default=None, description="lipsync | motion | performance")
+    tier: str = Field(default="demo", description="demo | studio")
+    with_talk: bool = Field(default=False, description="performance: include lipsync addon")
 
 
 class EstimateResponse(BaseModel):
@@ -42,6 +45,26 @@ class EstimateResponse(BaseModel):
 
 @router.post("/estimate", response_model=EstimateResponse, summary="生成前积分/耗时估算")
 async def estimate_cost_endpoint(req: EstimateRequest):
+    from app.services.entitlements import motion_cost, lipsync_cost
+
+    if req.tool:
+        try:
+            seconds, credits = estimate_tool(
+                tool=req.tool,
+                tier=req.tier,
+                with_talk=req.with_talk,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        breakdown: dict = {"tool": req.tool, "tier": req.tier, "base_credits": credits}
+        if req.tool == "performance" and req.with_talk:
+            breakdown["motion_credits"] = motion_cost(req.tier)
+            breakdown["lipsync_addon"] = lipsync_cost(req.tier)
+        return EstimateResponse(
+            estimated_time_seconds=seconds,
+            estimated_cost_credits=credits,
+            breakdown=breakdown,
+        )
     seconds, credits = estimate_generation(
         media_type=req.media_type,
         model=req.model,

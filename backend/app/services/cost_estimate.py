@@ -1,7 +1,44 @@
 """Unified credit/time estimation from models catalog (Phase 7 Yapper parity)."""
 from __future__ import annotations
 
-from app.services.entitlements import LIPSYNC_DEMO_COST
+from app.services.entitlements import LIPSYNC_DEMO_COST, lipsync_cost, motion_cost
+
+# Tool latency hints (seconds) — aligned with backend task estimates
+TOOL_ESTIMATED_SECONDS: dict[str, int] = {
+    "lipsync": 180,
+    "lipsync_studio": 240,
+    "motion": 90,
+    "motion_studio": 120,
+    "performance": 150,
+    "performance_studio": 180,
+}
+
+
+def estimate_tool(
+    *,
+    tool: str,
+    tier: str = "demo",
+    with_talk: bool = False,
+) -> tuple[int, int]:
+    """Return (estimated_seconds, estimated_credits) for lipsync/motion/performance."""
+    t = (tool or "").strip().lower()
+    tier_norm = "studio" if (tier or "demo").strip().lower() == "studio" else "demo"
+    if t == "lipsync":
+        credits = lipsync_cost(tier_norm)
+        seconds = TOOL_ESTIMATED_SECONDS["lipsync_studio" if tier_norm == "studio" else "lipsync"]
+        return seconds, credits
+    if t == "motion":
+        credits = motion_cost(tier_norm)
+        seconds = TOOL_ESTIMATED_SECONDS["motion_studio" if tier_norm == "studio" else "motion"]
+        return seconds, credits
+    if t == "performance":
+        credits = motion_cost(tier_norm) + (lipsync_cost(tier_norm) if with_talk else 0)
+        key = "performance_studio" if tier_norm == "studio" else "performance"
+        seconds = TOOL_ESTIMATED_SECONDS[key]
+        if with_talk:
+            seconds += 60
+        return seconds, credits
+    raise ValueError(f"unknown tool: {tool}")
 
 
 def _model_entry(model_id: str):

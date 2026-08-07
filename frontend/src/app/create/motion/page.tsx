@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Upload, Video, Image, Play, ArrowRight, RefreshCw, CheckCircle, Lightbulb } from "lucide-react";
 import { useCreationStore } from "@/lib/stores";
-import { API_BASE, type TaskResult } from "@/lib/api";
+import { API_BASE, apiAuthHeaders, estimateTool, type TaskResult } from "@/lib/api";
 import { CapabilityNotice } from "@/components/CapabilityNotice";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +70,15 @@ export default function MotionControlPage() {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [loadingSample, setLoadingSample] = useState(false);
+  const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    estimateTool({ tool: "motion", tier })
+      .then((e) => { if (!cancelled) setEstimatedCredits(e.estimated_cost_credits); })
+      .catch(() => { if (!cancelled) setEstimatedCredits(null); });
+    return () => { cancelled = true; };
+  }, [tier]);
 
   const loadCanonicalSample = useCallback(async () => {
     setLoadingSample(true);
@@ -163,7 +172,7 @@ export default function MotionControlPage() {
       setPhase("submitting");
       const res = await fetch(`${API_BASE}/motion`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: apiAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           image_url: imageUrl,
           video_url: videoUrl,
@@ -474,6 +483,9 @@ export default function MotionControlPage() {
               <>
                 <Play className="w-5 h-5" />
                 开始运动迁移
+                {estimatedCredits != null && (
+                  <span className="opacity-80 text-sm">· {estimatedCredits} 积分</span>
+                )}
               </>
             )}
           </motion.button>
