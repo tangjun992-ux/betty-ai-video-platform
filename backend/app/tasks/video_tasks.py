@@ -203,14 +203,24 @@ def generate_video_task(
         cost = rd.get("cost", 0)
 
         output = persist_results(output)
+        chained = _maybe_chain_lipsync(
+            db_task_id, params,
+            prompt,
+            output[0].get("url", "") if output else "",
+        )
+        stage = "lipsync_queued" if chained else "completed"
         _update_task(
-            db_task_id, status="completed", progress=100, current_stage="completed",
+            db_task_id, status="completed", progress=100, current_stage=stage,
             completed_at=datetime.now(timezone.utc),
             results=json.dumps(output), actual_cost=cost,
         )
         model_health.record_success(model, int((time.monotonic() - started) * 1000))
-        _broadcast_progress(db_task_id, 100, "completed", "视频生成完成！")
-        return {"status": "completed", "results": output, "cost": cost}
+        msg = "唇形同步已排队…" if chained else "视频生成完成！"
+        _broadcast_progress(db_task_id, 100, stage, msg)
+        result = {"status": "completed", "results": output, "cost": cost}
+        if chained:
+            result["lipsync_task_id"] = chained
+        return result
 
     except RuntimeError as e:
         from app.fallback_handler import is_retryable_error
@@ -228,6 +238,71 @@ def generate_video_task(
         from app.fallback_handler import is_retryable_error
         model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
         return _mark_failed(db_task_id, str(e))
+
+
+def _maybe_chain_lipsync(db_task_id: str, params: dict, prompt: str, video_url: str) -> str | None:
+    """Queue Kling lipsync after video when post_lipsync=true (Omni integrated flow)."""
+    if not params.get("post_lipsync"):
+        return None
+    portrait = (params.get("image_url") or "").strip()
+    if not portrait and params.get("reference_images"):
+        refs = params.get("reference_images") or []
+        if refs:
+            portrait = str(refs[0]).strip()
+    if not portrait:
+        logger.warning("post_lipsync skipped: no portrait image for task %s", db_task_id)
+        return None
+    text = (params.get("lipsync_text") or prompt or "").strip()[:2000]
+    if not text:
+        return None
+    try:
+        import uuid
+        from celery_app import app as celery_app
+        from app.tasks.task_db import get_task_gateway_context, get_db_url_sync
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session
+        from app.models.task import Task
+
+        ctx = get_task_gateway_context(db_task_id)
+        user_id = ctx.get("user_id")
+        if not user_id:
+            return None
+        lipsync_id = str(uuid.uuid4())
+        voice_id = params.get("lipsync_voice_id") or "zh-CN-XiaoxiaoNeural"
+        engine = create_engine(get_db_url_sync())
+        with Session(engine) as session:
+            session.add(Task(
+                task_id=lipsync_id,
+                user_id=int(user_id),
+                prompt=text,
+                media_type="video",
+                quality="balanced",
+                requested_model="lipsync-demo",
+                selected_model="kling/ai-avatar-pro",
+                parameters={
+                    "image_url": portrait,
+                    "text": text,
+                    "voice_id": voice_id,
+                    "tier": "demo",
+                    "parent_task_id": db_task_id,
+                    "parent_video_url": video_url,
+                },
+                estimated_cost=4.0,
+                status="queued",
+                current_stage="post_lipsync_chain",
+            ))
+            session.commit()
+        celery_app.send_task(
+            "app.tasks.lipsync_tasks.process_lipsync",
+            args=[lipsync_id, portrait, None, text, voice_id, "kling/ai-avatar-pro"],
+            queue="video_q",
+        )
+        _update_task(db_task_id, current_stage="lipsync_queued")
+        logger.info("post_lipsync chained %s → %s", db_task_id, lipsync_id)
+        return lipsync_id
+    except Exception as e:
+        logger.warning("post_lipsync chain failed for %s: %s", db_task_id, e)
+        return None
 
 
 def _handle_retryable(self, db_task_id, model, error, prompt, params: dict):

@@ -68,6 +68,19 @@ SPECS = [
     ("美食 ASMR 感特写：拉丝芝士披萨，蒸汽与油光", "image", "food", "imagen-4", "1024x1024", 0, 520, 7900),
     ("宠物治愈短片：金毛犬草地奔跑，阳光丁达尔", "video", "cute/kawaii", "seedance-2.0-fast", "1920x1080", 5, 880, 14100),
     ("职场头像棚拍三连概念：白衬衣、柔灰背景、眼神自信", "image", "portrait", "gpt-image-2", "1024x1024", 0, 360, 5400),
+    # Phase 7 density — Explore flywheel (Yapper parity target ~50+)
+    ("Studio macro shot of luxury skincare jar, dew drops, soft pink gradient", "image", "product", "gpt-image-2", "1080x1920", 0, 445, 7100),
+    ("Cinematic drone flyover of coastal cliffs at golden hour, waves crashing", "video", "landscape", "seedance-2.0", "1920x1080", 6, 532, 8600),
+    ("Retro synthwave album cover, neon grid horizon, chrome sports car", "image", "cyberpunk", "nano-banana-2", "1024x1024", 0, 378, 5920),
+    ("Kids illustration: friendly dinosaur teaching alphabet, pastel colors", "image", "cartoon", "nano-banana-2", "1024x1024", 0, 290, 4510),
+    ("Fitness influencer gym mirror selfie, energetic mood, vertical short", "video", "energetic", "kling-2.5-turbo", "1080x1920", 5, 640, 9800),
+    ("Minimalist Japanese tea ceremony, tatami room, natural window light", "image", "realistic", "gpt-image-2", "1920x1080", 0, 215, 3380),
+    ("Epic fantasy dragon soaring over medieval castle, volumetric clouds", "image", "fantasy", "gpt-image-2", "1920x1080", 0, 590, 9200),
+    ("Street food night market, sizzling wok flames, handheld documentary", "video", "documentary", "seedance-2.0-fast", "1080x1920", 5, 410, 6300),
+    ("Corporate explainer thumbnail: presenter gesture, clean blue backdrop", "image", "portrait", "nano-banana-2", "1920x1080", 0, 198, 3120),
+    ("Watercolor botanical illustration, peonies and leaves, white paper", "image", "artistic", "nano-banana-2", "1024x1024", 0, 334, 5210),
+    ("Luxury watch unboxing hero frame, black velvet, spotlight reflection", "image", "product", "gpt-image-2", "1080x1920", 0, 476, 7450),
+    ("Snowboarder jump slow motion, powder spray, blue sky, action sports", "video", "energetic", "seedance-2.0", "1920x1080", 6, 558, 8700),
 ]
 
 

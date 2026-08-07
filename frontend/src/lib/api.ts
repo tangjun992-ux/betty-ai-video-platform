@@ -213,6 +213,24 @@ export interface GenerateRequest {
   seed?: number;
   /** Negative prompt — elements to avoid (honored by supporting models) */
   negative_prompt?: string;
+  /** Auto-chain Kling lipsync after video completes (Omni integrated flow) */
+  post_lipsync?: boolean;
+  /** Script for post_lipsync; defaults to prompt */
+  lipsync_text?: string;
+}
+
+export interface EstimateRequest {
+  media_type?: "image" | "video";
+  model?: string;
+  duration?: number;
+  count?: number;
+  post_lipsync?: boolean;
+}
+
+export interface EstimateResponse {
+  estimated_time_seconds: number;
+  estimated_cost_credits: number;
+  breakdown?: Record<string, number>;
 }
 
 export interface GenerateResponse {
@@ -274,6 +292,8 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
       generate_audio: req.generate_audio ?? false,
       ...(req.seed != null ? { seed: req.seed } : {}),
       ...(req.negative_prompt ? { negative_prompt: req.negative_prompt } : {}),
+      ...(req.post_lipsync ? { post_lipsync: true } : {}),
+      ...(req.lipsync_text ? { lipsync_text: req.lipsync_text } : {}),
     }),
   });
   if (!res.ok) {
@@ -537,9 +557,29 @@ export async function getReceipt(orderNo: string): Promise<any> {
   if (!res.ok) throw new Error(`加载收据失败: ${res.status}`);
   return res.json();
 }
+/** Pre-submit credit/time estimate (Phase 7 — unified catalog pricing) */
+export async function estimateGeneration(req: EstimateRequest): Promise<EstimateResponse> {
+  const res = await fetch(`${API_BASE}/generate/estimate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      media_type: req.media_type || "video",
+      model: req.model || "seedance-2.0",
+      duration: req.duration ?? 5,
+      count: req.count ?? 1,
+      post_lipsync: req.post_lipsync ?? false,
+    }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `估价失败: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function checkout(kind: "plan" | "pack", id: string, cycle: "monthly" | "yearly" = "monthly"): Promise<any> {
   const res = await fetch(`${API_BASE}/billing/checkout`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ kind, id, cycle }),
   });
   if (!res.ok) {
