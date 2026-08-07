@@ -831,6 +831,7 @@ async def extract_prompt(
     """
     from app.services.prompt_extract import extract_prompt_from_media, guess_media_kind
     from app.services.media_store import store_upload
+    from app.services.viral_structure import infer_viral_structure
 
     if not media_file and not (media_url and media_url.strip()):
         raise HTTPException(status_code=400, detail="请提供 media_file 或 media_url")
@@ -932,6 +933,13 @@ async def extract_prompt(
             await db.rollback()
 
     result["charged_credits"] = charged
+    result["resolved_media_url"] = resolved_url if resolved_url else None
+    result["viral_structure"] = infer_viral_structure(
+        prompt=str(result.get("prompt") or ""),
+        social=result.get("social"),
+        style_tags=result.get("style_tags"),
+        media_kind=kind,
+    )
     result["create_links"] = {
         "image": "/create/image",
         "video": "/create/video",
