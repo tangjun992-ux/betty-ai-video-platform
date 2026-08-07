@@ -143,7 +143,7 @@ MODELS = [
         id="veo-3.1-fast", provider="KIE.ai → Google", display_name="Veo 3.1 Fast",
         description="Veo 快速档，质价比优",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=30, avg_latency_s=70, styles=["cinematic", "realistic"], cost_per_image_credits=0, cost_per_5s_video_credits=8),
-        cost_tier="high", status="beta",
+        cost_tier="high", status="active",
     ),
     ModelInfo(
         id="veo-3", provider="KIE.ai → Google", display_name="Veo 3",
@@ -197,7 +197,7 @@ MODELS = [
         id="wan-2.2", provider="KIE.ai → Alibaba", display_name="WAN 2.2",
         description="高质开源视频",
         capabilities=ModelCapability(media_types=["video"], max_resolution="720p", max_duration_s=8, avg_latency_s=55, styles=["realistic", "anime"], cost_per_image_credits=0, cost_per_5s_video_credits=4),
-        cost_tier="low", status="beta",
+        cost_tier="low", status="active",
     ),
     ModelInfo(
         id="hailuo-2.3", provider="KIE.ai → MiniMax", display_name="Hailuo 2.3",
@@ -209,7 +209,7 @@ MODELS = [
         id="hailuo-02", provider="KIE.ai → MiniMax", display_name="Hailuo 02",
         description="海螺经典，稳定流畅",
         capabilities=ModelCapability(media_types=["video"], max_resolution="720p", max_duration_s=6, avg_latency_s=50, styles=["realistic", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=5),
-        cost_tier="low", status="beta",
+        cost_tier="low", status="active",
     ),
     ModelInfo(
         id="grok-video", provider="KIE.ai → xAI", display_name="Grok Video",

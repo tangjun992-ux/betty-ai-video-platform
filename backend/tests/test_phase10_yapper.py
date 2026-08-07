@@ -23,7 +23,7 @@ def test_auto_promote_promotes_mapped_beta_on_outframe():
     from app.api.models_info import MODELS
     from app.services.model_promotion import demote_model, maybe_auto_promote_from_smoke
 
-    mid = "wan-2.2"
+    mid = "veo-3.1"
     m = next(x for x in MODELS if x.id == mid)
     assert m.status == "beta"
 
@@ -54,7 +54,7 @@ def test_auto_promote_ignores_non_outframe():
 
     with patch.dict(os.environ, {"MODEL_SMOKE_AUTO_PROMOTE": "1"}):
         r = maybe_auto_promote_from_smoke({
-            "details": [{"model_id": "wan-2.2", "ok": True, "path": "mapping_only"}],
+            "details": [{"model_id": "veo-3", "ok": True, "path": "mapping_only"}],
         })
     assert r["promoted"] == []
 

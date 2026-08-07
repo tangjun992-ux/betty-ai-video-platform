@@ -192,11 +192,16 @@ async def readiness():
     from app.services.stripe_ready import stripe_status
     from app.services.storage_ready import storage_status
     from app.services.oidc_ready import oidc_status
+    from app.services.model_catalog import catalog_integrity
+    from app.services.model_promotion import auto_promote_enabled
+    from app.services.model_smoke import get_last_smoke
     from app.config import settings
 
     stripe = stripe_status().public_dict()
     storage = storage_status().public_dict()
     sso = oidc_status(discover=False).public_dict()
+    catalog = catalog_integrity()
+    last_smoke = get_last_smoke()
     ok = True
     if settings.is_production:
         ok = (
@@ -210,4 +215,17 @@ async def readiness():
         "stripe": stripe,
         "storage": storage,
         "sso": sso,
+        "catalog": {
+            "active_count": catalog["active_count"],
+            "beta_count": catalog["beta_count"],
+            "active_target": 15,
+            "active_outside_verified_set": catalog.get("active_outside_verified_set") or [],
+        },
+        "smoke": {
+            "auto_promote_enabled": auto_promote_enabled(),
+            "last_ts": (last_smoke or {}).get("ts"),
+            "last_mode": (last_smoke or {}).get("mode"),
+            "outframe_ok": (last_smoke or {}).get("outframe_ok", 0),
+            "failed_count": len((last_smoke or {}).get("failed") or []),
+        },
     }

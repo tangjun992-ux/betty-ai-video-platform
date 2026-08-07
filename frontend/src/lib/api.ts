@@ -1230,6 +1230,97 @@ export async function gatewayReloadRoutes(token: string) {
   return res.json();
 }
 
+// ── Admin ops: readiness + model shelf ──
+
+export interface SystemReadiness {
+  ok: boolean;
+  env: string;
+  stripe: {
+    api_key_configured: boolean;
+    webhook_secret_configured: boolean;
+    subscription_ready: boolean;
+    production_ok: boolean;
+    blockers: string[];
+  };
+  storage: {
+    storage_type: string;
+    cdn_configured: boolean;
+    s3_public_configured: boolean;
+    production_ok: boolean;
+    blockers: string[];
+  };
+  sso: {
+    configured: boolean;
+    production_ok: boolean;
+    blockers: string[];
+  };
+  catalog: {
+    active_count: number;
+    beta_count: number;
+    active_target: number;
+    active_outside_verified_set: string[];
+  };
+  smoke: {
+    auto_promote_enabled: boolean;
+    last_ts?: string;
+    last_mode?: string;
+    outframe_ok?: number;
+    failed_count?: number;
+  };
+}
+
+export interface PromotableModel {
+  model_id: string;
+  display_name: string;
+  status: string;
+  media_types: string[];
+  last_smoke?: { ok?: boolean; path?: string; error?: string; latency_ms?: number };
+}
+
+export interface PromotableResponse {
+  verified_active_count: number;
+  active_target: number;
+  promotable: PromotableModel[];
+  verified_set_size: number;
+  last_smoke_ts?: string;
+  auto_promote_env?: string;
+}
+
+export async function getSystemReadiness(): Promise<SystemReadiness> {
+  const res = await fetch(`${API_BASE}/system/readiness`);
+  if (!res.ok) throw new Error(`Readiness: ${res.status}`);
+  return res.json();
+}
+
+export async function getPromotableModels(token: string): Promise<PromotableResponse> {
+  const res = await fetch(`${API_BASE}/admin/model-health/promotable`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Promotable: ${res.status}`);
+  return res.json();
+}
+
+export async function promoteModel(token: string, modelId: string, note?: string) {
+  const res = await fetch(`${API_BASE}/admin/model-health/${encodeURIComponent(modelId)}/promote`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ note: note || "admin promote" }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Promote failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getLastModelSmoke(token: string) {
+  const res = await fetch(`${API_BASE}/admin/model-health/last-smoke`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Last smoke: ${res.status}`);
+  return res.json();
+}
+
 // Ensure guest/auth headers are attached before any page-level data fetch runs.
 if (typeof window !== "undefined") {
   installAuthFetch();

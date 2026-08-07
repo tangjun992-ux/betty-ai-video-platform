@@ -42,10 +42,12 @@ import {
   Sparkles,
   Users,
   Zap,
+  Shield,
 } from "lucide-react";
 
 const adminNav = [
   { href: "/admin/gateway", icon: Zap, label: "Gateway 运维" },
+  { href: "/admin/ops", icon: Shield, label: "生产运维" },
 ];
 
 // ─── NAV ITEMS ──────────────────────────────────────────
