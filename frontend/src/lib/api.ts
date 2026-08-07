@@ -1267,6 +1267,14 @@ export interface SystemReadiness {
     subscription_ready: boolean;
     production_ok: boolean;
     blockers: string[];
+    bootstrap?: {
+      price_envs_configured: number;
+      price_envs_total: number;
+      subscription_prices_ready: boolean;
+      bootstrap_complete: boolean;
+      validate_cmd: string;
+      dry_run_cmd: string;
+    };
   };
   storage: {
     storage_type: string;
@@ -1288,6 +1296,7 @@ export interface SystemReadiness {
   };
   smoke: {
     auto_promote_enabled: boolean;
+    mapping_promote_enabled?: boolean;
     last_ts?: string;
     last_mode?: string;
     outframe_ok?: number;
@@ -1344,6 +1353,25 @@ export async function getLastModelSmoke(token: string) {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Last smoke: ${res.status}`);
+  return res.json();
+}
+
+export interface WebhookFailure {
+  task_id: string;
+  status: string;
+  webhook_url: string;
+  attempts?: number;
+  status_code?: number;
+  reason?: string;
+  at?: string;
+  updated_at?: string;
+}
+
+export async function getWebhookFailures(token: string, limit = 30): Promise<{ total: number; failures: WebhookFailure[] }> {
+  const res = await fetch(`${API_BASE}/admin/model-health/webhook-failures?limit=${limit}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Webhook failures: ${res.status}`);
   return res.json();
 }
 

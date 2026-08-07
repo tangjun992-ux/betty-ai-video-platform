@@ -10,9 +10,11 @@ import {
   getLastModelSmoke,
   getPromotableModels,
   getSystemReadiness,
+  getWebhookFailures,
   promoteModel,
   type PromotableResponse,
   type SystemReadiness,
+  type WebhookFailure,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +23,7 @@ export default function AdminOpsPage() {
   const [readiness, setReadiness] = useState<SystemReadiness | null>(null);
   const [promotable, setPromotable] = useState<PromotableResponse | null>(null);
   const [lastSmoke, setLastSmoke] = useState<{ available: boolean; report?: Record<string, unknown> } | null>(null);
+  const [webhookFailures, setWebhookFailures] = useState<WebhookFailure[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -32,12 +35,14 @@ export default function AdminOpsPage() {
       const rd = await getSystemReadiness();
       setReadiness(rd);
       if (token) {
-        const [pm, ls] = await Promise.all([
+        const [pm, ls, wh] = await Promise.all([
           getPromotableModels(token),
           getLastModelSmoke(token),
+          getWebhookFailures(token),
         ]);
         setPromotable(pm);
         setLastSmoke(ls);
+        setWebhookFailures(wh.failures);
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "加载失败");
@@ -114,6 +119,10 @@ export default function AdminOpsPage() {
                 { k: "API Key", v: readiness.stripe.api_key_configured ? "已配置" : "未配置" },
                 { k: "Webhook", v: readiness.stripe.webhook_secret_configured ? "已配置" : "未配置" },
                 { k: "订阅 Checkout", v: readiness.stripe.subscription_ready ? "就绪" : "未就绪" },
+                ...(readiness.stripe.bootstrap ? [{
+                  k: "Price 环境变量",
+                  v: `${readiness.stripe.bootstrap.price_envs_configured}/${readiness.stripe.bootstrap.price_envs_total}`,
+                }] : []),
               ]}
             />
             <ReadinessCard
@@ -145,7 +154,8 @@ export default function AdminOpsPage() {
             </h2>
             <div className="flex flex-wrap gap-4 text-sm text-text-secondary mb-4">
               <span>beta: {readiness.catalog.beta_count}</span>
-              <span>Smoke 自动晋升: {readiness.smoke.auto_promote_enabled ? "开启" : "关闭（MODEL_SMOKE_AUTO_PROMOTE）"}</span>
+              <span>Smoke 自动晋升: {readiness.smoke.auto_promote_enabled ? "开启" : "关闭"}</span>
+              <span>Mapping 晋升: {readiness.smoke.mapping_promote_enabled ? "开启" : "关闭"}</span>
               {readiness.smoke.last_ts && (
                 <span>最近 smoke: {readiness.smoke.last_ts} · outframe {readiness.smoke.outframe_ok ?? 0}</span>
               )}
@@ -176,6 +186,29 @@ export default function AdminOpsPage() {
               </div>
             ) : (
               <p className="text-sm text-text-tertiary">暂无可晋升 beta 模型（需 KIE 映射白名单）</p>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4">
+            <h2 className="text-sm font-medium mb-3 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+              Webhook 投递失败
+              <span className="text-text-tertiary font-normal">({webhookFailures.length})</span>
+            </h2>
+            {webhookFailures.length > 0 ? (
+              <div className="space-y-2 max-h-56 overflow-y-auto">
+                {webhookFailures.map((f) => (
+                  <div key={f.task_id} className="text-xs border-t border-cosmic-border/50 pt-2 first:border-t-0 first:pt-0">
+                    <p className="font-mono text-text-primary">{f.task_id.slice(0, 12)}… · {f.status}</p>
+                    <p className="text-text-secondary truncate">{f.webhook_url}</p>
+                    <p className="text-amber-600/90">
+                      {f.status_code ? `HTTP ${f.status_code}` : "—"} · {f.attempts ?? "?"} 次 · {f.reason || "未知错误"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-text-tertiary">暂无失败记录</p>
             )}
           </section>
 

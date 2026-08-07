@@ -41,6 +41,12 @@ jobs:
         env:
           ENV: test
         run: python scripts/smoke_active_models.py mapping
+      - name: Stripe bootstrap dry-run + validate
+        env:
+          ENV: test
+        run: |
+          python scripts/bootstrap_stripe_prices.py --dry-run --json-only | python -c "import json,sys; d=json.load(sys.stdin); assert d['mode']=='dry-run'"
+          python scripts/bootstrap_stripe_prices.py --validate --json-only
 
   frontend:
     name: Frontend · lint + build

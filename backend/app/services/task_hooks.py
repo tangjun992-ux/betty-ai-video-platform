@@ -91,6 +91,39 @@ def persist_webhook_status(db_task_id: str, delivery: dict[str, Any]) -> None:
         session.commit()
 
 
+def list_failed_webhooks(*, limit: int = 50, scan: int = 500) -> list[dict[str, Any]]:
+    """Return recent tasks whose callback webhook delivery failed."""
+    engine = _sync_engine()
+    out: list[dict[str, Any]] = []
+    with Session(engine) as session:
+        rows = session.execute(
+            text(
+                "SELECT task_id, status, webhook_url, parameters, updated_at "
+                "FROM tasks WHERE webhook_url IS NOT NULL AND webhook_url != '' "
+                "ORDER BY updated_at DESC LIMIT :lim"
+            ),
+            {"lim": scan},
+        ).mappings().all()
+    for row in rows:
+        params = _parse_parameters(row.get("parameters"))
+        wh = params.get("webhook")
+        if not isinstance(wh, dict) or wh.get("delivered") is not False:
+            continue
+        out.append({
+            "task_id": row["task_id"],
+            "status": row["status"],
+            "webhook_url": (row.get("webhook_url") or "")[:200],
+            "attempts": wh.get("attempts"),
+            "status_code": wh.get("status_code"),
+            "reason": (wh.get("reason") or "")[:300],
+            "at": wh.get("at"),
+            "updated_at": str(row.get("updated_at") or ""),
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _parse_results(raw) -> list:
     if isinstance(raw, list):
         return raw

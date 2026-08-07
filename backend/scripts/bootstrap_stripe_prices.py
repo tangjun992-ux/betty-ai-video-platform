@@ -5,6 +5,9 @@ Usage:
   # Dry plan (no API calls) — always safe in CI
   python scripts/bootstrap_stripe_prices.py --dry-run
 
+  # Validate configured Price env vars (no API calls)
+  python scripts/bootstrap_stripe_prices.py --validate
+
   # Real create (requires STRIPE_API_KEY; prefer sk_test_*)
   STRIPE_API_KEY=sk_test_... python scripts/bootstrap_stripe_prices.py
 
@@ -166,12 +169,23 @@ def write_env(path: str, env_lines: dict[str, str]) -> None:
         f.write("\n".join(kept).rstrip() + "\n")
 
 
+def validate_env() -> dict[str, Any]:
+    from app.services.stripe_ready import validate_stripe_bootstrap
+    return validate_stripe_bootstrap()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Bootstrap Stripe Prices for Betty")
     parser.add_argument("--dry-run", action="store_true", help="Print plan without API calls")
+    parser.add_argument("--validate", action="store_true", help="Validate Price env vars (no API calls)")
     parser.add_argument("--json-only", action="store_true", help="Emit only JSON (no env stub lines)")
     parser.add_argument("--write-env", metavar="PATH", help="Append/update Price IDs into env file")
     args = parser.parse_args()
+
+    if args.validate:
+        report = validate_env()
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report.get("ok") or os.getenv("ENV", "").lower() in ("test", "development", "dev", "") else 1
 
     if args.dry_run or not (os.getenv("STRIPE_API_KEY") or "").strip():
         report = dry_plan()
