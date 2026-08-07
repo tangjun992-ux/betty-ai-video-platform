@@ -37,7 +37,7 @@ def test_promote_mapped_beta():
     from app.services.model_promotion import promote_model, demote_model
     from app.api.models_info import MODELS
 
-    mid = "wan-2.2"
+    mid = "veo-3.1"
     before = next(m for m in MODELS if m.id == mid)
     assert before.status == "beta"
     r = promote_model(mid, note="test promote")

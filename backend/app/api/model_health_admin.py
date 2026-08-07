@@ -29,15 +29,38 @@ class PromoteRequest(BaseModel):
 async def list_promotable(_: User = Depends(require_admin)):
     from app.api.models_info import MODELS
     from app.services.model_catalog import GATEWAY_MAPPED_BETA_IDS, GATEWAY_VERIFIED_IDS
+    from app.services.model_smoke import get_last_smoke
+
+    smoke_by_id: dict[str, dict] = {}
+    report = get_last_smoke()
+    for d in (report or {}).get("details") or []:
+        mid = d.get("model_id")
+        if mid:
+            smoke_by_id[mid] = {
+                "ok": d.get("ok"),
+                "path": d.get("path"),
+                "error": (d.get("error") or "")[:120],
+                "latency_ms": d.get("latency_ms"),
+            }
 
     items = []
     for m in MODELS:
         if m.status == "beta" and m.id in GATEWAY_MAPPED_BETA_IDS:
-            items.append({"model_id": m.id, "display_name": m.display_name, "status": m.status})
+            items.append({
+                "model_id": m.id,
+                "display_name": m.display_name,
+                "status": m.status,
+                "media_types": list(m.capabilities.media_types or []),
+                "last_smoke": smoke_by_id.get(m.id),
+            })
+    active = [m for m in MODELS if m.status == "active"]
     return {
-        "verified_active_count": sum(1 for m in MODELS if m.status == "active"),
+        "verified_active_count": len(active),
+        "active_target": 15,
         "promotable": items,
         "verified_set_size": len(GATEWAY_VERIFIED_IDS),
+        "last_smoke_ts": (report or {}).get("ts"),
+        "auto_promote_env": __import__("os").getenv("MODEL_SMOKE_AUTO_PROMOTE", ""),
     }
 
 

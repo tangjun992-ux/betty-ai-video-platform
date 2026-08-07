@@ -1189,6 +1189,33 @@ export default function AgentPage() {
                 <h3 className="text-sm font-semibold">变体画廊 · 并排选优</h3>
                 {variantBatchId && <span className="text-[10px] text-text-tertiary">batch {variantBatchId.slice(0, 8)}</span>}
               </div>
+              {!variantRunning && variantGallery.length > 1 && variantGallery.every((v) => v.done) && (
+                <div
+                  data-testid="agent-variant-compare-bar"
+                  className="mb-3 flex flex-wrap gap-3 px-3 py-2 rounded-lg bg-cosmic-subtle/40 border border-cosmic-border/50 text-[11px] text-text-secondary"
+                >
+                  {(() => {
+                    const credits = variantGallery.map((v) => v.plan?.total_credits ?? 0).filter((c) => c > 0);
+                    const steps = variantGallery.map((v) => v.plan?.steps?.filter((s) => !s.skip).length ?? 0);
+                    const minC = credits.length ? Math.min(...credits) : 0;
+                    const maxC = credits.length ? Math.max(...credits) : 0;
+                    return (
+                      <>
+                        <span>对比 {variantGallery.length} 套</span>
+                        {credits.length > 0 && (
+                          <span className="text-amber-500/90">
+                            积分 {minC === maxC ? minC : `${minC}–${maxC}`}
+                          </span>
+                        )}
+                        {steps.some((s) => s > 0) && (
+                          <span>分镜 {Math.min(...steps)}–{Math.max(...steps)} 步</span>
+                        )}
+                        <span className="text-text-tertiary">点击「采用此变体」进入分镜编辑或查看成片</span>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {variantGallery.map((v) => {
                   const media = resolveMedia(v.final?.media_url || v.final?.url);
@@ -1228,6 +1255,24 @@ export default function AgentPage() {
                   );
                 })}
               </div>
+              {pickedVariantId && phase === "planned" && plan && (
+                <div className="mt-4 flex flex-wrap gap-2" data-testid="agent-variant-wizard-cta">
+                  <button
+                    type="button"
+                    onClick={() => document.querySelector("[data-testid=agent-plan]")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    className="px-3 py-1.5 rounded-lg text-xs border border-brand/40 text-brand hover:bg-brand/10"
+                  >
+                    继续编辑分镜 →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => execute(true)}
+                    className="px-3 py-1.5 rounded-lg text-xs bg-cosmic-subtle text-text-secondary hover:text-brand"
+                  >
+                    免费预览此变体
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
