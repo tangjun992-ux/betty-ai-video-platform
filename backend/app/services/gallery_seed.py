@@ -19,7 +19,7 @@ async def maybe_seed_gallery_dev(db: AsyncSession) -> int:
         return 0
     try:
         r = await db.execute(select(func.count()).select_from(Task).where(Task.status == "completed"))
-        if (r.scalar() or 0) >= 8:
+        if (r.scalar() or 0) >= 50:
             return 0
         from scripts import seed_gallery as sg
         sg.main()

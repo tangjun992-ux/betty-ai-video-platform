@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from app.db import get_db
 from app.models.task import Task
 from app.services.credits import deduct_credits, refund_task_credits, resolve_team_id
@@ -18,10 +19,45 @@ from app.tasks.pipeline_tasks import run_pipeline
 from app.router import router as prompt_router
 from app.prompt_enhancer import enhancer as prompt_enhancer
 from app.rate_limiter import rate_limit
+from app.services.cost_estimate import estimate_generation
 from app.auth import resolve_user_id
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class EstimateRequest(BaseModel):
+    media_type: str = Field(default="video", description="image | video")
+    model: str = Field(default="seedance-2.0")
+    duration: int = Field(default=5, ge=1, le=60)
+    count: int = Field(default=1, ge=1, le=4)
+    post_lipsync: bool = Field(default=False)
+
+
+class EstimateResponse(BaseModel):
+    estimated_time_seconds: int
+    estimated_cost_credits: int
+    breakdown: dict
+
+
+@router.post("/estimate", response_model=EstimateResponse, summary="生成前积分/耗时估算")
+async def estimate_cost_endpoint(req: EstimateRequest):
+    seconds, credits = estimate_generation(
+        media_type=req.media_type,
+        model=req.model,
+        duration=req.duration,
+        count=req.count,
+        post_lipsync=req.post_lipsync,
+    )
+    breakdown: dict = {"base_credits": credits}
+    if req.post_lipsync and req.media_type == "video":
+        breakdown["lipsync_addon"] = 4
+        breakdown["base_credits"] = max(0, credits - 4)
+    return EstimateResponse(
+        estimated_time_seconds=seconds,
+        estimated_cost_credits=credits,
+        breakdown=breakdown,
+    )
 
 
 class GenerateRequest(BaseModel):
@@ -66,6 +102,15 @@ class GenerateRequest(BaseModel):
         max_length=2000,
         description="负向提示词：描述不希望出现的元素（支持的模型会透传；不支持时忽略）",
     )
+    post_lipsync: Optional[bool] = Field(
+        default=False,
+        description="视频完成后自动排队 Kling 唇形同步（Omni 一体流，对标 Yapper）",
+    )
+    lipsync_text: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="post_lipsync 时的口播文案；默认使用 prompt",
+    )
 
 
 class GenerateResponse(BaseModel):
@@ -100,6 +145,13 @@ async def execute_generation(
     can invoke it directly without a synthetic Starlette request.
     """
     task_id = str(uuid.uuid4())
+    # Plan-tier concurrent generation cap (Yapper Creator = 10).
+    from app.models.user import User
+    from app.services.generation_limits import enforce_concurrent_limit
+    from app.services.entitlements import user_role
+    u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    await enforce_concurrent_limit(db, user_id, user_role(u.role if u else "guest"))
+
     # Deterministic seed: reuse the caller's (reproduce) or roll a fresh one so
     # every generation is reproducible and variations can be requested later.
     import random as _random
@@ -145,8 +197,12 @@ async def execute_generation(
     if effective_media == "auto":
         effective_media = "image" if "video" not in estimated_model else "video"
 
-    estimated_time, estimated_cost = _estimate_time_and_cost(
-        effective_media, estimated_model, req.duration or 5
+    estimated_time, estimated_cost = estimate_generation(
+        media_type=effective_media,
+        model=estimated_model,
+        duration=req.duration or 5,
+        count=req.count,
+        post_lipsync=bool(req.post_lipsync),
     )
 
     # Build routing info for response
@@ -202,6 +258,10 @@ async def execute_generation(
         params["reference_videos"] = ref_videos
     if ref_audios:
         params["reference_audios"] = ref_audios
+    if req.post_lipsync:
+        params["post_lipsync"] = True
+        params["lipsync_text"] = (req.lipsync_text or req.prompt or "").strip()[:2000]
+        params["lipsync_voice_id"] = "zh-CN-XiaoxiaoNeural"
 
     # Create Task record
     task = Task(
@@ -261,6 +321,10 @@ async def execute_generation(
         celery_params["reference_videos"] = ref_videos
     if ref_audios:
         celery_params["reference_audios"] = ref_audios
+    if req.post_lipsync:
+        celery_params["post_lipsync"] = True
+        celery_params["lipsync_text"] = (req.lipsync_text or req.prompt or "").strip()[:2000]
+        celery_params["lipsync_voice_id"] = "zh-CN-XiaoxiaoNeural"
 
     # Dispatch appropriate Celery task — refund if broker/dispatch fails after deduct.
     try:

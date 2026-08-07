@@ -370,6 +370,66 @@ export default function AgentPage() {
     } catch (e: any) { setErr(`无法连接导演引擎 (${e?.message}) — 请确认后端已启动`); setPhase("idle"); }
   };
 
+  /** Yapper "Just Direct" — plan + async run in one API call. */
+  const oneClickDirect = async (text?: string, opts?: {
+    duration?: number; scenario?: string | null; placement?: string; templateId?: string;
+  }) => {
+    const b = (text ?? brief).trim();
+    if (!b && !opts?.templateId) return;
+    const dur = opts?.duration ?? duration;
+    const sc = opts?.scenario !== undefined ? opts.scenario : activeScenario;
+    const place = opts?.placement !== undefined ? opts.placement : exportPlacement;
+    if (b) setBrief(b);
+    setPhase("running"); setErr(null); setAssets([]); setPlan(null); pollStop.current = false;
+    try {
+      const needed = 8;
+      const ok = await ensureCreditsForReal(needed);
+      if (!ok) { setPhase("idle"); return; }
+      const res = await fetch(`${API_BASE}/director/run/oneclick`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brief: b || "投放成片",
+          has_ref_image: refImage,
+          duration: dur,
+          ref_image_url: refImageUrl,
+          minimal: true,
+          scenario: sc || undefined,
+          identity_lock: identityLock,
+          export_placement: place || undefined,
+          template_id: opts?.templateId,
+          dry_run: false,
+          session_uid: activeUid || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(typeof err.detail === "string" ? err.detail : `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.plan) setPlan(data.plan);
+      const jobId = data.job_id;
+      while (!pollStop.current) {
+        await new Promise((r) => setTimeout(r, 1800));
+        if (pollStop.current) break;
+        let s: any;
+        try { s = await (await fetch(`${API_BASE}/director/progress/${jobId}`)).json(); }
+        catch { continue; }
+        applyProgress(s);
+        if (s.done || s.status === "failed") {
+          if (s.status === "failed") setErr(`执行失败 (${s.error || "未知错误"})`);
+          if (typeof s.total_ms === "number") setTotalMs(s.total_ms);
+          setPhase("done");
+          setPlan((cur) => { if (cur) saveSession(cur, s.assets || []); return cur; });
+          void maybePromptUpgrade(true);
+          break;
+        }
+      }
+    } catch (e: any) {
+      setErr(`一键成片失败 (${e?.message})`);
+      setPhase("idle");
+    }
+  };
+
   const startScenario = async (sc: Scenario) => {
     if (sc.duration) setDuration(sc.duration);
     setBrief(sc.brief);
@@ -407,7 +467,7 @@ export default function AgentPage() {
       }
       return;
     }
-    makePlan(sc.brief, { duration: sc.duration, scenario: sc.id });
+    await oneClickDirect(sc.brief, { duration: sc.duration, scenario: sc.id });
   };
 
   // ── composer modes (对标 yapper: Help Prompt / Help Ideate / Variants) ──
@@ -844,7 +904,7 @@ export default function AgentPage() {
             <div className="flex items-start gap-2 px-4 pt-4 pb-1.5">
               <textarea value={brief} onChange={(e) => setBrief(e.target.value)}
                 data-testid="agent-brief"
-                onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); makePlan(); } }}
+                onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); oneClickDirect(); } }}
                 placeholder="一句话说出你想要的，例如：做一个30秒的咖啡产品宣传片，电影级画质，竖屏抖音…（⌘/Ctrl + ⏎ 开始导演）"
                 rows={2}
                 className="flex-1 resize-none bg-transparent text-[15px] leading-relaxed text-text-primary placeholder:text-text-tertiary/40 outline-none focus:outline-none focus-visible:outline-none focus:shadow-none focus-visible:shadow-none min-h-[64px] max-h-[220px] py-0.5" />
@@ -855,11 +915,11 @@ export default function AgentPage() {
                     brief.trim() && !composerBusy ? "hover:text-brand hover:bg-cosmic-subtle/60" : "opacity-40 cursor-not-allowed")}>
                   {composerBusy === "polish" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
                 </button>
-                <button onClick={() => makePlan()} disabled={!brief.trim() || phase === "planning"}
-                  data-testid="agent-plan-btn" title={t("agent.cta")}
+                <button onClick={() => oneClickDirect()} disabled={!brief.trim() || phase === "running" || phase === "planning"}
+                  data-testid="agent-oneclick-btn" title="一键成片（对标 Yapper Just Direct）"
                   className={cn("inline-flex items-center justify-center h-8 w-8 rounded-full transition-all",
-                    brief.trim() && phase !== "planning" ? "bg-brand text-white hover:brightness-110 active:scale-95" : "bg-cosmic-subtle text-text-tertiary/50 cursor-not-allowed")}>
-                  {phase === "planning" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
+                    brief.trim() && phase !== "running" && phase !== "planning" ? "bg-brand text-white hover:brightness-110 active:scale-95" : "bg-cosmic-subtle text-text-tertiary/50 cursor-not-allowed")}>
+                  {phase === "running" || phase === "planning" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
                 </button>
               </div>
             </div>

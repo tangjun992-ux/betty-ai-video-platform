@@ -20,7 +20,7 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import {
   submitGeneration, getTaskStatus, uploadImage, trackOnboarding, cancelTask,
   listCreativeSessions, createCreativeSession, getCreativeSession,
-  updateCreativeSession, deleteCreativeSession, editImageTool,
+  updateCreativeSession, deleteCreativeSession, editImageTool, estimateGeneration,
   type GenerateResponse, type TaskResult, type CreativeSession, API_BASE,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -97,6 +97,7 @@ export default function CreateImagePage() {
   // Submission tracking for empty state logic
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [imageModels, setImageModels] = useState<Array<{ id: string; name: string; desc: string; badge?: string; credits?: number }>>(IMAGE_MODELS_FALLBACK);
+  const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null);
 
   // Result interactions
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -136,6 +137,20 @@ export default function CreateImagePage() {
       })
       .catch(() => {});
   }, []);
+
+  const effectiveImageModel = selectedModel === "auto" ? "nano-banana-2" : selectedModel;
+
+  useEffect(() => {
+    let cancelled = false;
+    estimateGeneration({
+      media_type: "image",
+      model: effectiveImageModel,
+      count,
+    })
+      .then((e) => { if (!cancelled) setEstimatedCredits(e.estimated_cost_credits); })
+      .catch(() => { if (!cancelled) setEstimatedCredits(null); });
+    return () => { cancelled = true; };
+  }, [effectiveImageModel, count]);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -636,10 +651,8 @@ export default function CreateImagePage() {
     );
   }, [toast]);
 
-  // ── Credit estimate for the param bar ──
+  // ── Credit estimate for the param bar (server-side catalog) ──
   const selectedModelObj = imageModels.find((m) => m.id === selectedModel);
-  const perImageCredits = selectedModelObj?.credits ?? null;
-  const estimatedCredits = perImageCredits != null ? perImageCredits * count : null;
 
   // ── Derived Values ───────────────────────────────────
   const imageResults = results.filter((r) => r.type === "image");

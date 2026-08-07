@@ -561,6 +561,75 @@ async def run_plan_async(
     return {"job_id": job_id, "plan": plan.to_dict(), "dry_run": dry, "session_uid": session_uid}
 
 
+class OneClickRequest(PlanRequest):
+    """Yapper 'Just Direct' — plan + async run in one call."""
+    dry_run: bool | None = Field(default=None)
+    session_uid: Optional[str] = Field(default=None)
+    minimal: bool = Field(
+        default=True,
+        description="默认快速成片：跳过 TTS，最短路径出片",
+    )
+
+
+@router.post("/run/oneclick", summary="一键成片：plan + 后台执行（对标 Yapper Just Direct）")
+async def run_oneclick(
+    req: OneClickRequest,
+    request: Request,
+    user_id: int = Depends(resolve_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Single API for Agent home / scenario cards: auto-plan with minimal=True then enqueue Celery run."""
+    from app.services.generation_limits import enforce_concurrent_limit
+    from app.models.user import User
+    from app.services.entitlements import user_role
+
+    u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    await enforce_concurrent_limit(db, user_id, user_role(u.role if u else "guest"))
+
+    run_req = RunRequest(
+        brief=req.brief,
+        has_ref_image=req.has_ref_image,
+        duration=req.duration,
+        ref_image_url=req.ref_image_url,
+        minimal=bool(req.minimal),
+        scenario=req.scenario,
+        identity_lock=req.identity_lock,
+        export_placement=req.export_placement,
+        template_id=req.template_id,
+        dry_run=req.dry_run,
+        session_uid=req.session_uid,
+    )
+    plan = _resolve_plan(run_req)
+    dry = _dry_run_default() if req.dry_run is None else req.dry_run
+    await _charge_director_plan(db, user_id, plan, team_id=resolve_team_id(request), dry_run=dry)
+    session_uid = req.session_uid
+    if session_uid:
+        await _owned_session(db, session_uid, user_id)
+    job_id = uuid.uuid4().hex
+    from app.tasks.director_tasks import run_director, write_progress
+    write_progress(job_id, {
+        "job_id": job_id, "status": "queued", "done": False, "dry_run": dry,
+        "user_id": user_id,
+        "session_uid": session_uid,
+        "oneclick": True,
+        "plan": plan.to_dict(),
+        "steps": [
+            {"id": s.id, "status": "skipped" if s.skip else "pending", "title": s.title, "elapsed_ms": None}
+            for s in plan.steps
+        ],
+        "assets": [], "asset_count": 0, "total_ms": None,
+    })
+    run_director.delay(job_id, plan.to_dict(), dry, session_uid, user_id)
+    return {
+        "job_id": job_id,
+        "plan": plan.to_dict(),
+        "dry_run": dry,
+        "oneclick": True,
+        "poll_url": f"/api/v1/director/progress/{job_id}",
+        "total_credits": sum(s.est_credits for s in plan.steps if not s.skip),
+    }
+
+
 @router.get("/progress/{job_id}", summary="查询异步执行进度")
 async def run_progress(
     job_id: str,

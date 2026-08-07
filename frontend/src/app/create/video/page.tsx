@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, Play, Plus, X, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCreationStore } from "@/lib/stores";
-import { submitGeneration, getTaskStatus, uploadMedia, runStoryboard, enhancePrompt, type TaskResult, API_BASE } from "@/lib/api";
+import { submitGeneration, getTaskStatus, uploadMedia, runStoryboard, enhancePrompt, estimateGeneration, type TaskResult, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
@@ -71,6 +71,7 @@ export default function CreateVideoPage() {
   const [videoModels, setVideoModels] = useState(VIDEO_MODELS_FALLBACK);
   const [generateAudio, setGenerateAudio] = useState(false);
   const [postLipsync, setPostLipsync] = useState(false);
+  const [estimatedCredits, setEstimatedCredits] = useState<number | null>(null);
 
   // Default aspect for video is landscape
   useEffect(() => {
@@ -123,6 +124,26 @@ export default function CreateVideoPage() {
     const t = setInterval(() => setElapsed((p) => p + 1), 1000);
     return () => clearInterval(t);
   }, [submitting]);
+
+  const effectiveModel = (() => {
+    const omni = references.some((r) => r.type === "video" || r.type === "audio") || references.filter((r) => r.type === "image").length > 1;
+    if (omni && (selectedModel === "auto" || !selectedModel)) return "seedance-2.0";
+    return selectedModel === "auto" ? "seedance-2.0" : selectedModel;
+  })();
+
+  useEffect(() => {
+    let cancelled = false;
+    estimateGeneration({
+      media_type: "video",
+      model: effectiveModel,
+      duration: duration || 5,
+      count,
+      post_lipsync: postLipsync,
+    })
+      .then((e) => { if (!cancelled) setEstimatedCredits(e.estimated_cost_credits); })
+      .catch(() => { if (!cancelled) setEstimatedCredits(null); });
+    return () => { cancelled = true; };
+  }, [effectiveModel, duration, count, postLipsync]);
 
   const handleAddReference = useCallback((file: File, type: "image" | "video" | "audio") => {
     const preview = URL.createObjectURL(file);
@@ -205,6 +226,8 @@ export default function CreateVideoPage() {
         reference_audios: referenceAudios.length ? referenceAudios : undefined,
         omni: omni || undefined,
         generate_audio: wantAudio || undefined,
+        post_lipsync: postLipsync && referenceImages.length > 0 ? true : undefined,
+        lipsync_text: postLipsync ? prompt.trim() : undefined,
       };
       const res = await submitGeneration(body);
       setTaskId(res.task_id);
@@ -214,8 +237,7 @@ export default function CreateVideoPage() {
         for (const r of result.results) addResult({ url: r.url, type: "video", prompt, model: res.estimated_model || selectedModel });
         toast.success("视频生成完成", `已生成 ${result.results.length} 个视频`);
         if (postLipsync && imageUrl) {
-          toast.info("继续唇形同步", "已带入参考图；口型走 Kling avatar");
-          router.push(`/create/lipsync?${new URLSearchParams({ image_url: imageUrl }).toString()}`);
+          toast.info("唇形同步已排队", "后端将自动串联 Kling 口型任务");
         }
       }
     } catch (err: any) {
@@ -229,9 +251,6 @@ export default function CreateVideoPage() {
   }, [prompt, multiShotMode, shots, references, submitting, selectedModel, quality, aspectRatio, duration, count, generateAudio, postLipsync, addRecentPrompt, addResult, toast, router]);
 
   const videoResults = results.filter((r) => r.type === "video");
-  const selVid = videoModels.find((m) => m.id === selectedModel);
-  const per5s = selVid?.credits ?? null;
-  const estimatedCredits = per5s != null ? per5s * Math.max(1, Math.ceil((duration || 5) / 5)) * count : null;
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">
