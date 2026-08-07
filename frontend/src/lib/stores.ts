@@ -225,7 +225,7 @@ export const useToastStore = create<ToastState>()((set) => ({
 
 // ─── Auth Store ─────────────────────────────────────────
 interface AuthState {
-  user: { id: string; email: string; name?: string; credits: number } | null;
+  user: { id: string; email: string; name?: string; credits: number; is_admin?: boolean } | null;
   token: string | null;
   setUser: (u: AuthState["user"]) => void;
   setToken: (t: string | null) => void;

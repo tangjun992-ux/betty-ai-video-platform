@@ -46,6 +46,7 @@ def _user_payload(user: User, credits: int | None = None) -> dict:
         "display_name": user.display_name,
         "name": user.display_name or user.username,
         "role": user.role,
+        "is_admin": bool(user.is_admin),
     }
     if credits is not None:
         payload["credits"] = credits
@@ -133,6 +134,7 @@ async def get_profile(current_user: User = Depends(get_current_user)):
         "display_name": current_user.display_name,
         "role": current_user.role,
         "is_active": current_user.is_active,
+        "is_admin": bool(current_user.is_admin),
     }
 
 

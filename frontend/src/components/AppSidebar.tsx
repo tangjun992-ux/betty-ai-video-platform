@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { useUIStore } from "@/lib/stores";
+import { useUIStore, useAuthStore } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
 import { useLocale } from "@/i18n/LocaleProvider";
@@ -41,7 +41,12 @@ import {
   ChevronDown,
   Sparkles,
   Users,
+  Zap,
 } from "lucide-react";
+
+const adminNav = [
+  { href: "/admin/gateway", icon: Zap, label: "Gateway 运维" },
+];
 
 // ─── NAV ITEMS ──────────────────────────────────────────
 const mainNav = [
@@ -133,6 +138,7 @@ function NavItem({
 export function AppSidebar() {
   const { t } = useLocale();
   const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
+  const isAdmin = useAuthStore((s) => Boolean(s.user?.is_admin));
   const [toolsOpen, setToolsOpen] = useState(true);
 
   return (
@@ -250,6 +256,26 @@ export function AppSidebar() {
                 icon={item.icon}
                 label={t(item.labelKey as any)}
                 collapsed={true}
+              />
+            ))}
+          </>
+        )}
+
+        {isAdmin && (
+          <>
+            <div className="my-2 mx-3 border-t border-cosmic-border" />
+            {!sidebarCollapsed && (
+              <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary/70 select-none">
+                运维
+              </p>
+            )}
+            {adminNav.map((item) => (
+              <NavItem
+                key={item.href}
+                href={item.href}
+                icon={item.icon}
+                label={item.label}
+                collapsed={sidebarCollapsed}
               />
             ))}
           </>

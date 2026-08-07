@@ -329,6 +329,15 @@ KLING_SECRET_KEY=...
 - [x] `model_smoke` live 探测走 Gateway
 - [x] 生产 compose + `.env.example` 补全 Replicate / KIE backup / Gateway env
 
+### Phase 5 — 生产抛光（本 PR）
+
+- [x] 移除 motion_tasks legacy KieAdapter/registry fallback（Gateway 唯一路径）
+- [x] Provider 级 RPM + 并发背压（`GATEWAY_PROVIDER_RPM` / `GATEWAY_PROVIDER_MAX_INFLIGHT`）
+- [x] Gateway Admin HTTP 集成测试
+- [x] Grafana Dashboard 模板（`infra/grafana/betty-gateway-dashboard.json`）
+- [x] 前端 Admin 侧栏入口 + `is_admin` 暴露于 auth/settings API
+- [x] lipsync publicize 统一走 Gateway assets
+
 ---
 
 ## 9. 风险与决策

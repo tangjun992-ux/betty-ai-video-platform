@@ -72,23 +72,6 @@ def process_lipsync(
         use_gw = gateway_enabled() and not demo
 
         async def _to_public(url: str, default_ct: str) -> str:
-            if demo or not use_gw:
-                from app.adapters.kie_adapter import KieAdapter
-                if not url:
-                    return url
-                if url.startswith(("http://", "https://")):
-                    if "/api/v1/media" not in url and "localhost" not in url and "127.0.0.1" not in url:
-                        return url
-                p = _local_media_path(url)
-                if not p:
-                    return url
-                with open(p, "rb") as f:
-                    data = f.read()
-                ext = os.path.splitext(p)[1].lstrip(".") or ("png" if "image" in default_ct else "mp3")
-                ct = f"image/{ext}" if default_ct.startswith("image") else f"audio/{ext}"
-                return await KieAdapter().upload_public_url(
-                    data, filename=f"ls_{uuid.uuid4().hex[:8]}.{ext}", content_type=ct,
-                )
             return await gateway.publicize_url(url, default_content_type=default_ct, trace_id=db_task_id)
 
         audio_public = audio_url

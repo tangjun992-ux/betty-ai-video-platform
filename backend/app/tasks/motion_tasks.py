@@ -11,26 +11,12 @@ import time
 from datetime import datetime, timezone
 
 from celery_app import app
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session
 
 from app.services.media_store import persist_results
 
 logger = logging.getLogger(__name__)
 
 from app.tasks.task_db import update_task as _update_task
-
-
-def _get_db_url_sync():
-    db_url = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
-    if db_url.startswith("sqlite+aiosqlite"):
-        db_url = db_url.replace("sqlite+aiosqlite", "sqlite")
-    elif db_url.startswith("postgresql+asyncpg"):
-        db_url = db_url.replace("postgresql+asyncpg", "postgresql")
-    return db_url
-
-
-
 
 def _run_async(coro):
     loop = asyncio.new_event_loop()
@@ -118,223 +104,74 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
     )
     studio = params.get("tier") == "studio"
 
-    if gateway_enabled():
-        try:
-            _broadcast_progress(db_task_id, 45, "generating", "Gateway motion 通道生成中...")
-            _update_task(db_task_id, progress=45, current_stage="generating")
-            gw = _run_async(gateway.generate_motion(
-                image_url=image_url,
-                video_url=video_url,
-                model=motion_model,
-                prompt=motion_prompt,
-                duration=int(params.get("duration", 5) or 5),
-                resolution=params.get("resolution", "720p") or ("1080p" if studio else "720p"),
-                studio=studio,
-                character_orientation=params.get("character_orientation") or "video",
-                background_source=params.get("background_source"),
-                **gateway_call_kwargs(db_task_id),
-            ))
-            result = gw.result
-            rd = result.to_dict() if hasattr(result, "to_dict") else result
-            media_url = rd.get("media_url") or rd.get("url") or ""
-            if media_url:
-                output = [{
-                    "type": "video",
-                    "url": media_url,
-                    "thumbnail": rd.get("thumbnail_url", "") or image_url,
-                    "model": rd.get("model", "kie/motion"),
-                    "resolution": rd.get("resolution", "720p"),
-                    "duration": rd.get("duration", 5),
-                    "cost": rd.get("cost", 6),
-                    "op": "motion",
-                    "gateway_provider": gw.provider_used,
-                    "gateway_fallback": gw.fallback_used,
-                }]
-                voice_text = (params.get("voice_text") or "").strip()
-                if voice_text:
-                    try:
-                        _broadcast_progress(db_task_id, 90, "voice", "正在生成旁白音频...")
-                        tgw = _run_async(gateway.generate_speech(
-                            voice_text,
-                            voice=params.get("voice") or "Rachel",
-                            **gateway_call_kwargs(db_task_id, include_cost=False),
-                        ))
-                        tts_d = tgw.result.to_dict() if hasattr(tgw.result, "to_dict") else tgw.result
-                        audio_url_out = tts_d.get("media_url") or tts_d.get("url") or ""
-                        if audio_url_out:
-                            output.append({
-                                "type": "audio",
-                                "url": audio_url_out,
-                                "model": tts_d.get("model", "tts"),
-                                "cost": tts_d.get("cost", 0),
-                                "op": "motion_voice",
-                                "note": "旁白 TTS；非实时变声引擎",
-                            })
-                    except Exception as ve:
-                        logger.warning("motion voice TTS failed (non-fatal): %s", ve)
-                output = persist_results(output)
-                _update_task(
-                    db_task_id, status="completed", progress=100, current_stage="completed",
-                    completed_at=datetime.now(timezone.utc),
-                    results=json.dumps(output),
-                    actual_cost=rd.get("cost", 6),
-                )
-                _broadcast_progress(db_task_id, 100, "completed", "运动控制生成完成！")
-                return {"status": "completed", "results": output}
-            last_error = "Gateway motion 未返回视频 URL"
-        except Exception as e:
-            last_error = str(e)
-            logger.warning("Gateway generate_motion failed, falling back: %s", e)
-    else:
-        last_error = "未知错误"
+    if not gateway_enabled():
+        return _fail_task(db_task_id, "Model Gateway 未启用，无法执行运动控制。")
 
-    # Legacy fallback path when gateway disabled or gateway motion failed
+    last_error = "Gateway motion 未返回视频 URL"
     try:
-        from app.adapters.kie_adapter import KieAdapter
-        kie = KieAdapter()
-        if kie.is_available() and hasattr(kie, "generate_motion"):
-            _broadcast_progress(db_task_id, 45, "generating", "KIE motion 专用通道生成中...")
-            _update_task(db_task_id, progress=45, current_stage="generating")
-            motion_model = (
-                model
-                or params.get("model")
-                or ("motion-control-studio" if params.get("tier") == "studio" else "motion-control")
-            )
-            result = _run_async(kie.generate_motion(
-                image_url=image_url,
-                video_url=video_url,
-                prompt=motion_prompt,
-                model_id=motion_model,
-                duration=int(params.get("duration", 5) or 5),
-                resolution=params.get("resolution", "720p") or ("1080p" if params.get("tier") == "studio" else "720p"),
-                character_orientation=params.get("character_orientation") or "video",
-                background_source=params.get("background_source"),
-                studio=params.get("tier") == "studio",
-            ))
-            rd = result.to_dict() if hasattr(result, "to_dict") else result
-            media_url = rd.get("media_url") or rd.get("url") or ""
-            if media_url:
-                output = [{
-                    "type": "video",
-                    "url": media_url,
-                    "thumbnail": rd.get("thumbnail_url", "") or image_url,
-                    "model": rd.get("model", "kie/motion"),
-                    "resolution": rd.get("resolution", "720p"),
-                    "duration": rd.get("duration", 5),
-                    "cost": rd.get("cost", 6),
-                    "op": "motion",
-                }]
-                # Optional TTS narration (Motion + Voice light parity — not a voice changer).
-                voice_text = (params.get("voice_text") or "").strip()
-                if voice_text:
-                    try:
-                        _broadcast_progress(db_task_id, 90, "voice", "正在生成旁白音频...")
-                        tts = _run_async(kie.generate_speech(
-                            voice_text,
-                            voice=params.get("voice") or "Rachel",
-                        ))
-                        tts_d = tts.to_dict() if hasattr(tts, "to_dict") else tts
-                        audio_url = tts_d.get("media_url") or tts_d.get("url") or ""
-                        if audio_url:
-                            output.append({
-                                "type": "audio",
-                                "url": audio_url,
-                                "model": tts_d.get("model", "tts"),
-                                "cost": tts_d.get("cost", 0),
-                                "op": "motion_voice",
-                                "note": "旁白 TTS；非实时变声引擎",
-                            })
-                    except Exception as ve:
-                        logger.warning("motion voice TTS failed (non-fatal): %s", ve)
-                output = persist_results(output)
-                _update_task(
-                    db_task_id, status="completed", progress=100, current_stage="completed",
-                    completed_at=datetime.now(timezone.utc),
-                    results=json.dumps(output),
-                    result_url=output[0].get("url", "") if output else "",
-                    actual_cost=rd.get("cost", 6),
-                )
-                _broadcast_progress(db_task_id, 100, "completed", "运动控制生成完成！")
-                return {"status": "completed", "results": output}
-            last_error = "KIE motion 未返回视频 URL"
+        _broadcast_progress(db_task_id, 45, "generating", "Gateway motion 通道生成中...")
+        _update_task(db_task_id, progress=45, current_stage="generating")
+        gw = _run_async(gateway.generate_motion(
+            image_url=image_url,
+            video_url=video_url,
+            model=motion_model,
+            prompt=motion_prompt,
+            duration=int(params.get("duration", 5) or 5),
+            resolution=params.get("resolution", "720p") or ("1080p" if studio else "720p"),
+            studio=studio,
+            character_orientation=params.get("character_orientation") or "video",
+            background_source=params.get("background_source"),
+            **gateway_call_kwargs(db_task_id),
+        ))
+        result = gw.result
+        rd = result.to_dict() if hasattr(result, "to_dict") else result
+        media_url = rd.get("media_url") or rd.get("url") or ""
+        if not media_url:
+            return _fail_task(db_task_id, last_error)
+
+        output = [{
+            "type": "video",
+            "url": media_url,
+            "thumbnail": rd.get("thumbnail_url", "") or image_url,
+            "model": rd.get("model", "kie/motion"),
+            "resolution": rd.get("resolution", "720p"),
+            "duration": rd.get("duration", 5),
+            "cost": rd.get("cost", 6),
+            "op": "motion",
+            "gateway_provider": gw.provider_used,
+            "gateway_fallback": gw.fallback_used,
+        }]
+        voice_text = (params.get("voice_text") or "").strip()
+        if voice_text:
+            try:
+                _broadcast_progress(db_task_id, 90, "voice", "正在生成旁白音频...")
+                tgw = _run_async(gateway.generate_speech(
+                    voice_text,
+                    voice=params.get("voice") or "Rachel",
+                    **gateway_call_kwargs(db_task_id, include_cost=False),
+                ))
+                tts_d = tgw.result.to_dict() if hasattr(tgw.result, "to_dict") else tgw.result
+                audio_url_out = tts_d.get("media_url") or tts_d.get("url") or ""
+                if audio_url_out:
+                    output.append({
+                        "type": "audio",
+                        "url": audio_url_out,
+                        "model": tts_d.get("model", "tts"),
+                        "cost": tts_d.get("cost", 0),
+                        "op": "motion_voice",
+                        "note": "旁白 TTS；非实时变声引擎",
+                    })
+            except Exception as ve:
+                logger.warning("motion voice TTS failed (non-fatal): %s", ve)
+        output = persist_results(output)
+        _update_task(
+            db_task_id, status="completed", progress=100, current_stage="completed",
+            completed_at=datetime.now(timezone.utc),
+            results=json.dumps(output),
+            actual_cost=rd.get("cost", 6),
+        )
+        _broadcast_progress(db_task_id, 100, "completed", "运动控制生成完成！")
+        return {"status": "completed", "results": output}
     except Exception as e:
-        last_error = str(e)
-        logger.warning("KIE generate_motion failed, falling back: %s", e)
-
-    adapters_to_try = []
-    try:
-        from app.adapters.registry import get_adapter, _load_all_adapters
-        _load_all_adapters()
-        for mid in ("bytedance/seedance-2-fast", "seedance-2-fast", "seedance-2.0-fast"):
-            ad = get_adapter(mid)
-            if ad:
-                adapters_to_try.append((mid, ad))
-                break
-    except Exception as e:
-        logger.warning("Adapter registry load failed: %s", e)
-
-    if not adapters_to_try:
-        try:
-            from app.adapters.kie_adapter import KieAdapter
-            adapters_to_try.append(("kie/seedance", KieAdapter()))
-        except Exception as e:
-            logger.warning("KIE adapter unavailable: %s", e)
-
-    if not adapters_to_try:
-        return _fail_task(db_task_id, "未找到可用的运动控制模型适配器，请检查 KIE_API_KEY 配置。")
-
-    for model_id, adapter in adapters_to_try:
-        try:
-            _broadcast_progress(db_task_id, 50, "generating", f"{model_id} 视频生成中...")
-            _update_task(db_task_id, progress=50, current_stage="generating")
-
-            gen_kwargs = dict(
-                prompt=motion_prompt,
-                image_url=image_url,
-                duration=params.get("duration", 5),
-                resolution=params.get("resolution", "1080p"),
-            )
-            # video_url for motion reference (adapter may ignore if unsupported)
-            if hasattr(adapter, "generate_video"):
-                try:
-                    result = _run_async(adapter.generate_video(**gen_kwargs, video_url=video_url))
-                except TypeError:
-                    result = _run_async(adapter.generate_video(**gen_kwargs))
-            else:
-                continue
-
-            rd = result.to_dict() if hasattr(result, "to_dict") else result
-            error = rd.get("error")
-            media_url = rd.get("media_url") or rd.get("url") or ""
-
-            if error or not media_url:
-                last_error = error or "模型未返回视频 URL"
-                logger.warning("Motion %s failed: %s", model_id, last_error)
-                continue
-
-            output = [{
-                "type": "video",
-                "url": media_url,
-                "thumbnail": rd.get("thumbnail_url", "") or image_url,
-                "model": rd.get("model", model_id),
-                "resolution": rd.get("resolution", "1080p"),
-                "duration": rd.get("duration", 5),
-                "cost": rd.get("cost", 6),
-            }]
-            output = persist_results(output)
-            _update_task(
-                db_task_id, status="completed", progress=100, current_stage="completed",
-                completed_at=datetime.now(timezone.utc),
-                results=json.dumps(output),
-                result_url=output[0].get("url", "") if output else "",
-                actual_cost=rd.get("cost", 6),
-            )
-            _broadcast_progress(db_task_id, 100, "completed", "运动控制生成完成！")
-            logger.info("Motion control completed: task=%s model=%s", db_task_id, model_id)
-            return {"status": "completed", "results": output}
-
-        except Exception as e:
-            last_error = str(e)
-            logger.warning("Motion adapter %s error: %s", model_id, e)
-
-    return _fail_task(db_task_id, f"运动控制生成失败：{last_error}")
+        logger.exception("Gateway motion failed task=%s", db_task_id)
+        return _fail_task(db_task_id, f"运动控制生成失败：{e}")

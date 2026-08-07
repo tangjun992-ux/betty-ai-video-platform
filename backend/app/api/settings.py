@@ -159,6 +159,7 @@ async def get_settings(
             "avatar_url": current_user.avatar_url,
             "role": current_user.role,
             "is_active": current_user.is_active,
+            "is_admin": bool(current_user.is_admin),
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
         },
         preferences=_get_user_preferences(current_user),
