@@ -20,16 +20,16 @@ const PLANS = [
 
 const PLAN_FEATURES: Record<string, { zh: string[]; en: string[] }> = {
   starter: {
-    zh: ["1,000 Credits / 月", "已验证图片模型", "1080p 分辨率", "标准生成速度", "高级唇形同步", "个人使用许可"],
-    en: ["1,000 credits / mo", "Verified image models", "1080p resolution", "Standard speed", "Advanced lip-sync", "Personal-use license"],
+    zh: ["1,000 Credits / 月", "已验证图片模型", "3 路并发生成", "1080p 分辨率", "标准生成速度", "高级唇形同步", "个人使用许可"],
+    en: ["1,000 credits / mo", "Verified image models", "3 concurrent generations", "1080p resolution", "Standard speed", "Advanced lip-sync", "Personal-use license"],
   },
   personal: {
-    zh: ["3,000 Credits / 月", "已验证视频模型", "Seedance 2.0 全模态", "4K 分辨率", "高级运动控制", "图片 & 视频放大"],
-    en: ["3,000 credits / mo", "Verified video models", "Seedance 2.0 omni", "4K resolution", "Advanced motion control", "Image & video upscale"],
+    zh: ["3,000 Credits / 月", "已验证视频模型", "5 路并发生成", "Seedance 2.0 全模态", "4K 分辨率", "高级运动控制", "图片 & 视频放大"],
+    en: ["3,000 credits / mo", "Verified video models", "5 concurrent generations", "Seedance 2.0 omni", "4K resolution", "Advanced motion control", "Image & video upscale"],
   },
   creator: {
-    zh: ["7,000 Credits / 月", "全部已验证模型", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
-    en: ["7,000 credits / mo", "All verified models", "4K · fastest speed", "Commercial license", "Team collaboration", "API access", "Priority support"],
+    zh: ["7,000 Credits / 月", "全部已验证模型", "10 路并发生成", "4K 分辨率 · 最快速度", "商业授权许可", "团队协作", "API 访问", "优先支持"],
+    en: ["7,000 credits / mo", "All verified models", "10 concurrent generations", "4K · fastest speed", "Commercial license", "Team collaboration", "API access", "Priority support"],
   },
 };
 
@@ -43,8 +43,8 @@ const MAX_TIERS = [
 ];
 
 const MAX_FEATURES = {
-  zh: ["全部已验证模型 + 实验室抢先体验", "最高并发 · 高分辨率", "无限团队座位", "API + Webhook", "专属客户经理 · SLA"],
-  en: ["All verified models + Lab early access", "Highest concurrency · high resolution", "Unlimited team seats", "API + Webhooks", "Dedicated CSM · SLA"],
+  zh: ["全部已验证模型 + 实验室抢先体验", "15 路最高并发 · 高分辨率", "无限团队座位", "API + Webhook", "专属客户经理 · SLA"],
+  en: ["All verified models + Lab early access", "15 concurrent generations · high resolution", "Unlimited team seats", "API + Webhooks", "Dedicated CSM · SLA"],
 };
 
 const CREDIT_USAGE = [

@@ -3,12 +3,12 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/lib/stores";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, oidcExchange } from "@/lib/api";
 import { Loading } from "@/components/StatusStates";
 
 /**
- * OIDC / SSO callback — stores JWT from query and hydrates user profile.
- * Backend redirects here as /auth/callback?token=...
+ * OIDC / SSO callback — exchanges one-time code for JWT (Phase 8 secure flow).
+ * Legacy `?token=` still supported for dev/back-compat.
  */
 function AuthCallbackInner() {
   const router = useRouter();
@@ -17,14 +17,26 @@ function AuthCallbackInner() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = params.get("token");
-    if (!token) {
-      setError("缺少登录令牌");
+    const idpError = params.get("error");
+    const idpDesc = params.get("error_description");
+    if (idpError) {
+      setError(idpDesc || idpError || "IdP 拒绝了登录请求");
       return;
     }
+
     let cancelled = false;
     (async () => {
       try {
+        let token = params.get("token");
+        const code = params.get("code");
+        if (!token && code) {
+          const exchanged = await oidcExchange(code);
+          token = exchanged.access_token;
+        }
+        if (!token) {
+          setError("缺少登录凭证（code 或 token）");
+          return;
+        }
         setToken(token);
         const r = await fetch(`${API_BASE}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },

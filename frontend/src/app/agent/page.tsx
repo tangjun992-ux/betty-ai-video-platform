@@ -10,7 +10,7 @@ import {
   ChevronsUpDown, ArrowUp, Zap, SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { API_BASE } from "@/lib/api";
+import { API_BASE, apiAuthHeaders, parseApiError } from "@/lib/api";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { PayModal, type PayTarget } from "@/components/PayModal";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -386,7 +386,8 @@ export default function AgentPage() {
       const ok = await ensureCreditsForReal(needed);
       if (!ok) { setPhase("idle"); return; }
       const res = await fetch(`${API_BASE}/director/run/oneclick`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: apiAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           brief: b || "投放成片",
           has_ref_image: refImage,
@@ -402,8 +403,14 @@ export default function AgentPage() {
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(typeof err.detail === "string" ? err.detail : `HTTP ${res.status}`);
+        const body = await res.json().catch(() => ({}));
+        const e = parseApiError(res, body);
+        if (e.isConcurrentLimit) {
+          toast.warning("并发已满", e.message);
+          setPhase("idle");
+          return;
+        }
+        throw e;
       }
       const data = await res.json();
       if (data.plan) setPlan(data.plan);

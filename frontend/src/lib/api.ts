@@ -92,6 +92,40 @@ export function apiAuthHeaders(extra?: HeadersInit): Headers {
   return headers;
 }
 
+/** Normalize FastAPI error payloads; tags 429 concurrent-limit responses. */
+export function parseApiError(res: Response, body: unknown): Error & { status?: number; isConcurrentLimit?: boolean } {
+  const detail = (body as { detail?: unknown })?.detail;
+  const msg =
+    typeof detail === "string"
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map((d: { msg?: string }) => d.msg || String(d)).join("; ")
+        : `HTTP ${res.status}`;
+  const err = new Error(msg) as Error & { status?: number; isConcurrentLimit?: boolean };
+  err.status = res.status;
+  err.isConcurrentLimit = res.status === 429;
+  return err;
+}
+
+export async function oidcExchange(code: string): Promise<{ access_token: string; token_type: string }> {
+  const res = await fetch(`${API_BASE}/auth/oidc/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `SSO 换票失败: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getOidcStatus(): Promise<{ configured: boolean; issuer?: string }> {
+  const res = await fetch(`${API_BASE}/auth/oidc/status`);
+  if (!res.ok) return { configured: false };
+  return res.json();
+}
+
 /** Install a one-time global fetch interceptor that attaches auth/guest headers. */
 export function installAuthFetch() {
   if (typeof window === "undefined") return;
@@ -298,7 +332,7 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `生成请求失败: ${res.status}`);
+    throw parseApiError(res, err);
   }
   return res.json();
 }

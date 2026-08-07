@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, UserPlus, Building2 } from "lucide-react";
 import { useAuthStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
-import { register, trackOnboarding } from "@/lib/api";
+import { register, trackOnboarding, API_BASE, getOidcStatus } from "@/lib/api";
 import { BrandMark } from "@/components/BrandLogo";
 
 export default function RegisterPage() {
@@ -22,6 +22,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [ssoConfigured, setSsoConfigured] = useState(false);
   const [errors, setErrors] = useState<{
     username?: string;
     email?: string;
@@ -257,6 +258,26 @@ export default function RegisterPage() {
                 </>
               )}
             </button>
+
+            {ssoConfigured && (
+              <>
+                <div className="relative py-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-cosmic-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="px-2 bg-transparent text-text-secondary">或</span>
+                  </div>
+                </div>
+                <a
+                  href={`${API_BASE}/auth/oidc/login`}
+                  className="btn-secondary w-full h-11 text-base inline-flex items-center justify-center gap-2"
+                >
+                  <Building2 className="w-4 h-4" />
+                  企业 SSO 注册 / 登录
+                </a>
+              </>
+            )}
           </motion.form>
 
           {/* Footer Link */}

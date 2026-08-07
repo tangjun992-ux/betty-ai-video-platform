@@ -243,7 +243,8 @@ export default function CreateVideoPage() {
     } catch (err: any) {
       const msg = err.message || "视频生成失败，请重试";
       setError(msg);
-      toast.error("生成失败", msg);
+      if (err?.isConcurrentLimit) toast.warning("并发已满", msg);
+      else toast.error("生成失败", msg);
     } finally {
       setSubmitting(false);
       setTaskId(null);

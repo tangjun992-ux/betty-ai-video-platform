@@ -185,13 +185,13 @@ MODELS = [
         id="kling-1.6", provider="KIE.ai → Kuaishou", display_name="Kling 1.6",
         description="经典稳定档",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=60, styles=["realistic", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=5),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="active",
     ),
     ModelInfo(
         id="wan-2.5", provider="KIE.ai → Alibaba", display_name="WAN 2.5",
         description="阿里旗舰，开源生态强",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=70, styles=["realistic", "anime", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=6),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="active",
     ),
     ModelInfo(
         id="wan-2.2", provider="KIE.ai → Alibaba", display_name="WAN 2.2",
@@ -203,7 +203,7 @@ MODELS = [
         id="hailuo-2.3", provider="KIE.ai → MiniMax", display_name="Hailuo 2.3",
         description="海螺，运动幅度大/表演力强",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=75, styles=["dynamic", "cinematic", "character"], cost_per_image_credits=0, cost_per_5s_video_credits=7),
-        cost_tier="medium", status="beta",
+        cost_tier="medium", status="active",
     ),
     ModelInfo(
         id="hailuo-02", provider="KIE.ai → MiniMax", display_name="Hailuo 02",
