@@ -1,10 +1,14 @@
 """Runtime model status promotion (admin) with catalog integrity checks."""
 from __future__ import annotations
 
+import logging
+import os
 import time
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 from app.services.model_catalog import (
     GATEWAY_GUESS_IDS,
@@ -65,6 +69,46 @@ def promote_model(model_id: str, *, note: str | None = None) -> dict:
 
     model_health.clear_quarantine(mid)
     return {"model_id": mid, "status": "active", "already": False, "note": note}
+
+
+_OUTFRAME_PATHS = frozenset({
+    "live_image", "live_video", "live_image_gateway", "live_video_gateway",
+})
+
+
+def auto_promote_enabled() -> bool:
+    return os.getenv("MODEL_SMOKE_AUTO_PROMOTE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def maybe_auto_promote_from_smoke(report: dict[str, Any]) -> dict[str, Any]:
+    """Promote mapped-beta models that passed paid outframe smoke (gated by env)."""
+    if not auto_promote_enabled():
+        return {"skipped": True, "reason": "MODEL_SMOKE_AUTO_PROMOTE not enabled", "promoted": []}
+    if report.get("skipped"):
+        return {"skipped": True, "reason": report.get("reason") or "smoke skipped", "promoted": []}
+
+    promoted: list[str] = []
+    already: list[str] = []
+    for detail in report.get("details") or []:
+        if not detail.get("ok"):
+            continue
+        path = (detail.get("evidence") or {}).get("path") or detail.get("path") or ""
+        if path not in _OUTFRAME_PATHS:
+            continue
+        mid = detail.get("model_id")
+        if not mid or mid not in GATEWAY_MAPPED_BETA_IDS:
+            continue
+        try:
+            r = promote_model(mid, note="auto-promote from smoke outframe")
+            if r.get("already"):
+                already.append(mid)
+            else:
+                promoted.append(mid)
+                logger.info("auto-promoted model %s from smoke (path=%s)", mid, path)
+        except HTTPException as e:
+            logger.warning("auto-promote skipped %s: %s", mid, e.detail)
+
+    return {"skipped": False, "promoted": promoted, "already_active": already, "count": len(promoted)}
 
 
 def demote_model(model_id: str, *, to: Literal["beta", "lab"] = "beta", note: str | None = None) -> dict:

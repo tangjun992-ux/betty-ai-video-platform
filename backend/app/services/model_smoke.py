@@ -290,6 +290,113 @@ DEFAULT_LIVE_VIDEO_SAMPLE = ("seedance-2.0-fast", "seedance-2.0", "kling-2.5-tur
 STABLE_LIVE_VIDEO_FALLBACK = ("seedance-2.0-fast", "seedance-2.0")
 DEFAULT_LIVE_IMAGE_SAMPLE = ("gpt-image-2", "nano-banana", "nano-banana-pro", "imagen-4")
 
+# Beta SKUs eligible for weekly rotation probe (mapped, not yet active).
+DEFAULT_BETA_VIDEO_PROBE = ("veo-3.1-fast", "wan-2.2", "hailuo-02", "veo-3.1", "veo-3")
+
+
+def beta_probe_rotation(*, media: str = "video", n: int = 2) -> list[str]:
+    """Round-robin pick `n` mapped-beta models for weekly live probe (cost control)."""
+    from app.services.model_catalog import GATEWAY_MAPPED_BETA_IDS
+    from app.api.models_info import MODELS
+
+    by_id = {m.id: m for m in MODELS}
+    want = "video" if media == "video" else "image"
+    candidates = [
+        mid for mid in DEFAULT_BETA_VIDEO_PROBE
+        if mid in GATEWAY_MAPPED_BETA_IDS
+        and mid in by_id
+        and want in (by_id[mid].capabilities.media_types or [])
+    ]
+    if not candidates:
+        return []
+    week = int(time.strftime("%W", time.gmtime()))
+    start = week % len(candidates)
+    out: list[str] = []
+    for i in range(min(n, len(candidates))):
+        out.append(candidates[(start + i) % len(candidates)])
+    return out
+
+
+def run_beta_video_probe(models: list[str] | None = None) -> dict:
+    """Probe mapped-beta video SKUs (weekly rotation). Only live_video → outframe_ok."""
+    from app.api.models_info import MODELS
+    from app.services.model_health import model_health, quarantine_ttl_for_reason
+
+    models = list(models or beta_probe_rotation(media="video", n=2))
+    by_id = {m.id: m for m in MODELS}
+    report: dict[str, Any] = {
+        "mode": "beta_video_probe",
+        "probed": 0,
+        "ok": 0,
+        "outframe_ok": 0,
+        "outframe_skipped": 0,
+        "failed": [],
+        "quarantined": [],
+        "skipped": [],
+        "details": [],
+        "beta_models": models,
+    }
+    if not models:
+        report["skipped"] = True
+        report["reason"] = "no mapped-beta video candidates"
+        return report
+
+    for mid in models:
+        m = by_id.get(mid)
+        if not m:
+            report["failed"].append(mid)
+            report["details"].append({"model_id": mid, "ok": False, "error": "not in catalog"})
+            continue
+        report["probed"] += 1
+        media = list(m.capabilities.media_types or ["video"])
+        probe = probe_model(mid, media, mode="live_video")
+        report["details"].append({"model_id": mid, **probe})
+        path = (probe.get("evidence") or {}).get("path") or ""
+        if probe.get("ok") and path in ("live_video", "live_video_gateway"):
+            model_health.record_success(mid, probe.get("latency_ms") or 0)
+            model_health.clear_quarantine(mid)
+            report["ok"] += 1
+            report["outframe_ok"] += 1
+        elif probe.get("ok"):
+            report["skipped"].append(mid)
+            report["outframe_skipped"] += 1
+        else:
+            err = probe.get("error") or "beta video probe failed"
+            model_health.record_failure(mid, err, retryable=True)
+            model_health.set_quarantine(mid, reason=err, ttl=quarantine_ttl_for_reason(err))
+            report["failed"].append(mid)
+            report["quarantined"].append(mid)
+
+    report["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    return report
+
+
+def merge_smoke_reports(*reports: dict) -> dict:
+    """Merge multiple smoke reports for auto-promote (dedupe by model_id, last wins)."""
+    merged: dict[str, Any] = {
+        "mode": "merged",
+        "probed": 0,
+        "ok": 0,
+        "outframe_ok": 0,
+        "failed": [],
+        "details": [],
+    }
+    by_model: dict[str, dict] = {}
+    for rep in reports:
+        if rep.get("skipped") and not rep.get("details"):
+            continue
+        merged["probed"] += rep.get("probed", 0)
+        merged["ok"] += rep.get("ok", 0)
+        merged["outframe_ok"] += rep.get("outframe_ok", 0)
+        merged["failed"].extend(rep.get("failed") or [])
+        for d in rep.get("details") or []:
+            mid = d.get("model_id")
+            if mid:
+                by_model[mid] = d
+    merged["details"] = list(by_model.values())
+    merged["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    return merged
+
 
 def run_live_video_sample(models: list[str] | tuple[str, ...] | None = None) -> dict:
     """Shared paid live-video sample (scripts + weekly Beat). Only live_video → outframe_ok."""
