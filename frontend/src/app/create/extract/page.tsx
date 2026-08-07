@@ -85,6 +85,13 @@ export default function ExtractPage() {
       );
     } catch (e: any) {
       toast.error("提取失败", e?.message || "请稍后重试");
+      if ((e?.message || "").includes("上传") || (e?.message || "").includes("直链")) {
+        setResult({
+          prompt: "",
+          mode: "error",
+          honesty: e?.message,
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -172,6 +179,13 @@ export default function ExtractPage() {
             <div className="h-full flex flex-col items-center justify-center text-text-secondary text-sm gap-2 py-16">
               <ImageIcon className="w-8 h-8 opacity-40" />
               <p>提取结果将显示在这里</p>
+            </div>
+          ) : result.mode === "error" ? (
+            <div className="space-y-3" data-testid="extract-social-fallback">
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-200/90">
+                社媒页面解析失败。请改用<strong className="font-semibold">上传截图/短视频</strong>，或粘贴可直链访问的图片 URL。
+              </div>
+              <p className="text-xs text-text-secondary">{result.honesty}</p>
             </div>
           ) : (
             <div className="space-y-4" data-testid="extract-result">

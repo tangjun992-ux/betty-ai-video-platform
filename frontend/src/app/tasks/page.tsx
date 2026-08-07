@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { listTasks, getTaskStatus } from "@/lib/api";
+import { listTasks, getTaskStatus, retryTask } from "@/lib/api";
 import { TaskCard } from "@/components/TaskCard";
 
 export default function TasksPage() {
@@ -78,7 +78,14 @@ export default function TasksPage() {
           {tasks.map((task) => (
             <div key={task.task_id} onClick={() => router.push(`/tasks/${task.task_id}`)}
               className="cursor-pointer hover:opacity-90 transition">
-              <TaskCard task={task} onStatusChange={fetchTasks} />
+              <TaskCard
+                task={task}
+                onStatusChange={fetchTasks}
+                onRetry={async (id) => {
+                  const r = await retryTask(id);
+                  router.push(`/tasks/${r.task_id}`);
+                }}
+              />
             </div>
           ))}
         </div>
