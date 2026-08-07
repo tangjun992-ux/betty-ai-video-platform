@@ -1029,6 +1029,88 @@ export async function deleteApiKey(token: string, keyId: string) {
   return res.json();
 }
 
+// ── Gateway Admin (Phase 3) ──────────────────────────────
+
+export interface GatewayStatus {
+  enabled: boolean;
+  registry: { version: number; kill_switch: boolean; disabled: { key: string; reason?: string }[] };
+  routes: { route_count: number; region: string; routes: unknown[] };
+  providers: {
+    key: string;
+    successes: number;
+    failures: number;
+    circuit_open: boolean;
+    available: boolean;
+    last_error: string;
+    admin_disabled?: boolean;
+  }[];
+  backends: { name: string; configured: boolean }[];
+  metrics: { counters: Record<string, number> };
+  kie_key_pool: { configured: number; pool_enabled: boolean; key_suffixes: string[] };
+}
+
+export async function getGatewayStatus(token: string): Promise<GatewayStatus> {
+  const res = await fetch(`${API_BASE}/admin/gateway/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Gateway status: ${res.status}`);
+  return res.json();
+}
+
+export async function gatewayDisableProvider(
+  token: string,
+  provider: string,
+  remote_model: string,
+  reason = "",
+) {
+  const res = await fetch(`${API_BASE}/admin/gateway/providers/disable`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ provider, remote_model, reason }),
+  });
+  if (!res.ok) throw new Error("下线 Provider 失败");
+  return res.json();
+}
+
+export async function gatewayEnableProvider(token: string, provider: string, remote_model: string) {
+  const res = await fetch(`${API_BASE}/admin/gateway/providers/enable`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ provider, remote_model }),
+  });
+  if (!res.ok) throw new Error("恢复 Provider 失败");
+  return res.json();
+}
+
+export async function gatewayResetCircuit(token: string, provider: string, remote_model: string) {
+  const res = await fetch(`${API_BASE}/admin/gateway/providers/reset-circuit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ provider, remote_model }),
+  });
+  if (!res.ok) throw new Error("重置熔断失败");
+  return res.json();
+}
+
+export async function gatewayKillSwitch(token: string, active: boolean) {
+  const res = await fetch(`${API_BASE}/admin/gateway/kill-switch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ active }),
+  });
+  if (!res.ok) throw new Error("Kill switch 操作失败");
+  return res.json();
+}
+
+export async function gatewayReloadRoutes(token: string) {
+  const res = await fetch(`${API_BASE}/admin/gateway/reload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("重载路由失败");
+  return res.json();
+}
+
 // Ensure guest/auth headers are attached before any page-level data fetch runs.
 if (typeof window !== "undefined") {
   installAuthFetch();

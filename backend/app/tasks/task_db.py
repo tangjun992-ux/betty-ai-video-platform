@@ -80,3 +80,31 @@ def update_task(db_task_id: str, **kwargs):
         except Exception as e:
             logger.warning("task terminal hooks failed for %s: %s", db_task_id, e)
     return task_pk
+
+
+def update_task_parameters_gateway_meta(db_task_id: str, gateway_meta: dict) -> None:
+    """Merge gateway routing metadata into tasks.parameters.gateway."""
+    engine = create_engine(get_db_url_sync())
+    with Session(engine) as session:
+        row = session.execute(
+            text("SELECT parameters FROM tasks WHERE task_id = :tid"),
+            {"tid": db_task_id},
+        ).first()
+        if not row:
+            return
+        raw = row[0]
+        if isinstance(raw, str) and raw:
+            try:
+                params = json.loads(raw)
+            except Exception:
+                params = {}
+        elif isinstance(raw, dict):
+            params = dict(raw)
+        else:
+            params = {}
+        params["gateway"] = gateway_meta
+        session.execute(
+            text("UPDATE tasks SET parameters = :p WHERE task_id = :tid"),
+            {"p": json.dumps(params, ensure_ascii=False), "tid": db_task_id},
+        )
+        session.commit()

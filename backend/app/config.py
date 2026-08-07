@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     GATEWAY_ROUTES_PATH: str = os.getenv("GATEWAY_ROUTES_PATH", "")
     GATEWAY_CIRCUIT_FAILURES: int = int(os.getenv("GATEWAY_CIRCUIT_FAILURES", "3"))
     GATEWAY_CIRCUIT_TTL_SECONDS: int = int(os.getenv("GATEWAY_CIRCUIT_TTL_SECONDS", "300"))
+    # Region tag for provider routing (cn | us | eu | empty=global)
+    GATEWAY_REGION: str = os.getenv("GATEWAY_REGION", "")
+    # Daily credit caps via gateway (0 = unlimited)
+    GATEWAY_USER_DAILY_CREDIT_CAP: float = float(os.getenv("GATEWAY_USER_DAILY_CREDIT_CAP", "0"))
+    GATEWAY_TEAM_DAILY_CREDIT_CAP: float = float(os.getenv("GATEWAY_TEAM_DAILY_CREDIT_CAP", "0"))
 
     # LiteLLM proxy (Phase 2 — LLM/chat only, not media generation)
     LITELLM_PROXY_URL: str = os.getenv("LITELLM_PROXY_URL", "")

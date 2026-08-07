@@ -44,9 +44,10 @@ routes:
   # ── Video generation ──────────────────────────────────────
   - capability: video.generate
     model: seedance-2.0
-    description: "Seedance 2.0 — KIE primary, Wan 2.1 Replicate fallback"
+    description: "Seedance 2.0 — KIE primary; Seedance 直连 5% canary (cn); Replicate fallback"
     chain:
-      - { provider: kie, remote_model: bytedance/seedance-2, priority: 1, timeout_s: 600 }
+      - { provider: kie, remote_model: bytedance/seedance-2, priority: 1, weight: 95 }
+      - { provider: seedance, remote_model: seedance-2-fast, priority: 1, canary_percent: 5, region: cn, timeout_s: 600 }
       - { provider: replicate, remote_model: wavespeedai/wan-2.1-t2v-720p, priority: 2, fallback_only: true, timeout_s: 480 }
 
   - capability: video.generate
@@ -57,8 +58,10 @@ routes:
 
   - capability: video.generate
     model: kling-2.5-turbo
+    description: "Kling 2.5 — KIE primary; Kling 直连 fallback"
     chain:
       - { provider: kie, remote_model: kling/v2-5-turbo-text-to-video-pro, priority: 1, timeout_s: 600 }
+      - { provider: kling, remote_model: kling/video-v3-pro, priority: 2, fallback_only: true, timeout_s: 600 }
 
   - capability: video.generate
     model: kling-2.1-pro

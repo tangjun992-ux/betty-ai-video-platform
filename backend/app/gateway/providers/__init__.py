@@ -5,11 +5,15 @@ from typing import Optional
 
 from app.gateway.providers.base import ProviderBackend
 from app.gateway.providers.kie import KieBackend
+from app.gateway.providers.kling import KlingBackend
 from app.gateway.providers.replicate import ReplicateBackend
+from app.gateway.providers.seedance import SeedanceBackend
 
 _BACKENDS: dict[str, ProviderBackend] = {
     "kie": KieBackend(),
     "replicate": ReplicateBackend(),
+    "seedance": SeedanceBackend(),
+    "kling": KlingBackend(),
 }
 
 

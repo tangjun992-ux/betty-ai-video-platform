@@ -25,7 +25,9 @@ class ProviderTarget:
     priority: int = 1
     fallback_only: bool = False  # only used when primary fails
     timeout_s: int = 240
-    weight: int = 100       # load-balance weight (future)
+    weight: int = 100       # load-balance weight among primaries
+    canary_percent: int = 0  # A/B: share of traffic when >0 (same priority band)
+    region: str = ""        # empty = all regions; cn | us | eu
 
 
 @dataclass(frozen=True)

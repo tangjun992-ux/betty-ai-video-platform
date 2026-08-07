@@ -14,12 +14,26 @@ from app.gateway.types import Capability, GatewayExecutionResult, RouteDefinitio
 logger = logging.getLogger(__name__)
 
 
+def _persist_gateway_meta(trace_id: str, result: GatewayExecutionResult) -> None:
+    """Write gateway routing metadata into task.parameters for webhooks/ops."""
+    if not trace_id or len(trace_id) < 8:
+        return
+    try:
+        from app.tasks.task_db import update_task_parameters_gateway_meta
+        update_task_parameters_gateway_meta(trace_id, result.to_meta())
+    except Exception as e:
+        logger.debug("[gateway] meta persist skipped: %s", e)
+
+
 async def execute_route(
     capability: Capability,
     model: str,
     *,
     trace_id: str = "",
     allow_fallback: bool = True,
+    user_id: int | None = None,
+    team_id: str | None = None,
+    estimated_cost: float = 0.0,
     **kwargs: Any,
 ) -> GatewayExecutionResult:
     """
@@ -27,13 +41,24 @@ async def execute_route(
 
     Raises RuntimeError when all hops fail or no route/targets exist.
     """
+    from app.gateway.budget import gateway_budget
+
+    budget = gateway_budget.check(
+        user_id=user_id, team_id=team_id, estimated_cost=estimated_cost,
+    )
+    if not budget.allowed:
+        raise RuntimeError(budget.reason)
+
     route = resolve_route(capability, model)
     if not route:
         raise RuntimeError(f"No gateway route for {capability.value}/{model}")
 
-    return await _execute_chain(
+    result = await _execute_chain(
         route, model, trace_id=trace_id, allow_fallback=allow_fallback, **kwargs,
     )
+    gateway_budget.record(result.cost, user_id=user_id, team_id=team_id)
+    _persist_gateway_meta(trace_id, result)
+    return result
 
 
 async def _execute_chain(
@@ -79,7 +104,7 @@ async def _execute_chain(
             provider_health.record_failure("kie", remote_override, str(e))
             raise
 
-    targets = select_targets(route, allow_fallback=allow_fallback)
+    targets = select_targets(route, allow_fallback=allow_fallback, trace_id=trace_id)
     if not targets:
         raise RuntimeError(
             f"No available provider targets for {route.capability.value}/{model_requested}"
@@ -123,6 +148,14 @@ async def _execute_chain(
                 "latency_ms": latency,
             })
 
+            from app.gateway.metrics import gateway_metrics
+            gateway_metrics.record_request(
+                provider=target.provider,
+                capability=route.capability.value,
+                success=True,
+                fallback=used_fallback and target.fallback_only,
+            )
+
             return GatewayExecutionResult(
                 result=result,
                 capability=route.capability,
@@ -153,6 +186,12 @@ async def _execute_chain(
             logger.warning(
                 "[gateway] hop failed provider=%s model=%s err=%s",
                 target.provider, target.remote_model, err[:200],
+            )
+            from app.gateway.metrics import gateway_metrics
+            gateway_metrics.record_request(
+                provider=target.provider,
+                capability=route.capability.value,
+                success=False,
             )
             if not is_retryable_error(err):
                 break

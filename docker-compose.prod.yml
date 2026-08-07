@@ -77,6 +77,12 @@ services:
       - SEEDANCE_API_KEY=${SEEDANCE_API_KEY}
       - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
       - KLING_SECRET_KEY=${KLING_SECRET_KEY}
+      - GATEWAY_ENABLED=${GATEWAY_ENABLED:-true}
+      - GATEWAY_REGION=${GATEWAY_REGION:-}
+      - GATEWAY_USER_DAILY_CREDIT_CAP=${GATEWAY_USER_DAILY_CREDIT_CAP:-0}
+      - GATEWAY_TEAM_DAILY_CREDIT_CAP=${GATEWAY_TEAM_DAILY_CREDIT_CAP:-0}
+      - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://litellm:4000}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-}
       # Production default: object storage. Override STORAGE_TYPE=local only for smoke tests.
       - STORAGE_TYPE=${STORAGE_TYPE:-s3}
       - STORAGE_PATH=/app/storage
@@ -129,6 +135,12 @@ services:
       - SEEDANCE_API_KEY=${SEEDANCE_API_KEY}
       - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
       - KLING_SECRET_KEY=${KLING_SECRET_KEY}
+      - GATEWAY_ENABLED=${GATEWAY_ENABLED:-true}
+      - GATEWAY_REGION=${GATEWAY_REGION:-}
+      - GATEWAY_USER_DAILY_CREDIT_CAP=${GATEWAY_USER_DAILY_CREDIT_CAP:-0}
+      - GATEWAY_TEAM_DAILY_CREDIT_CAP=${GATEWAY_TEAM_DAILY_CREDIT_CAP:-0}
+      - LITELLM_PROXY_URL=${LITELLM_PROXY_URL:-http://litellm:4000}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-}
       - STORAGE_TYPE=${STORAGE_TYPE:-s3}
       - STORAGE_PATH=/app/storage
       - MEDIA_CDN_BASE_URL=${MEDIA_CDN_BASE_URL:-}
@@ -174,6 +186,31 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
+
+  # LiteLLM Proxy — LLM gateway for Director Brain (optional)
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+    volumes:
+      - ./infra/litellm/config.yaml:/app/config.yaml:ro
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aivideo}
+      - REDIS_URL=redis://redis:6379/3
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - KIE_API_KEY=${KIE_API_KEY}
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-litellm-master}
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   frontend:
     image: node:22-alpine

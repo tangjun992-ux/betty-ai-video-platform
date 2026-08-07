@@ -32,6 +32,8 @@ def _parse_target(entry: dict) -> ProviderTarget:
         fallback_only=bool(entry.get("fallback_only", False)),
         timeout_s=int(entry.get("timeout_s", 240)),
         weight=int(entry.get("weight", 100)),
+        canary_percent=int(entry.get("canary_percent", 0)),
+        region=str(entry.get("region", "") or "").strip().lower(),
     )
 
 

@@ -150,14 +150,21 @@ backend/app/gateway/
 ├── types.py             # Capability, RouteDefinition, ExecutionResult
 ├── config.py            # 加载 routes.yaml + env 覆盖
 ├── routes.yaml          # Provider Chain 配置（可热更新）
-├── router.py            # SKU → 有序 target 列表（过滤熔断）
-├── executor.py          # 链式执行 + retry + 审计
+├── router.py            # SKU → 有序 target 列表（过滤熔断/Region/灰度）
+├── executor.py          # 链式执行 + retry + 审计 + 预算
 ├── facade.py            # 对外统一 API（generate_image/video/...）
 ├── health.py            # Provider 级健康（extends model_health）
+├── registry.py          # Redis 运行时禁用 / Kill Switch（Phase 3）
+├── budget.py            # 用户/团队日额度（Phase 3）
+├── metrics.py           # 请求 / fallback 计数（Phase 3）
+├── assets.py            # 公开 URL 上传（Phase 2）
+├── kie_keys.py          # KIE Key 池轮换（Phase 2）
 └── providers/
     ├── base.py          # ProviderBackend Protocol
     ├── kie.py           # KIE createTask/poll 封装
-    └── replicate.py     # Replicate prediction 封装
+    ├── replicate.py     # Replicate prediction 封装
+    ├── seedance.py      # Seedance 直连（Phase 3）
+    └── kling.py         # Kling 直连（Phase 3）
 ```
 
 ### 5.2 GatewayFacade 对外契约
@@ -235,6 +242,16 @@ LITELLM_MASTER_KEY=...
 # 熔断
 GATEWAY_CIRCUIT_FAILURES=3
 GATEWAY_CIRCUIT_TTL_SECONDS=300
+
+# Phase 3 — Region / 预算 / 灰度
+GATEWAY_REGION=cn              # cn | us | eu（空 = global）
+GATEWAY_USER_DAILY_CREDIT_CAP=0   # 0 = 不限
+GATEWAY_TEAM_DAILY_CREDIT_CAP=0
+
+# Direct API backends（Phase 3）
+SEEDANCE_API_KEY=...
+KLING_ACCESS_KEY=...
+KLING_SECRET_KEY=...
 ```
 
 ### 6.3 Docker Compose 增量（Phase 2）
@@ -287,16 +304,20 @@ GATEWAY_CIRCUIT_TTL_SECONDS=300
 - [x] Asset Gateway（`upload_public_url` / `publicize_url`）
 - [x] `GET /api/v1/gateway/health` 公开健康端点
 - [x] LiteLLM 配置模板 + director_brain 优先走 LiteLLM Proxy
-- [ ] Direct API backends（Seedance/Kling 直连 — Phase 3）
-- [ ] Docker Compose 内置 litellm 服务（可选运维步骤）
+- [x] Direct API backends（Seedance/Kling 直连 — Phase 3）
+- [x] Docker Compose 内置 litellm 服务
 
-### Phase 3 — 企业级
+### Phase 3 — 企业级（本 PR）
 
-- [ ] Admin UI：路由表编辑、Provider 权重、紧急下线
-- [ ] A/B 路由（新 Provider 灰度 5% 流量）
-- [ ] 跨 Region Provider（EU/US 数据合规）
-- [ ] 成本预算告警（per-team spend cap）
-- [ ] Webhook 回调统一（async job 完成通知）
+- [x] Admin UI：Gateway 控制台（`/admin/gateway`）— 健康、Kill Switch、Provider 下线
+- [x] Admin API：`/api/v1/admin/gateway/*` — reload、disable/enable、reset-circuit、kill-switch
+- [x] Redis Registry：运行时 Provider 禁用 + Kill Switch + 版本号
+- [x] A/B 灰度：`canary_percent` + `trace_id` 稳定分桶（seedance-2.0 5% cn）
+- [x] Region 路由：`GATEWAY_REGION` 过滤 chain 中的 `region` 字段
+- [x] 预算上限：`GATEWAY_USER_DAILY_CREDIT_CAP` / `GATEWAY_TEAM_DAILY_CREDIT_CAP`
+- [x] Gateway Metrics：Redis 请求 / fallback 计数
+- [x] Webhook 增强：task 完成回调 payload 含 `gateway` 元数据
+- [x] Direct Backends：`providers/seedance.py`、`providers/kling.py`
 
 ---
 

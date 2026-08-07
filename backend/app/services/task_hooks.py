@@ -132,7 +132,9 @@ def build_webhook_payload(task: dict[str, Any]) -> dict[str, Any]:
             u = r.get("url") or r.get("media_url") or ""
             if u:
                 media_urls.append(u)
-    return {
+    params = _parse_parameters(task.get("parameters"))
+    gateway = params.get("gateway") if isinstance(params.get("gateway"), dict) else {}
+    payload = {
         "event": f"task.{task.get('status')}",
         "task_id": task.get("task_id"),
         "status": task.get("status"),
@@ -145,6 +147,9 @@ def build_webhook_payload(task: dict[str, Any]) -> dict[str, Any]:
         "cost": task.get("actual_cost") or task.get("estimated_cost") or 0,
         "ts": int(time.time()),
     }
+    if gateway:
+        payload["gateway"] = gateway
+    return payload
 
 
 def sign_payload(body: bytes, *, secret: str | None = None, timestamp: int | None = None) -> dict[str, str]:
