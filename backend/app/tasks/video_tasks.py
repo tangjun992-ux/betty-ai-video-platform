@@ -105,9 +105,15 @@ def generate_video_task(
 
     # Demo mode: render locally when no provider key is configured.
     from app.adapters.demo_provider import demo_mode_active, DemoAdapter
+    from app.gateway import gateway_enabled
     if demo_mode_active():
         adapter = DemoAdapter(model_label=model)
+        use_gateway = False
+    elif gateway_enabled():
+        use_gateway = True
+        adapter = None
     else:
+        use_gateway = False
         get_adapter = _load_adapters()
         adapter = get_adapter(model)
         if not adapter:
@@ -130,10 +136,11 @@ def generate_video_task(
 
     started = time.monotonic()
     try:
-        result = _run_async(
-            adapter.generate_video(
+        if use_gateway:
+            from app.gateway import gateway
+            gw = _run_async(gateway.generate_video(
+                model=model,
                 prompt=prompt,
-                model_id=model,
                 image_url=image_url or (ref_images[0] if ref_images else None),
                 duration=duration,
                 resolution=resolution,
@@ -142,8 +149,26 @@ def generate_video_task(
                 reference_audios=ref_audios,
                 omni=omni,
                 generate_audio=bool(params.get("generate_audio")),
+                trace_id=db_task_id,
+            ))
+            result = gw.result
+            if gw.fallback_used:
+                _update_task(db_task_id, current_stage="gateway_fallback", selected_model=model)
+        else:
+            result = _run_async(
+                adapter.generate_video(
+                    prompt=prompt,
+                    model_id=model,
+                    image_url=image_url or (ref_images[0] if ref_images else None),
+                    duration=duration,
+                    resolution=resolution,
+                    reference_images=ref_images,
+                    reference_videos=ref_videos,
+                    reference_audios=ref_audios,
+                    omni=omni,
+                    generate_audio=bool(params.get("generate_audio")),
+                )
             )
-        )
         quality_ok, quality_error = validate_generation_results(result, "video")
         if not quality_ok:
             raise RuntimeError(quality_error)

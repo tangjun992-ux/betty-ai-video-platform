@@ -1,0 +1,36 @@
+# LiteLLM Proxy — Phase 2 LLM gateway (Director Brain / Prompt Extract)
+# Deploy: docker compose -f docker-compose.prod.yml up litellm
+# Docs: https://docs.litellm.ai/docs/proxy/configs
+
+model_list:
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Fallback when OpenAI unavailable — KIE OpenAI-compatible surface
+  - model_name: gpt-4o-mini-fallback
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/KIE_API_KEY
+      api_base: https://api.kie.ai/v1
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 2
+  timeout: 45
+  allowed_fails: 3
+  cooldown_time: 60
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

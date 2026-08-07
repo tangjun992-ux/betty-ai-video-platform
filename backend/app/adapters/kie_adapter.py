@@ -249,6 +249,13 @@ class KieAdapter(BaseModelAdapter):
 
     @property
     def _api_key(self) -> str:
+        try:
+            from app.gateway.kie_keys import current_kie_api_key
+            pooled = current_kie_api_key()
+            if pooled:
+                return pooled
+        except Exception:
+            pass
         return settings.KIE_API_KEY or os.getenv("KIE_API_KEY", "")
 
     # ── availability ─────────────────────────────────────────

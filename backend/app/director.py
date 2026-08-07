@@ -1204,7 +1204,7 @@ class DirectorExecutor:
                             "mode": "demo_tone", "honesty": "offline_preview_not_tts",
                             "cost": 0, "narration": True,
                         }
-                    from app.adapters.kie_adapter import KieAdapter
+                    from app.gateway import gateway
                     from app.services.media_store import persist_results
                     from app.services.audio_prep import synthesize_speech_edge, is_azure_neural_voice
                     import uuid as _uuid
@@ -1221,7 +1221,7 @@ class DirectorExecutor:
                         wav_bytes, used_voice = await synthesize_speech_edge(
                             narrate, edge_voice, rate=tts_rate,
                         )
-                        url = await KieAdapter().upload_public_url(
+                        url = await gateway.upload_public_url(
                             wav_bytes,
                             filename=f"dir_tts_{_uuid.uuid4().hex[:8]}.wav",
                             content_type="audio/wav",
@@ -1243,7 +1243,8 @@ class DirectorExecutor:
                     for voice in el_order:
                         for attempt in range(2):
                             try:
-                                res = await KieAdapter().generate_speech(narrate, voice=voice)
+                                gw = await gateway.generate_speech(narrate, voice=voice, trace_id=step.id)
+                                res = gw.result
                                 out = {
                                     "type": "audio", "url": res.media_url,
                                     "media_url": res.media_url, "model": res.model,
@@ -1405,14 +1406,14 @@ class DirectorExecutor:
                         "error": f"唇形同步缺少上游资产：{'、'.join(missing)}（真实生成不会回退 Ken Burns）",
                     }
                 try:
-                    from app.adapters.kie_adapter import KieAdapter
+                    from app.gateway import gateway
                     from app.services.media_store import persist_results
                     from app.services.audio_prep import prepare_lipsync_audio_url, boost_video_audio
                     import uuid as _uuid
                     # Loudnorm driving audio before Kling (fixes quiet 口播 + weak mouth drive)
                     try:
                         norm = await asyncio.to_thread(prepare_lipsync_audio_url, aud_pub)
-                        aud_pub = await KieAdapter().upload_public_url(
+                        aud_pub = await gateway.upload_public_url(
                             norm.read_bytes(),
                             filename=f"dir_ls_norm_{_uuid.uuid4().hex[:8]}.wav",
                             content_type="audio/wav",
@@ -1435,11 +1436,12 @@ class DirectorExecutor:
                     if prefer_infini and not (ls_model or "").startswith("infinitalk"):
                         # Try InfiniTalk@720p first (timeout capped in adapter), then Kling
                         ls_model = "infinitalk/from-audio"
-                    res = await KieAdapter().generate_lipsync(
+                    gw = await gateway.generate_lipsync(
                         image_url=img_pub, audio_url=aud_pub, prompt=ls_prompt,
                         model_id=ls_model, resolution="720p",
-                        prefer_infinitalk=prefer_infini,
+                        prefer_infinitalk=prefer_infini, trace_id=step.id,
                     )
+                    res = gw.result
                     final_url = res.media_url
                     try:
                         boosted = await asyncio.to_thread(boost_video_audio, res.media_url)
@@ -1501,11 +1503,11 @@ class DirectorExecutor:
                     and not self.dry_run
                 ):
                     try:
-                        from app.adapters.kie_adapter import KieAdapter
+                        from app.gateway import gateway
                         from app.adapters.demo_provider import demo_mode_active
                         if not demo_mode_active():
                             ar = (step.params or {}).get("aspect_ratio") or "16:9"
-                            edited = await KieAdapter().edit_image(
+                            gw = await gateway.edit_image(
                                 image_urls=[base_image_url],
                                 prompt=(
                                     f"{step.prompt}｜SAME subject identity locked, "
@@ -1513,7 +1515,9 @@ class DirectorExecutor:
                                     f"single frame, aspect {ar}"
                                 ),
                                 image_size=ar,
+                                trace_id=step.id,
                             )
+                            edited = gw.result
                             new_url = getattr(edited, "media_url", None) or getattr(edited, "url", None)
                             if new_url:
                                 # Prefer public source if adapter attached one

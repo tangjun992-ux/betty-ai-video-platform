@@ -278,13 +278,17 @@ GATEWAY_CIRCUIT_TTL_SECONDS=300
 - [x] 单元测试
 - [x] 本文档
 
-### Phase 2 — Provider 全覆盖（1-2 迭代）
+### Phase 2 — Provider 全覆盖（本 PR）
 
-- [ ] 所有 Celery task / director / generate.py 改走 facade
-- [ ] Direct API backends（Seedance/Kling/OpenAI 直连）
-- [ ] KIE Key 池轮换
-- [ ] `GET /api/v1/gateway/health` 运维端点
-- [ ] LiteLLM 部署 + director_brain 迁移
+- [x] video / lipsync / motion / face_swap / performance Celery tasks → gateway facade
+- [x] generate.py `/speech` + `/edit` → gateway
+- [x] director.py TTS / lipsync / edit / upload → gateway
+- [x] KIE Key 池轮换（`KIE_API_KEY` + `KIE_API_KEY_BACKUP`）
+- [x] Asset Gateway（`upload_public_url` / `publicize_url`）
+- [x] `GET /api/v1/gateway/health` 公开健康端点
+- [x] LiteLLM 配置模板 + director_brain 优先走 LiteLLM Proxy
+- [ ] Direct API backends（Seedance/Kling 直连 — Phase 3）
+- [ ] Docker Compose 内置 litellm 服务（可选运维步骤）
 
 ### Phase 3 — 企业级
 

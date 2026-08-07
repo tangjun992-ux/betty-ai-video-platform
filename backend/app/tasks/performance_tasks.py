@@ -52,6 +52,15 @@ def _fail(db_task_id: str, err: str) -> dict:
     return {"status": "failed", "error": err}
 
 
+def _run_async(coro):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
 @app.task(
     bind=True,
     name="app.tasks.performance_tasks.process_performance",
@@ -82,24 +91,26 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
     )
     _broadcast(db_task_id, 10, "motion", "Performance：原生 Motion Control…")
 
-    from app.adapters.kie_adapter import KieAdapter
+    from app.gateway import gateway
     from app.services.media_store import persist_results
 
-    kie = KieAdapter()
     output = []
     total_cost = 0
+    studio = params.get("tier") == "studio"
 
     try:
-        motion = asyncio.run(kie.generate_motion(
+        gw = _run_async(gateway.generate_motion(
             image_url=image_url,
             video_url=video_url,
             prompt=params.get("prompt") or "No distortion, natural motion transfer.",
-            model_id="motion-control" if params.get("tier") != "studio" else "motion-control-studio",
+            model="motion-control-studio" if studio else "motion-control",
             duration=5,
-            resolution="1080p" if params.get("tier") == "studio" else "720p",
+            resolution="1080p" if studio else "720p",
+            studio=studio,
             character_orientation="video",
-            studio=params.get("tier") == "studio",
+            trace_id=db_task_id,
         ))
+        motion = gw.result
         murl = getattr(motion, "media_url", "") or ""
         if not murl:
             return _fail(db_task_id, "Motion 未返回视频")
@@ -111,6 +122,7 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
             "model": getattr(motion, "model", "kling-3.0/motion-control"),
             "op": "performance_motion",
             "cost": getattr(motion, "cost", 0),
+            "gateway_provider": gw.provider_used,
             "honesty": "原生 Kling Motion Control；≠ Act-One",
         })
     except Exception as e:
@@ -127,9 +139,10 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
         try:
             talk_audio = audio_url
             if not talk_audio and voice_text:
-                tts = asyncio.run(kie.generate_speech(
-                    voice_text, voice=params.get("voice") or "Rachel",
+                tgw = _run_async(gateway.generate_speech(
+                    voice_text, voice=params.get("voice") or "Rachel", trace_id=db_task_id,
                 ))
+                tts = tgw.result
                 talk_audio = getattr(tts, "media_url", "") or ""
                 total_cost += int(getattr(tts, "cost", 0) or 0)
                 if talk_audio:
@@ -143,13 +156,16 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
             if not talk_audio:
                 logger.warning("performance talk skipped — no audio")
             else:
-                # Upload local paths if needed — lipsync expects public URLs
-                lip = asyncio.run(kie.generate_lipsync(
-                    image_url=image_url,
-                    audio_url=talk_audio,
+                img_pub = _run_async(gateway.publicize_url(image_url, trace_id=db_task_id))
+                aud_pub = _run_async(gateway.publicize_url(talk_audio, default_content_type="audio/mpeg", trace_id=db_task_id))
+                lgw = _run_async(gateway.generate_lipsync(
+                    image_url=img_pub,
+                    audio_url=aud_pub,
                     prompt="natural talking performance on camera",
-                    resolution="720p" if params.get("tier") == "studio" else "480p",
+                    resolution="720p" if studio else "480p",
+                    trace_id=db_task_id,
                 ))
+                lip = lgw.result
                 lurl = getattr(lip, "media_url", "") or ""
                 total_cost += int(getattr(lip, "cost", 0) or 0)
                 if lurl:
@@ -160,6 +176,7 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
                         "model": getattr(lip, "model", "kling/ai-avatar-pro"),
                         "op": "performance_talk",
                         "cost": getattr(lip, "cost", 0),
+                        "gateway_provider": lgw.provider_used,
                         "honesty": "Lipsync 口播片段；与 Motion 分轨输出，非 Act-One 一体编码器",
                     })
         except Exception as e:
@@ -180,7 +197,6 @@ def process_performance(self, db_task_id: str, params: dict) -> dict:
         current_stage="completed",
         completed_at=datetime.now(timezone.utc),
         results=json.dumps(output),
-        result_url=result_url,
         actual_cost=total_cost,
     )
     _broadcast(db_task_id, 100, "completed", "Performance Drive 完成")

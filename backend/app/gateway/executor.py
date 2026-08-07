@@ -44,6 +44,41 @@ async def _execute_chain(
     allow_fallback: bool = True,
     **kwargs: Any,
 ) -> GatewayExecutionResult:
+    # Explicit remote SKU override (director/lipsync pass kling/… or infinitalk/…)
+    remote_override = kwargs.pop("remote_model_override", None)
+    if remote_override:
+        backend = get_backend("kie")
+        if not backend or not backend.is_configured():
+            raise RuntimeError("KIE_API_KEY not configured for remote_model_override")
+        hop_started = time.monotonic()
+        started = time.monotonic()
+        try:
+            result = await backend.execute(
+                route.capability,
+                remote_override,
+                trace_id=trace_id,
+                **kwargs,
+            )
+            provider_health.record_success("kie", remote_override)
+            cost = float(getattr(result, "cost", 0) or 0)
+            return GatewayExecutionResult(
+                result=result,
+                capability=route.capability,
+                model_requested=model_requested,
+                model_used=model_requested,
+                provider_used="kie",
+                remote_model_used=remote_override,
+                fallback_used=False,
+                attempts=[{"provider": "kie", "remote_model": remote_override, "success": True,
+                           "latency_ms": int((time.monotonic() - hop_started) * 1000)}],
+                latency_ms=int((time.monotonic() - started) * 1000),
+                cost=cost,
+                trace_id=trace_id,
+            )
+        except Exception as e:
+            provider_health.record_failure("kie", remote_override, str(e))
+            raise
+
     targets = select_targets(route, allow_fallback=allow_fallback)
     if not targets:
         raise RuntimeError(

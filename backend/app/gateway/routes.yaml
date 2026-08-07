@@ -83,9 +83,21 @@ routes:
       - { provider: kie, remote_model: kling/ai-avatar-pro, priority: 1, timeout_s: 900 }
       - { provider: kie, remote_model: infinitalk/from-audio, priority: 2, fallback_only: true, timeout_s: 900 }
 
+  - capability: lipsync
+    model: lipsync-studio
+    description: "Studio tier — InfiniTalk primary, Kling avatar fallback"
+    chain:
+      - { provider: kie, remote_model: infinitalk/from-audio, priority: 1, timeout_s: 900 }
+      - { provider: kie, remote_model: kling/ai-avatar-pro, priority: 2, fallback_only: true, timeout_s: 900 }
+
   # ── Motion control ──────────────────────────────────────────
   - capability: motion
     model: motion-control
+    chain:
+      - { provider: kie, remote_model: kling-3.0/motion-control, priority: 1, timeout_s: 600 }
+
+  - capability: motion
+    model: motion-control-studio
     chain:
       - { provider: kie, remote_model: kling-3.0/motion-control, priority: 1, timeout_s: 600 }
 

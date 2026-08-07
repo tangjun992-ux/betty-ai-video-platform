@@ -452,7 +452,6 @@ async def generate_speech(req: SpeechRequest):
         from app.adapters.demo_provider import render_demo_speech
         url = await _a.to_thread(render_demo_speech, req.text)
         return {"url": url, "media_type": "audio", "model": "demo-tts", "demo": True}
-    from app.adapters.kie_adapter import KieAdapter
     from app.services.media_store import persist_results
     # Prefer Edge Neural TTS (fast ~1s, bounded timeout) — same reliable path as
     # the director; only fall back to KIE ElevenLabs (slower) if Edge fails.
@@ -460,7 +459,8 @@ async def generate_speech(req: SpeechRequest):
     try:
         edge_voice = req.voice if is_azure_neural_voice(req.voice) else "zh-CN-XiaoxiaoNeural"
         wav_bytes, used_voice = await synthesize_speech_edge(req.text, edge_voice, rate="-5%")
-        url = await KieAdapter().upload_public_url(
+        from app.gateway import gateway
+        url = await gateway.upload_public_url(
             wav_bytes, filename=f"tts_{uuid.uuid4().hex[:8]}.wav", content_type="audio/wav",
         )
         out = {"type": "audio", "url": url, "media_url": url, "model": f"edge-tts:{used_voice}"}
@@ -469,7 +469,9 @@ async def generate_speech(req: SpeechRequest):
                 "media_type": "audio", "model": f"edge-tts:{used_voice}", "cost": 0, "demo": False}
     except Exception as edge_err:
         logger.warning("[speech] edge-tts failed (%s) → KIE ElevenLabs", edge_err)
-    res = await KieAdapter().generate_speech(req.text, voice=req.voice)
+    from app.gateway import gateway
+    gw = await gateway.generate_speech(req.text, voice=req.voice)
+    res = gw.result
     out = {"type": "audio", "url": res.media_url, "media_url": res.media_url, "model": res.model}
     out = (await _a.to_thread(persist_results, [out]))[0]
     return {"url": out.get("url"), "source_url": out.get("source_url", res.media_url),
@@ -585,20 +587,24 @@ async def edit_image_tool(
                     "operation": op, "cost_credits": tool_cost, "cost": upstream,
                     "task_id": tool_task_id, "margin_credits": tool_cost}
 
-        from app.adapters.kie_adapter import KieAdapter
+        from app.gateway import gateway
         from app.services.media_store import persist_results
-        adapter = KieAdapter()
-        pub = await adapter.upload_public_url(data, filename="src.png", content_type=ctype)
+        pub = await gateway.upload_public_url(data, filename="src.png", content_type=ctype)
 
         async def _run():
             if op == "upscale":
-                return await adapter.upscale_image(image_url=pub, factor=factor)
+                return await gateway.upscale_image(image_url=pub, factor=factor, trace_id=tool_task_id)
             if op == "bg-remove":
-                return await adapter.remove_background(image_url=pub)
+                return await gateway.remove_background(image_url=pub, trace_id=tool_task_id)
             if op == "extend":
-                return await adapter.extend_image(image_url=pub, target_ratio=ratio, prompt=prompt or "")
-            return await adapter.edit_image(image_urls=[pub], prompt=prompt,
-                                            image_size=ratio if ratio else "auto")
+                return await gateway.extend_image(
+                    image_url=pub, target_ratio=ratio, prompt=prompt or "", trace_id=tool_task_id,
+                )
+            gw = await gateway.edit_image(
+                image_urls=[pub], prompt=prompt or "",
+                image_size=ratio if ratio else "auto", trace_id=tool_task_id,
+            )
+            return gw.result
 
         # KIE image tools are intermittently flaky ("internal error") — retry.
         res = None

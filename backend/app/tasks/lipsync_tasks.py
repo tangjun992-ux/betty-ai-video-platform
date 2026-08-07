@@ -1,6 +1,4 @@
-"""
-Lipsync Celery task — processes image + audio to create talking video.
-"""
+"""Lipsync Celery task — processes image + audio to create talking video."""
 import asyncio
 import json
 import logging
@@ -9,8 +7,6 @@ import uuid
 from datetime import datetime, timezone
 
 from celery_app import app
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session
 
 from app.services.media_store import persist_results
 
@@ -19,6 +15,13 @@ logger = logging.getLogger(__name__)
 from app.tasks.task_db import update_task as _update_task
 
 
+def _run_async(coro):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 def _broadcast_progress(task_id: str, progress: int, stage: str, message: str = ""):
@@ -33,12 +36,7 @@ def _broadcast_progress(task_id: str, progress: int, stage: str, message: str = 
                 "message": message or stage,
             })
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(_send())
-        finally:
-            loop.close()
+        _run_async(_send())
     except Exception:
         pass
 
@@ -59,38 +57,39 @@ def process_lipsync(
     if backend_dir not in os.getcwd():
         os.chdir(backend_dir)
 
-    # Stage 1: Init
     self.update_state(state="PROGRESS", meta={"current_stage": "lipsync_init", "progress": 5})
     _update_task(db_task_id, status="generating", progress=5, current_stage="lipsync_init",
                  started_at=datetime.now(timezone.utc))
     _broadcast_progress(db_task_id, 5, "lipsync_init", "正在加载参考图片...")
 
     try:
-        from app.adapters.demo_provider import demo_mode_active, _local_media_path
-        from app.adapters.kie_adapter import KieAdapter
-
-        def _to_public(url: str, default_ct: str) -> str:
-            """Ensure a URL is publicly fetchable by KIE (upload local files)."""
-            if not url:
-                return url
-            if url.startswith("http://") or url.startswith("https://"):
-                # local backend URLs aren't reachable by KIE → upload
-                if "/api/v1/media" not in url and "localhost" not in url and "127.0.0.1" not in url:
-                    return url
-            p = _local_media_path(url)
-            if not p:
-                return url
-            with open(p, "rb") as f:
-                data = f.read()
-            ext = os.path.splitext(p)[1].lstrip(".") or ("png" if "image" in default_ct else "mp3")
-            ct = f"image/{ext}" if default_ct.startswith("image") else f"audio/{ext}"
-            return asyncio.run(KieAdapter().upload_public_url(
-                data, filename=f"ls_{uuid.uuid4().hex[:8]}.{ext}", content_type=ct))
+        from app.adapters.demo_provider import demo_mode_active, _local_media_path, render_demo_video
+        from app.gateway import gateway, gateway_enabled
 
         demo = demo_mode_active()
         tts_engine = None
+        use_gw = gateway_enabled() and not demo
 
-        # Stage 2: voiceover — real TTS if text given
+        async def _to_public(url: str, default_ct: str) -> str:
+            if demo or not use_gw:
+                from app.adapters.kie_adapter import KieAdapter
+                if not url:
+                    return url
+                if url.startswith(("http://", "https://")):
+                    if "/api/v1/media" not in url and "localhost" not in url and "127.0.0.1" not in url:
+                        return url
+                p = _local_media_path(url)
+                if not p:
+                    return url
+                with open(p, "rb") as f:
+                    data = f.read()
+                ext = os.path.splitext(p)[1].lstrip(".") or ("png" if "image" in default_ct else "mp3")
+                ct = f"image/{ext}" if default_ct.startswith("image") else f"audio/{ext}"
+                return await KieAdapter().upload_public_url(
+                    data, filename=f"ls_{uuid.uuid4().hex[:8]}.{ext}", content_type=ct,
+                )
+            return await gateway.publicize_url(url, default_content_type=default_ct, trace_id=db_task_id)
+
         audio_public = audio_url
         if text and not audio_url:
             self.update_state(state="PROGRESS", meta={"current_stage": "tts", "progress": 15})
@@ -102,12 +101,10 @@ def process_lipsync(
             else:
                 from app.services.audio_prep import is_azure_neural_voice, synthesize_speech_edge
                 voice = (voice_id or "zh-CN-XiaoxiaoNeural").strip() or "zh-CN-XiaoxiaoNeural"
-                # Prefer real Neural TTS for Azure-style ids (matches FE labels;
-                # ElevenLabs remap caused 「配音感」+ weaker Chinese phonemes).
                 if is_azure_neural_voice(voice):
                     try:
-                        wav_bytes, used_voice = asyncio.run(synthesize_speech_edge(text, voice))
-                        audio_public = asyncio.run(KieAdapter().upload_public_url(
+                        wav_bytes, used_voice = _run_async(synthesize_speech_edge(text, voice))
+                        audio_public = _run_async(gateway.upload_public_url(
                             wav_bytes,
                             filename=f"ls_tts_{uuid.uuid4().hex[:8]}.wav",
                             content_type="audio/wav",
@@ -118,25 +115,25 @@ def process_lipsync(
                         el_voice = "Rachel" if any(
                             k in voice for k in ("Xiaoxiao", "Xiaoyi", "Jenny", "Nanami")
                         ) else "Adam"
-                        res = asyncio.run(KieAdapter().generate_speech(
-                            text, voice=el_voice, language_code="zh" if voice.startswith("zh-") else None,
+                        gw = _run_async(gateway.generate_speech(
+                            text, voice=el_voice, trace_id=db_task_id,
+                            language_code="zh" if voice.startswith("zh-") else None,
                         ))
-                        audio_public = res.media_url
+                        audio_public = gw.result.media_url
                         tts_engine = f"elevenlabs:{el_voice}"
                 else:
-                    res = asyncio.run(KieAdapter().generate_speech(text, voice=voice))
-                    audio_public = res.media_url
+                    gw = _run_async(gateway.generate_speech(text, voice=voice, trace_id=db_task_id))
+                    audio_public = gw.result.media_url
                     tts_engine = f"elevenlabs:{voice}"
         elif audio_url:
-            audio_public = _to_public(audio_url, "audio/mpeg") if not demo else audio_url
+            audio_public = _run_async(_to_public(audio_url, "audio/mpeg")) if not demo else audio_url
 
-        # Stage 2b: loudnorm driving audio (−16 LUFS) before lip-sync
         if not demo and audio_public:
             try:
                 from app.services.audio_prep import prepare_lipsync_audio_url
                 _broadcast_progress(db_task_id, 22, "audio_prep", "正在均衡音量与清晰度...")
                 norm_wav = prepare_lipsync_audio_url(audio_public)
-                audio_public = asyncio.run(KieAdapter().upload_public_url(
+                audio_public = _run_async(gateway.upload_public_url(
                     norm_wav.read_bytes(),
                     filename=f"ls_norm_{uuid.uuid4().hex[:8]}.wav",
                     content_type="audio/wav",
@@ -144,13 +141,11 @@ def process_lipsync(
             except Exception as e:
                 logger.warning("[lipsync] audio loudnorm skipped: %s", e)
 
-        # Stage 3: make the portrait publicly reachable by KIE
         self.update_state(state="PROGRESS", meta={"current_stage": "face_detect", "progress": 30})
         _update_task(db_task_id, progress=30, current_stage="face_detect")
         _broadcast_progress(db_task_id, 30, "face_detect", "正在准备人物图片...")
-        image_public = image_url if demo else _to_public(image_url, "image/png")
+        image_public = image_url if demo else _run_async(_to_public(image_url, "image/png"))
 
-        # Stage 4/5: real lip-sync generation
         self.update_state(state="PROGRESS", meta={"current_stage": "lipsync", "progress": 50})
         _update_task(db_task_id, progress=50, current_stage="lipsync")
         _broadcast_progress(db_task_id, 50, "lipsync", "正在生成唇形同步视频...")
@@ -162,10 +157,8 @@ def process_lipsync(
         )
 
         if demo:
-            from app.adapters.demo_provider import render_demo_video
             v_url, thumb = render_demo_video(text or "talking avatar", "720x1280", 5, "portrait",
                                              _local_media_path(image_url) and image_url or None)
-            # Honest mode tag: Ken Burns is NOT lip-sync / digital human.
             output = persist_results([{
                 "type": "video", "url": v_url, "thumbnail": thumb,
                 "model": "demo-lipsync", "duration": 5,
@@ -173,24 +166,26 @@ def process_lipsync(
                 "honesty": "offline_preview_not_lipsync",
             }])
         else:
-            # Studio: prefer infinitalk@720p when available; Demo stays on Kling.
-            # Explicit KIE ids (contain "/") are honored as-is.
-            model_id = "kling/ai-avatar-pro"
+            route_model = model or "kling-ai-avatar"
+            model_id = None
             resolution = "720p"
             product_tier = "demo"
             if model and "/" in model:
                 model_id = model
             elif model in ("lipsync-studio", "studio"):
-                model_id = "infinitalk/from-audio"
-                resolution = "720p"
+                route_model = "lipsync-studio"
                 product_tier = "studio"
-            res = asyncio.run(KieAdapter().generate_lipsync(
-                image_url=image_public, audio_url=audio_public,
-                prompt=LIPSYNC_PROMPT,
+            gw = _run_async(gateway.generate_lipsync(
+                image_url=image_public,
+                audio_url=audio_public,
+                model=route_model,
                 model_id=model_id,
+                prompt=LIPSYNC_PROMPT,
                 resolution=resolution,
                 prefer_infinitalk=(product_tier == "studio"),
+                trace_id=db_task_id,
             ))
+            res = gw.result
             _update_task(db_task_id, progress=85, current_stage="rendering")
             _broadcast_progress(db_task_id, 85, "rendering", "正在均衡成片音量...")
             final_url = res.media_url
@@ -210,6 +205,8 @@ def process_lipsync(
                 "resolution_intent": resolution,
                 "tts_engine": tts_engine,
                 "audio_prep": "loudnorm_-16LUFS",
+                "gateway_provider": gw.provider_used,
+                "gateway_fallback": gw.fallback_used,
             }])
 
         _update_task(

@@ -34,11 +34,15 @@ def resolve_brain_model(brain: str | None) -> str | None:
 
 def _llm_credentials() -> Optional[tuple[str, str]]:
     """Return (api_key, base_url) when a chat provider is configured."""
+    # LiteLLM proxy (Phase 2) — unified LLM routing with fallback YAML
+    litellm_url = (getattr(settings, "LITELLM_PROXY_URL", "") or "").strip().rstrip("/")
+    if litellm_url:
+        master = getattr(settings, "LITELLM_MASTER_KEY", "") or "sk-litellm"
+        return master, litellm_url
     if getattr(settings, "OPENAI_API_KEY", None):
         base = (settings.OPENAI_BASE_URL or "https://api.openai.com/v1").rstrip("/")
         return settings.OPENAI_API_KEY, base
     if getattr(settings, "KIE_API_KEY", None):
-        # KIE exposes an OpenAI-compatible chat surface under /v1
         return settings.KIE_API_KEY, "https://api.kie.ai/v1"
     return None
 

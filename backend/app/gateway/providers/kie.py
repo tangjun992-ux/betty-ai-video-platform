@@ -17,7 +17,8 @@ class KieBackend(ProviderBackend):
 
     def is_configured(self) -> bool:
         from app.config import settings
-        return bool(settings.KIE_API_KEY)
+        from app.gateway.kie_keys import _keys
+        return bool(_keys() or settings.KIE_API_KEY)
 
     def _adapter(self):
         from app.adapters.kie_adapter import KieAdapter
@@ -73,13 +74,19 @@ class KieBackend(ProviderBackend):
                 reference_images=kwargs.get("reference_images"),
                 reference_videos=kwargs.get("reference_videos"),
                 reference_audios=kwargs.get("reference_audios"),
+                omni=kwargs.get("omni"),
+                generate_audio=kwargs.get("generate_audio"),
+                video_url=kwargs.get("video_url"),
             )
 
         if capability == Capability.LIPSYNC:
             return await adapter.generate_lipsync(
                 image_url=kwargs.get("image_url", ""),
                 audio_url=kwargs.get("audio_url", ""),
+                prompt=kwargs.get("prompt", "a person talking naturally on camera"),
                 model_id=remote_model,
+                resolution=kwargs.get("resolution", "480p"),
+                prefer_infinitalk=kwargs.get("prefer_infinitalk", False),
             )
 
         if capability == Capability.MOTION:
@@ -88,7 +95,11 @@ class KieBackend(ProviderBackend):
                 video_url=kwargs.get("video_url", ""),
                 prompt=kwargs.get("prompt", ""),
                 model_id=remote_model,
+                duration=int(kwargs.get("duration", 5) or 5),
                 resolution=kwargs.get("resolution", "720p"),
+                character_orientation=kwargs.get("character_orientation"),
+                background_source=kwargs.get("background_source"),
+                studio=kwargs.get("studio", False),
             )
 
         if capability == Capability.TTS:
@@ -96,6 +107,9 @@ class KieBackend(ProviderBackend):
                 text=kwargs.get("text", ""),
                 voice=kwargs.get("voice"),
                 model_id=remote_model,
+                **{k: v for k, v in kwargs.items() if k in (
+                    "stability", "similarity_boost", "style", "speed", "language_code",
+                )},
             )
 
         raise RuntimeError(f"KIE backend does not support capability: {capability.value}")

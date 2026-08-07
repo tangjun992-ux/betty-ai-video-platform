@@ -109,8 +109,85 @@ def process_motion_task(self, db_task_id: str, model: str, prompt: str, params: 
     if style and style != "realistic":
         motion_prompt = f"{motion_prompt}, {style} style"
 
-    # Prefer dedicated motion API on KIE, then generic generate_video fallbacks.
-    last_error = "未知错误"
+    from app.gateway import gateway, gateway_enabled
+    motion_model = (
+        model
+        or params.get("model")
+        or ("motion-control-studio" if params.get("tier") == "studio" else "motion-control")
+    )
+    studio = params.get("tier") == "studio"
+
+    if gateway_enabled():
+        try:
+            _broadcast_progress(db_task_id, 45, "generating", "Gateway motion 通道生成中...")
+            _update_task(db_task_id, progress=45, current_stage="generating")
+            gw = _run_async(gateway.generate_motion(
+                image_url=image_url,
+                video_url=video_url,
+                model=motion_model,
+                prompt=motion_prompt,
+                duration=int(params.get("duration", 5) or 5),
+                resolution=params.get("resolution", "720p") or ("1080p" if studio else "720p"),
+                studio=studio,
+                character_orientation=params.get("character_orientation") or "video",
+                background_source=params.get("background_source"),
+                trace_id=db_task_id,
+            ))
+            result = gw.result
+            rd = result.to_dict() if hasattr(result, "to_dict") else result
+            media_url = rd.get("media_url") or rd.get("url") or ""
+            if media_url:
+                output = [{
+                    "type": "video",
+                    "url": media_url,
+                    "thumbnail": rd.get("thumbnail_url", "") or image_url,
+                    "model": rd.get("model", "kie/motion"),
+                    "resolution": rd.get("resolution", "720p"),
+                    "duration": rd.get("duration", 5),
+                    "cost": rd.get("cost", 6),
+                    "op": "motion",
+                    "gateway_provider": gw.provider_used,
+                    "gateway_fallback": gw.fallback_used,
+                }]
+                voice_text = (params.get("voice_text") or "").strip()
+                if voice_text:
+                    try:
+                        _broadcast_progress(db_task_id, 90, "voice", "正在生成旁白音频...")
+                        tgw = _run_async(gateway.generate_speech(
+                            voice_text,
+                            voice=params.get("voice") or "Rachel",
+                            trace_id=db_task_id,
+                        ))
+                        tts_d = tgw.result.to_dict() if hasattr(tgw.result, "to_dict") else tgw.result
+                        audio_url_out = tts_d.get("media_url") or tts_d.get("url") or ""
+                        if audio_url_out:
+                            output.append({
+                                "type": "audio",
+                                "url": audio_url_out,
+                                "model": tts_d.get("model", "tts"),
+                                "cost": tts_d.get("cost", 0),
+                                "op": "motion_voice",
+                                "note": "旁白 TTS；非实时变声引擎",
+                            })
+                    except Exception as ve:
+                        logger.warning("motion voice TTS failed (non-fatal): %s", ve)
+                output = persist_results(output)
+                _update_task(
+                    db_task_id, status="completed", progress=100, current_stage="completed",
+                    completed_at=datetime.now(timezone.utc),
+                    results=json.dumps(output),
+                    actual_cost=rd.get("cost", 6),
+                )
+                _broadcast_progress(db_task_id, 100, "completed", "运动控制生成完成！")
+                return {"status": "completed", "results": output}
+            last_error = "Gateway motion 未返回视频 URL"
+        except Exception as e:
+            last_error = str(e)
+            logger.warning("Gateway generate_motion failed, falling back: %s", e)
+    else:
+        last_error = "未知错误"
+
+    # Legacy fallback path when gateway disabled or gateway motion failed
     try:
         from app.adapters.kie_adapter import KieAdapter
         kie = KieAdapter()
