@@ -133,7 +133,7 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
           NEXT_PUBLIC_API_URL: http://127.0.0.1:8000/api/v1
-        run: npx playwright test e2e/capability.spec.ts e2e/betty.spec.ts e2e/agent.spec.ts e2e/agent-trends.spec.ts e2e/extract.spec.ts e2e/explore.spec.ts e2e/tasks.spec.ts e2e/pricing.spec.ts --reporter=line
+        run: npx playwright test e2e/capability.spec.ts e2e/betty.spec.ts e2e/agent.spec.ts e2e/agent-variants.spec.ts e2e/agent-trends.spec.ts e2e/extract.spec.ts e2e/explore.spec.ts e2e/tasks.spec.ts e2e/pricing.spec.ts --reporter=line
 
   e2e-full-chain:
     name: Playwright · timeline full-chain

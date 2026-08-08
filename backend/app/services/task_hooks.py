@@ -140,6 +140,7 @@ def list_failed_webhooks(*, limit: int = 50, scan: int = 500) -> list[dict[str, 
             "status_code": wh.get("status_code"),
             "reason": (wh.get("reason") or "")[:300],
             "at": wh.get("at"),
+            "alert_sent": bool(wh.get("alert_sent")),
             "updated_at": str(row.get("updated_at") or ""),
         })
         if len(out) >= limit:
@@ -190,6 +191,30 @@ def retry_failed_webhooks(*, limit: int = 10) -> dict[str, Any]:
         "attempted": len(results),
         "delivered": ok_count,
         "results": results,
+    }
+
+
+def webhook_failures_digest(*, limit: int = 50, scan: int = 500) -> dict[str, Any]:
+    """Aggregate recent webhook delivery failures for ops digest dashboards."""
+    failures = list_failed_webhooks(limit=limit, scan=scan)
+    by_reason: dict[str, int] = {}
+    by_status: dict[str, int] = {}
+    alerted = 0
+    for row in failures:
+        reason = (row.get("reason") or "unknown").strip()[:80] or "unknown"
+        by_reason[reason] = by_reason.get(reason, 0) + 1
+        st = row.get("status") or "unknown"
+        by_status[st] = by_status.get(st, 0) + 1
+        if row.get("alert_sent"):
+            alerted += 1
+    top_reasons = sorted(by_reason.items(), key=lambda x: (-x[1], x[0]))[:8]
+    return {
+        "total": len(failures),
+        "alert_sent_count": alerted,
+        "pending_alert": max(0, len(failures) - alerted),
+        "by_status": by_status,
+        "top_reasons": [{"reason": r, "count": c} for r, c in top_reasons],
+        "sample_task_ids": [f["task_id"] for f in failures[:5]],
     }
 
 

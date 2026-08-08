@@ -11,12 +11,14 @@ import {
   getPromotableModels,
   getSystemReadiness,
   getWebhookFailures,
+  getWebhookFailuresDigest,
   promoteModel,
   retryAllWebhookFailures,
   retryWebhookDelivery,
   type PromotableResponse,
   type SystemReadiness,
   type WebhookFailure,
+  type WebhookFailureDigest,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +28,7 @@ export default function AdminOpsPage() {
   const [promotable, setPromotable] = useState<PromotableResponse | null>(null);
   const [lastSmoke, setLastSmoke] = useState<{ available: boolean; report?: Record<string, unknown> } | null>(null);
   const [webhookFailures, setWebhookFailures] = useState<WebhookFailure[]>([]);
+  const [webhookDigest, setWebhookDigest] = useState<WebhookFailureDigest | null>(null);
   const [whBusy, setWhBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -38,14 +41,16 @@ export default function AdminOpsPage() {
       const rd = await getSystemReadiness();
       setReadiness(rd);
       if (token) {
-        const [pm, ls, wh] = await Promise.all([
+        const [pm, ls, wh, digest] = await Promise.all([
           getPromotableModels(token),
           getLastModelSmoke(token),
           getWebhookFailures(token),
+          getWebhookFailuresDigest(token),
         ]);
         setPromotable(pm);
         setLastSmoke(ls);
         setWebhookFailures(wh.failures);
+        setWebhookDigest(digest);
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "加载失败");
@@ -172,6 +177,9 @@ export default function AdminOpsPage() {
               {readiness.ops_alerts && (
                 <span>Webhook 告警: {readiness.ops_alerts.webhook_failure_alerts ? "已配置" : "未配置"}</span>
               )}
+              {readiness.ops_alerts?.digest_enabled && (
+                <span>Digest 聚合: 开启</span>
+              )}
             </div>
             {promotable && promotable.promotable.length > 0 ? (
               <div className="space-y-2">
@@ -232,6 +240,18 @@ export default function AdminOpsPage() {
                 </button>
               )}
             </div>
+            {webhookDigest && webhookDigest.total > 0 && (
+              <div className="mb-3 p-2 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs space-y-1">
+                <p className="text-text-secondary">
+                  聚合摘要 · {webhookDigest.total} 失败 · 已告警 {webhookDigest.alert_sent_count} · 待告警 {webhookDigest.pending_alert}
+                </p>
+                {webhookDigest.top_reasons.length > 0 && (
+                  <p className="text-text-tertiary truncate">
+                    主因: {webhookDigest.top_reasons.map((r) => `${r.reason} (${r.count})`).join(" · ")}
+                  </p>
+                )}
+              </div>
+            )}
             {webhookFailures.length > 0 ? (
               <div className="space-y-2 max-h-56 overflow-y-auto">
                 {webhookFailures.map((f) => (
