@@ -23,15 +23,17 @@ def live_smoke_kpi(*, last_smoke: dict | None = None) -> dict:
         }
 
     details = report.get("details") or []
-    video_ok = sum(
-        1 for d in details
-        if d.get("ok") and "video" in str(d.get("path") or d.get("media_type") or "")
-    )
-    image_ok = sum(
-        1 for d in details
-        if d.get("ok") and "image" in str(d.get("path") or d.get("media_type") or "")
-    )
+
+    def _path(d: dict) -> str:
+        ev = d.get("evidence") if isinstance(d.get("evidence"), dict) else {}
+        return str((ev or {}).get("path") or d.get("path") or d.get("media_type") or "")
+
+    video_ok = sum(1 for d in details if d.get("ok") and "video" in _path(d))
+    image_ok = sum(1 for d in details if d.get("ok") and "image" in _path(d))
     mode = report.get("mode") or ""
+    if mode == "live_kpi_combined":
+        image_ok = max(image_ok, int((report.get("image_sample") or {}).get("outframe_ok") or 0))
+        video_ok = max(video_ok, int((report.get("video_sample") or {}).get("outframe_ok") or 0))
     outframe = int(report.get("outframe_ok") or 0)
     if video_ok == 0 and "video" in mode:
         video_ok = outframe
@@ -59,16 +61,19 @@ def go_live_readiness(*, last_smoke: dict | None = None) -> dict:
     """Aggregate staging checklist for revenue + media delivery + live KPI."""
     from app.services.stripe_ready import stripe_staging_readiness
     from app.services.storage_ready import storage_staging_readiness
-    from app.services.oidc_ready import oidc_status
+    from app.services.oidc_ready import oidc_status, oidc_staging_readiness
 
     stripe = stripe_staging_readiness()
     storage = storage_staging_readiness()
     live = live_smoke_kpi(last_smoke=last_smoke)
     oidc = oidc_status(discover=False).public_dict()
+    oidc_staging = oidc_staging_readiness(discover=False)
 
     blockers: list[str] = []
     blockers.extend(stripe.get("blockers") or [])
     blockers.extend(storage.get("blockers") or [])
+    if oidc_staging.get("required_in_production") and not oidc_staging.get("staging_ready"):
+        blockers.extend(oidc_staging.get("blockers") or [])
     if settings.is_production and not oidc.get("production_ok"):
         blockers.extend(oidc.get("blockers") or [])
     if live.get("available") and not live.get("kpi_met"):
@@ -80,7 +85,7 @@ def go_live_readiness(*, last_smoke: dict | None = None) -> dict:
 
     go_live_ok = revenue_ready and media_ready
     if settings.is_production:
-        go_live_ok = go_live_ok and oidc.get("production_ok", True)
+        go_live_ok = go_live_ok and oidc_staging.get("staging_ready", True)
         if live.get("available"):
             go_live_ok = go_live_ok and bool(live.get("kpi_met"))
 
@@ -89,14 +94,11 @@ def go_live_readiness(*, last_smoke: dict | None = None) -> dict:
         "revenue_ready": revenue_ready,
         "media_ready": media_ready,
         "live_kpi_ready": live_ready,
+        "sso_ready": bool(oidc_staging.get("staging_ready")),
         "stripe": stripe,
         "storage": storage,
         "live_kpi": live,
-        "oidc": {
-            "configured": oidc.get("configured"),
-            "production_ok": oidc.get("production_ok"),
-            "required_in_production": oidc.get("required_in_production"),
-        },
+        "oidc": oidc_staging,
         "blockers": blockers,
         "env": settings.ENV,
     }

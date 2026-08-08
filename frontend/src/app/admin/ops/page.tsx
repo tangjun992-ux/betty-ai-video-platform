@@ -14,6 +14,7 @@ import {
   getWebhookFailuresDigest,
   sendWebhookFailuresDigest,
   promoteModel,
+  triggerLiveSmoke,
   retryAllWebhookFailures,
   retryWebhookDelivery,
   type PromotableResponse,
@@ -33,6 +34,7 @@ export default function AdminOpsPage() {
   const [whBusy, setWhBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
+  const [smokeBusy, setSmokeBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -224,6 +226,38 @@ export default function AdminOpsPage() {
             </section>
           )}
 
+          {readiness.sso.staging && (
+            <section className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4">
+              <h2 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Shield className="w-4 h-4 text-brand" />
+                OIDC / SSO Staging
+                <span className={cn(
+                  "text-xs font-normal px-2 py-0.5 rounded-full",
+                  readiness.sso.staging.staging_ready
+                    ? "bg-success/15 text-success"
+                    : "bg-amber-500/15 text-amber-600",
+                )}>
+                  {readiness.sso.staging.configured ? (readiness.sso.staging.staging_ready ? "就绪" : "待完善") : "可选"}
+                </span>
+              </h2>
+              <ul className="space-y-1.5 text-xs text-text-secondary mb-2">
+                {readiness.sso.staging.checklist.map((item) => (
+                  <li key={item.id} className="flex items-center gap-2">
+                    {item.ok ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    )}
+                    <span>{item.label}{item.required ? " *" : ""}</span>
+                  </li>
+                ))}
+              </ul>
+              {readiness.sso.staging.callback_path && (
+                <p className="text-[11px] text-text-tertiary">回调: {readiness.sso.staging.callback_path}</p>
+              )}
+            </section>
+          )}
+
           {readiness.go_live && (
             <section className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4">
               <h2 className="text-sm font-medium mb-3 flex items-center gap-2">
@@ -241,6 +275,7 @@ export default function AdminOpsPage() {
               <div className="flex flex-wrap gap-3 text-xs text-text-secondary mb-3">
                 <span>收款: {readiness.go_live.revenue_ready ? "✓" : "✗"}</span>
                 <span>CDN: {readiness.go_live.media_ready ? "✓" : "✗"}</span>
+                <span>SSO: {readiness.go_live.sso_ready ? "✓" : "—"}</span>
                 <span>
                   Live KPI: {readiness.go_live.live_kpi_ready === null ? "—" : readiness.go_live.live_kpi_ready ? "✓" : "✗"}
                 </span>
@@ -251,6 +286,32 @@ export default function AdminOpsPage() {
                   {" · "}image {readiness.live_kpi.image_outframe_ok}/{readiness.live_kpi.targets.image_outframe_min}
                   {readiness.live_kpi.note ? ` · ${readiness.live_kpi.note}` : ""}
                 </p>
+              )}
+              {token && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {(["live-image", "live-video", "live-kpi"] as const).map((kind) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      disabled={smokeBusy !== null}
+                      onClick={async () => {
+                        setSmokeBusy(kind);
+                        setError("");
+                        try {
+                          await triggerLiveSmoke(token, kind);
+                          await load();
+                        } catch (e: unknown) {
+                          setError(e instanceof Error ? e.message : "Live smoke 失败");
+                        } finally {
+                          setSmokeBusy(null);
+                        }
+                      }}
+                      className="px-2 py-1 rounded text-xs border border-cosmic-border hover:bg-cosmic-subtle disabled:opacity-50"
+                    >
+                      {smokeBusy === kind ? "运行中…" : kind === "live-kpi" ? "Live KPI 抽样" : kind === "live-image" ? "Live 图片" : "Live 视频"}
+                    </button>
+                  ))}
+                </div>
               )}
               {readiness.go_live.blockers.length > 0 && (
                 <ul className="text-[11px] text-amber-600/90 space-y-0.5">

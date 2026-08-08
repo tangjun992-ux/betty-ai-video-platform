@@ -228,6 +228,68 @@ class SmokeRequest(BaseModel):
     mode: str | None = Field(None, description="mapping | live | live_video")
 
 
+@router.post("/smoke/live-image", summary="触发 Live 图片出片抽样（付费，需 KIE Key）")
+async def trigger_live_image_smoke(
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.model_smoke import run_live_image_sample
+    from app.services.audit import record_audit
+
+    result = run_live_image_sample()
+    await record_audit(
+        db,
+        action="admin.smoke_live_image",
+        actor_user_id=user.id,
+        target_type="catalog",
+        meta={"outframe_ok": result.get("outframe_ok"), "failed": result.get("failed")},
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/smoke/live-video", summary="触发 Live 视频出片抽样（付费，需 KIE Key）")
+async def trigger_live_video_smoke(
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.model_smoke import run_live_video_sample
+    from app.services.audit import record_audit
+
+    result = run_live_video_sample()
+    await record_audit(
+        db,
+        action="admin.smoke_live_video",
+        actor_user_id=user.id,
+        target_type="catalog",
+        meta={"outframe_ok": result.get("outframe_ok"), "failed": result.get("failed")},
+    )
+    await db.commit()
+    return result
+
+
+@router.post("/smoke/live-kpi", summary="触发 Live KPI 合并抽样（image + video）")
+async def trigger_live_kpi_smoke(
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.model_smoke import run_live_kpi_smoke
+    from app.services.audit import record_audit
+    from app.services.go_live_ready import live_smoke_kpi
+
+    result = run_live_kpi_smoke()
+    kpi = live_smoke_kpi(last_smoke=result)
+    await record_audit(
+        db,
+        action="admin.smoke_live_kpi",
+        actor_user_id=user.id,
+        target_type="catalog",
+        meta={"kpi_met": kpi.get("kpi_met"), "outframe_ok": result.get("outframe_ok")},
+    )
+    await db.commit()
+    return {"report": result, "live_kpi": kpi}
+
+
 @router.post("/smoke", summary="触发模型健康冒烟（可 live）")
 async def trigger_smoke(
     body: SmokeRequest | None = None,

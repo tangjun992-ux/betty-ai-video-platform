@@ -199,7 +199,7 @@ async def catalog_report():
 async def readiness():
     from app.services.stripe_ready import stripe_status
     from app.services.storage_ready import storage_status
-    from app.services.oidc_ready import oidc_status
+    from app.services.oidc_ready import oidc_status, oidc_staging_readiness
     from app.services.model_catalog import catalog_integrity
     from app.services.model_promotion import auto_promote_enabled, mapping_promote_enabled
     from app.services.model_smoke import get_last_smoke
@@ -216,6 +216,7 @@ async def readiness():
     storage = storage_status().public_dict()
     storage["staging"] = storage_staging_readiness()
     sso = oidc_status(discover=False).public_dict()
+    sso["staging"] = oidc_staging_readiness(discover=False)
     catalog = catalog_integrity()
     last_smoke = get_last_smoke()
     go_live = go_live_readiness(last_smoke=last_smoke)
