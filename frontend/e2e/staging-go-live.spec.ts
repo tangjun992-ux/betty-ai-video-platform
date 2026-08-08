@@ -35,4 +35,12 @@ test.describe("Staging Go-Live 验收 API", () => {
     expect(whBody.endpoint_path).toBe("/api/v1/billing/stripe/webhook");
     expect(whBody.required_events).toContain("checkout.session.completed");
   });
+
+  test("oidc discovery-check 可达", async ({ request }) => {
+    const res = await request.get(`${API_BASE}/auth/oidc/discovery-check`);
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(typeof body.probe_ok).toBe("boolean");
+    expect(body.staging?.checklist).toBeTruthy();
+  });
 });

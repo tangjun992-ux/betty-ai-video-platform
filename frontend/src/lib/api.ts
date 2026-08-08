@@ -1391,6 +1391,27 @@ export async function getSystemReadiness(): Promise<SystemReadiness> {
   return res.json();
 }
 
+export interface OidcDiscoveryProbe {
+  configured: boolean;
+  discovery_ok: boolean;
+  probe_ok: boolean;
+  discovery_url: string;
+  issuer: string;
+  endpoints: Record<string, string>;
+  error?: string | null;
+  staging: {
+    staging_ready: boolean;
+    configured: boolean;
+    checklist: { id: string; label: string; ok: boolean; required?: boolean }[];
+  };
+}
+
+export async function probeOidcDiscovery(): Promise<OidcDiscoveryProbe> {
+  const res = await fetch(`${API_BASE}/auth/oidc/discovery-check`);
+  if (!res.ok) throw new Error(`OIDC discovery: ${res.status}`);
+  return res.json();
+}
+
 export async function getPromotableModels(token: string): Promise<PromotableResponse> {
   const res = await fetch(`${API_BASE}/admin/model-health/promotable`, {
     headers: { Authorization: `Bearer ${token}` },

@@ -42,6 +42,22 @@ async def sso_status():
     return _oidc_status(discover=False).public_dict()
 
 
+@router.get("/oidc/discovery-check", summary="OIDC IdP discovery 实时探测")
+async def oidc_discovery_check():
+    from app.services.oidc_ready import oidc_discovery_probe, oidc_staging_readiness
+
+    probe = oidc_discovery_probe()
+    staging = oidc_staging_readiness(discover=True)
+    return {
+        **probe,
+        "staging": {
+            "staging_ready": staging.get("staging_ready"),
+            "configured": staging.get("configured"),
+            "checklist": staging.get("checklist"),
+        },
+    }
+
+
 @router.get("/oidc/login", summary="发起 OIDC 登录")
 async def oidc_login(response: Response):
     if not oidc_configured():

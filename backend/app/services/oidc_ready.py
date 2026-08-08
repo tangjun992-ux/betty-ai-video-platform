@@ -117,6 +117,73 @@ def oidc_status(*, discover: bool = False) -> OidcStatus:
     )
 
 
+def oidc_discovery_probe(*, timeout: float = 5.0) -> dict:
+    """Live probe of IdP /.well-known/openid-configuration (no secrets exposed)."""
+    e = oidc_env()
+    issuer = e["issuer"]
+    if not issuer:
+        return {
+            "configured": False,
+            "discovery_ok": False,
+            "discovery_url": "",
+            "endpoints": {},
+            "issuer": "",
+            "error": "OIDC_ISSUER not set",
+            "probe_ok": False,
+        }
+    url = f"{issuer}/.well-known/openid-configuration"
+    try:
+        with httpx.Client(timeout=timeout) as c:
+            r = c.get(url)
+            if r.status_code >= 400:
+                return {
+                    "configured": True,
+                    "discovery_ok": False,
+                    "discovery_url": url,
+                    "endpoints": {},
+                    "issuer": issuer,
+                    "error": f"HTTP {r.status_code}",
+                    "probe_ok": False,
+                }
+            meta = r.json()
+            if not isinstance(meta, dict):
+                return {
+                    "configured": True,
+                    "discovery_ok": False,
+                    "discovery_url": url,
+                    "endpoints": {},
+                    "issuer": issuer,
+                    "error": "invalid JSON response",
+                    "probe_ok": False,
+                }
+            endpoints = {
+                "authorization_endpoint": meta.get("authorization_endpoint") or "",
+                "token_endpoint": meta.get("token_endpoint") or "",
+                "userinfo_endpoint": meta.get("userinfo_endpoint") or "",
+                "jwks_uri": meta.get("jwks_uri") or "",
+            }
+            has_core = all(endpoints[k] for k in ("authorization_endpoint", "token_endpoint", "userinfo_endpoint"))
+            return {
+                "configured": True,
+                "discovery_ok": has_core,
+                "discovery_url": url,
+                "endpoints": endpoints,
+                "issuer": meta.get("issuer") or issuer,
+                "error": None if has_core else "discovery missing core endpoints",
+                "probe_ok": has_core,
+            }
+    except Exception as ex:
+        return {
+            "configured": True,
+            "discovery_ok": False,
+            "discovery_url": url,
+            "endpoints": {},
+            "issuer": issuer,
+            "error": str(ex)[:200],
+            "probe_ok": False,
+        }
+
+
 def oidc_staging_readiness(*, discover: bool = False) -> dict:
     """Actionable OIDC/SSO checklist for enterprise staging."""
     from app.config import settings
@@ -155,6 +222,7 @@ def oidc_staging_readiness(*, discover: bool = False) -> dict:
         "issuer": st.issuer,
         "redirect_uri": st.redirect_uri,
         "callback_path": "/auth/callback",
+        "discovery_probe": oidc_discovery_probe() if discover and st.configured else None,
         "env_hint": {
             "OIDC_ISSUER": "https://idp.example.com",
             "OIDC_CLIENT_ID": "<client_id>",
