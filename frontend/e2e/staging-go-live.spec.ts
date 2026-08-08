@@ -87,4 +87,13 @@ test.describe("Staging Go-Live 验收 API", () => {
     expect(Array.isArray(body.missing_required)).toBe(true);
     expect(body.groups?.stripe).toBeTruthy();
   });
+
+  test("staging-runbook-execute 自动执行", async ({ request }) => {
+    const res = await request.post(`${API_BASE}/system/staging-runbook-execute`);
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(typeof body.execute_ok).toBe("boolean");
+    expect(Array.isArray(body.results)).toBe(true);
+    expect(body.results.some((r: { id: string }) => r.id === "checkout_smoke")).toBe(true);
+  });
 });

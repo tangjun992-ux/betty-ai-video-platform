@@ -1502,6 +1502,21 @@ export async function getStagingRunbook(host = "localhost:8000"): Promise<Stagin
   return res.json();
 }
 
+export interface RunbookExecuteResult {
+  execute_ok: boolean;
+  steps_executed: number;
+  steps_passed: number;
+  results: { id: string; title: string; ok: boolean; executed: boolean; duration_ms?: number }[];
+}
+
+export async function executeStagingRunbook(strict = false): Promise<RunbookExecuteResult> {
+  const res = await fetch(`${API_BASE}/system/staging-runbook-execute?strict=${strict ? "true" : "false"}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(`Runbook execute: ${res.status}`);
+  return res.json();
+}
+
 export async function getStripeCliGuide(host = "localhost:8000"): Promise<{ listen_command: string; forward_url: string }> {
   const res = await fetch(`${API_BASE}/billing/stripe-cli-guide?host=${encodeURIComponent(host)}`);
   if (!res.ok) throw new Error(`Stripe CLI guide: ${res.status}`);
