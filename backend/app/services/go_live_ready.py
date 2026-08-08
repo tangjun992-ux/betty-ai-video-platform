@@ -170,6 +170,7 @@ def staging_go_live_report(*, last_smoke: dict | None = None) -> dict:
             "webhook_deliver_test": "POST /billing/stripe-webhook-deliver-test",
             "staging_runbook": "python scripts/staging_runbook.py",
             "staging_env_audit": "python scripts/staging_env_audit.py",
+            "staging_checkout_smoke": "POST /billing/staging-checkout-smoke",
             "stripe_cli_listen": "stripe listen --forward-to localhost:8000/api/v1/billing/stripe/webhook",
         },
     }
@@ -345,6 +346,15 @@ def staging_runbook(*, last_smoke: dict | None = None, host: str = "localhost:80
                 "POST /admin/model-health/smoke/live-kpi",
             ],
             "env_keys": ["MODEL_SMOKE_LIVE", "MODEL_SMOKE_LIVE_VIDEO"],
+        },
+        {
+            "id": "checkout_smoke",
+            "title": "收款链路自测（checkout → webhook → 积分）",
+            "status": "pending",
+            "commands": [
+                "curl -X POST http://localhost:8000/api/v1/billing/staging-checkout-smoke -H 'X-Guest-Id: staging-smoke'",
+            ],
+            "env_keys": [],
         },
         {
             "id": "final_acceptance",

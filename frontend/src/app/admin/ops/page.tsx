@@ -19,6 +19,7 @@ import {
   getStagingAcceptance,
   getStagingRunbook,
   getStripeCliGuide,
+  stagingCheckoutSmoke,
   promoteModel,
   triggerLiveSmoke,
   exportGoLiveReport,
@@ -373,6 +374,26 @@ export default function AdminOpsPage() {
               )}
               {token && (
                 <div className="flex flex-wrap gap-2 mb-3">
+                  <button
+                    type="button"
+                    disabled={smokeBusy === "checkout-smoke"}
+                    onClick={async () => {
+                      setSmokeBusy("checkout-smoke");
+                      setError("");
+                      try {
+                        const r = await stagingCheckoutSmoke(`ops-smoke-${Date.now()}`);
+                        if (!r.ok) throw new Error(r.error || "收款链路自测失败");
+                        await load();
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : "收款链路自测失败");
+                      } finally {
+                        setSmokeBusy(null);
+                      }
+                    }}
+                    className="px-2 py-1 rounded text-xs border border-cosmic-border hover:bg-cosmic-subtle disabled:opacity-50"
+                  >
+                    {smokeBusy === "checkout-smoke" ? "测试中…" : "收款链路自测"}
+                  </button>
                   <button
                     type="button"
                     disabled={smokeBusy === "runbook"}
