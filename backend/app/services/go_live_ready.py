@@ -124,6 +124,8 @@ def staging_go_live_report(*, last_smoke: dict | None = None) -> dict:
         next_steps.append("配置 CDN/S3：STORAGE_TYPE=s3、AWS_*、MEDIA_CDN_BASE_URL")
     if gl.get("oidc", {}).get("required_in_production") and not gl.get("sso_ready"):
         next_steps.append("配置 OIDC：OIDC_ISSUER、CLIENT_ID、CLIENT_SECRET、REDIRECT_URI")
+    elif gl.get("oidc", {}).get("configured") and not (gl.get("oidc") or {}).get("discovery_probe"):
+        next_steps.append("在 Admin Ops 点击「OIDC Discovery 探测」验证 IdP /.well-known")
     live = gl.get("live_kpi") or {}
     if not live.get("available"):
         next_steps.append("在 Admin Ops 触发 Live KPI 抽样，或设置 MODEL_SMOKE_LIVE* 后运行 scripts/staging_go_live_check.py --live")

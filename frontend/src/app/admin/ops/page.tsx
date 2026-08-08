@@ -12,6 +12,7 @@ import {
   getSystemReadiness,
   getWebhookFailures,
   getWebhookFailuresDigest,
+  probeOidcDiscovery,
   sendWebhookFailuresDigest,
   promoteModel,
   triggerLiveSmoke,
@@ -20,6 +21,7 @@ import {
   retryWebhookDelivery,
   type PromotableResponse,
   type SystemReadiness,
+  type OidcDiscoveryProbe,
   type WebhookFailure,
   type WebhookFailureDigest,
 } from "@/lib/api";
@@ -36,6 +38,7 @@ export default function AdminOpsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [smokeBusy, setSmokeBusy] = useState<string | null>(null);
+  const [oidcProbe, setOidcProbe] = useState<OidcDiscoveryProbe | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -261,6 +264,36 @@ export default function AdminOpsPage() {
               {readiness.sso.staging.callback_path && (
                 <p className="text-[11px] text-text-tertiary">回调: {readiness.sso.staging.callback_path}</p>
               )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={smokeBusy === "oidc-discovery"}
+                  onClick={async () => {
+                    setSmokeBusy("oidc-discovery");
+                    setError("");
+                    try {
+                      const probe = await probeOidcDiscovery();
+                      setOidcProbe(probe);
+                      await load();
+                    } catch (e: unknown) {
+                      setError(e instanceof Error ? e.message : "OIDC discovery 失败");
+                    } finally {
+                      setSmokeBusy(null);
+                    }
+                  }}
+                  className="px-2 py-1 rounded text-xs border border-cosmic-border hover:bg-cosmic-subtle disabled:opacity-50"
+                >
+                  {smokeBusy === "oidc-discovery" ? "探测中…" : "OIDC Discovery 探测"}
+                </button>
+                {oidcProbe && (
+                  <span className={cn(
+                    "text-[11px]",
+                    oidcProbe.probe_ok ? "text-success" : "text-amber-600",
+                  )}>
+                    {oidcProbe.probe_ok ? "IdP discovery 通过" : (oidcProbe.error || "discovery 未通过")}
+                  </span>
+                )}
+              </div>
             </section>
           )}
 

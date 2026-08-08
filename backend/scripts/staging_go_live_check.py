@@ -6,6 +6,7 @@ Usage:
   python scripts/staging_go_live_check.py
   python scripts/staging_go_live_check.py --json-only
   python scripts/staging_go_live_check.py --soft   # dev: pass if only live KPI missing
+  python scripts/staging_go_live_check.py --require-webhook  # fail if webhook misconfigured
 
 Exit code 0 when go_live_ok (or --soft rules met), else 1.
 """
@@ -27,12 +28,22 @@ def main() -> int:
         action="store_true",
         help="In non-production, pass when revenue+media ready (ignore live KPI)",
     )
+    parser.add_argument(
+        "--require-webhook",
+        action="store_true",
+        help="Fail when Stripe webhook config (whsec format + endpoint) is not setup_ok",
+    )
     args = parser.parse_args()
 
     from app.services.go_live_ready import staging_go_live_report
 
     report = staging_go_live_report()
     ok = bool(report.get("go_live_ok"))
+
+    if args.require_webhook:
+        wh = (report.get("stripe") or {}).get("webhook_config") or {}
+        if not wh.get("setup_ok"):
+            ok = False
 
     if args.soft:
         from app.config import settings
