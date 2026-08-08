@@ -195,6 +195,12 @@ async def billing_stripe_webhook_check():
     return stripe_webhook_staging_check()
 
 
+@router.get("/stripe-webhook-self-test", summary="Stripe Webhook 签名校验自测（whsec 往返）")
+async def billing_stripe_webhook_self_test():
+    from app.services.stripe_ready import stripe_webhook_signature_self_test
+    return stripe_webhook_signature_self_test()
+
+
 @router.get("/summary", summary="账户余额与消费概览")
 async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Depends(resolve_user_id)):
     bal = await _get_balance(db, user_id)
@@ -779,13 +785,12 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     secret = settings.STRIPE_WEBHOOK_SECRET or os.getenv("STRIPE_WEBHOOK_SECRET", "")
     if settings.is_production and not secret:
         raise HTTPException(status_code=503, detail="Stripe webhook secret not configured")
-    if settings.is_production and not sig:
+    if secret and not sig:
         raise HTTPException(status_code=400, detail="Missing Stripe-Signature header")
     try:
-        if secret and settings.STRIPE_API_KEY:
-            import stripe
-            stripe.api_key = settings.STRIPE_API_KEY
-            event = stripe.Webhook.construct_event(payload, sig, secret)
+        if secret:
+            from app.services.stripe_ready import parse_stripe_webhook_event
+            event = parse_stripe_webhook_event(payload, sig, secret)
             etype = event["type"]
             data_obj = event["data"]["object"]
         elif settings.is_production:
@@ -794,6 +799,8 @@ async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
             event = json.loads(payload.decode("utf-8"))
             etype = event.get("type")
             data_obj = (event.get("data") or {}).get("object") or {}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("stripe webhook parse failed: %s", e)
         raise HTTPException(status_code=400, detail=f"invalid webhook: {e}")

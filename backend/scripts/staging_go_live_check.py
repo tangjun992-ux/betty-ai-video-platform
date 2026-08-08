@@ -42,7 +42,8 @@ def main() -> int:
 
     if args.require_webhook:
         wh = (report.get("stripe") or {}).get("webhook_config") or {}
-        if not wh.get("setup_ok"):
+        sig = (report.get("stripe") or {}).get("webhook_signature_self_test") or {}
+        if not wh.get("setup_ok") or not sig.get("self_test_ok"):
             ok = False
 
     if args.soft:

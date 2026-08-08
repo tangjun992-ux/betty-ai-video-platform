@@ -69,11 +69,20 @@ jobs:
           STRIPE_SUCCESS_URL: http://localhost:3000/billing/success
           STRIPE_CANCEL_URL: http://localhost:3000/pricing
         run: python scripts/staging_go_live_check.py --soft --json-only | python -c "import json,sys; d=json.load(sys.stdin); assert d.get('revenue_ready') and d.get('media_ready'); print('soft gate ok')"
-      - name: Phase parity tests (17–25)
+      - name: Staging webhook require gate (signature self-test)
+        env:
+          ENV: development
+          STRIPE_API_KEY: sk_test_ci_wh
+          STRIPE_WEBHOOK_SECRET: whsec_ci_require_webhook
+          STRIPE_PRICE_STARTER_MONTHLY: price_ci_wh
+          STRIPE_SUCCESS_URL: http://localhost:3000/billing/success
+          STRIPE_CANCEL_URL: http://localhost:3000/pricing
+        run: python scripts/staging_go_live_check.py --require-webhook --soft --json-only | python -c "import json,sys; d=json.load(sys.stdin); sig=d.get('stripe',{}).get('webhook_signature_self_test',{}); assert sig.get('self_test_ok'); print('require-webhook ok')"
+      - name: Phase parity tests (17–26)
         env:
           ENV: test
           DATABASE_URL: "sqlite+aiosqlite:////tmp/ci_phase.db"
-        run: pytest tests/test_phase17_yapper.py tests/test_phase18_yapper.py tests/test_phase19_yapper.py tests/test_phase20_yapper.py tests/test_phase21_yapper.py tests/test_phase22_yapper.py tests/test_phase23_yapper.py tests/test_phase24_yapper.py tests/test_phase25_yapper.py -q --tb=line
+        run: pytest tests/test_phase17_yapper.py tests/test_phase18_yapper.py tests/test_phase19_yapper.py tests/test_phase20_yapper.py tests/test_phase21_yapper.py tests/test_phase22_yapper.py tests/test_phase23_yapper.py tests/test_phase24_yapper.py tests/test_phase25_yapper.py tests/test_phase26_yapper.py -q --tb=line
 
   frontend:
     name: Frontend · lint + build
