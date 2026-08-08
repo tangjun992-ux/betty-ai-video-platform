@@ -1,6 +1,8 @@
 """Unified go-live readiness — Stripe + Storage/CDN + live smoke KPI."""
 from __future__ import annotations
 
+import time
+
 from app.config import settings
 
 
@@ -101,4 +103,59 @@ def go_live_readiness(*, last_smoke: dict | None = None) -> dict:
         "oidc": oidc_staging,
         "blockers": blockers,
         "env": settings.ENV,
+    }
+
+
+def staging_go_live_report(*, last_smoke: dict | None = None) -> dict:
+    """Full staging acceptance report with next-step guidance for ops/CI."""
+    from app.services.model_smoke import get_last_smoke
+    from app.services.ops_alerts import ops_alerts_status
+
+    smoke = last_smoke if last_smoke is not None else get_last_smoke()
+    gl = go_live_readiness(last_smoke=smoke)
+    next_steps: list[str] = []
+
+    if not gl.get("revenue_ready"):
+        next_steps.append("配置 Stripe：STRIPE_API_KEY、STRIPE_WEBHOOK_SECRET、Price IDs、SUCCESS/CANCEL URL")
+    if not gl.get("media_ready"):
+        next_steps.append("配置 CDN/S3：STORAGE_TYPE=s3、AWS_*、MEDIA_CDN_BASE_URL")
+    if gl.get("oidc", {}).get("required_in_production") and not gl.get("sso_ready"):
+        next_steps.append("配置 OIDC：OIDC_ISSUER、CLIENT_ID、CLIENT_SECRET、REDIRECT_URI")
+    live = gl.get("live_kpi") or {}
+    if not live.get("available"):
+        next_steps.append("在 Admin Ops 触发 Live KPI 抽样，或设置 MODEL_SMOKE_LIVE* 后运行 scripts/staging_go_live_check.py --live")
+    elif not live.get("kpi_met"):
+        next_steps.append(f"Live KPI 未达标：{live.get('note')}")
+
+    ops = ops_alerts_status()
+    if not ops.get("webhook_failure_alerts"):
+        next_steps.append("可选：配置 OPS_ALERT_WEBHOOK_URL 接收 Webhook 失败告警")
+
+    dims = {
+        "revenue": bool(gl.get("revenue_ready")),
+        "media": bool(gl.get("media_ready")),
+        "sso": bool(gl.get("sso_ready")),
+        "live_kpi": live.get("kpi_met") if live.get("available") else None,
+    }
+    ok_count = sum(1 for v in dims.values() if v is True)
+    pending = sum(1 for v in dims.values() if v is False)
+
+    return {
+        **gl,
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "summary": {
+            "dimensions": dims,
+            "dimensions_ok": ok_count,
+            "dimensions_pending": pending,
+            "dimensions_unknown": sum(1 for v in dims.values() if v is None),
+            "blocker_count": len(gl.get("blockers") or []),
+        },
+        "next_steps": next_steps,
+        "ops_alerts": ops,
+        "last_smoke_ts": (smoke or {}).get("ts"),
+        "commands": {
+            "staging_check": "python scripts/staging_go_live_check.py",
+            "stripe_bootstrap": "python scripts/bootstrap_stripe_prices.py --validate",
+            "live_kpi_admin": "POST /admin/model-health/smoke/live-kpi",
+        },
     }

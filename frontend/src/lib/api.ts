@@ -1426,6 +1426,14 @@ export async function triggerLiveSmoke(token: string, kind: "live-image" | "live
   return res.json();
 }
 
+export async function exportGoLiveReport(token: string) {
+  const res = await fetch(`${API_BASE}/admin/model-health/go-live-export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Go-live export: ${res.status}`);
+  return res.json();
+}
+
 export interface WebhookFailure {
   task_id: string;
   status: string;

@@ -224,6 +224,27 @@ async def admin_catalog(_: User = Depends(require_admin)):
     return catalog_integrity()
 
 
+@router.get("/go-live-export", summary="导出 Staging 验收报告（JSON）")
+async def export_go_live_report(
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.go_live_ready import staging_go_live_report
+    from app.services.model_smoke import get_last_smoke
+    from app.services.audit import record_audit
+
+    report = staging_go_live_report(last_smoke=get_last_smoke())
+    await record_audit(
+        db,
+        action="admin.go_live_export",
+        actor_user_id=user.id,
+        target_type="staging",
+        meta={"go_live_ok": report.get("go_live_ok"), "blocker_count": report.get("summary", {}).get("blocker_count")},
+    )
+    await db.commit()
+    return report
+
+
 class SmokeRequest(BaseModel):
     mode: str | None = Field(None, description="mapping | live | live_video")
 
