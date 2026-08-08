@@ -120,6 +120,9 @@ def staging_go_live_report(*, last_smoke: dict | None = None) -> dict:
         wh = (gl.get("stripe") or {}).get("webhook_config") or {}
         if wh.get("blockers"):
             next_steps.append(f"Stripe Webhook：{'; '.join(wh['blockers'][:2])}")
+        sig = (gl.get("stripe") or {}).get("webhook_signature_self_test") or {}
+        if wh.get("setup_ok") and not sig.get("self_test_ok"):
+            next_steps.append(f"Stripe Webhook 签名校验自测失败：{sig.get('error') or 'unknown'}")
     if not gl.get("media_ready"):
         next_steps.append("配置 CDN/S3：STORAGE_TYPE=s3、AWS_*、MEDIA_CDN_BASE_URL")
     if gl.get("oidc", {}).get("required_in_production") and not gl.get("sso_ready"):

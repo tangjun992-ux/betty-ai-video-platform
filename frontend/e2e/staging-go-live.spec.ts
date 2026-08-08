@@ -19,21 +19,25 @@ test.describe("Staging Go-Live 验收 API", () => {
   });
 
   test("go-live-readiness 与 billing staging 一致可达", async ({ request }) => {
-    const [gl, stripe, wh] = await Promise.all([
+    const [gl, stripe, wh, whSelf] = await Promise.all([
       request.get(`${API_BASE}/system/go-live-readiness`),
       request.get(`${API_BASE}/billing/staging-readiness`),
       request.get(`${API_BASE}/billing/stripe-webhook-check`),
+      request.get(`${API_BASE}/billing/stripe-webhook-self-test`),
     ]);
     expect(gl.ok()).toBeTruthy();
     expect(stripe.ok()).toBeTruthy();
     expect(wh.ok()).toBeTruthy();
+    expect(whSelf.ok()).toBeTruthy();
     const glBody = await gl.json();
     const stBody = await stripe.json();
     const whBody = await wh.json();
+    const whSelfBody = await whSelf.json();
     expect(typeof glBody.revenue_ready).toBe("boolean");
     expect(typeof stBody.staging_ready).toBe("boolean");
     expect(whBody.endpoint_path).toBe("/api/v1/billing/stripe/webhook");
     expect(whBody.required_events).toContain("checkout.session.completed");
+    expect(typeof whSelfBody.self_test_ok).toBe("boolean");
   });
 
   test("oidc discovery-check 可达", async ({ request }) => {

@@ -1294,6 +1294,11 @@ export interface SystemReadiness {
         setup_ok: boolean;
         dashboard_steps: string[];
       };
+      webhook_signature_self_test?: {
+        configured: boolean;
+        self_test_ok: boolean;
+        error?: string | null;
+      };
       checklist: { id: string; label: string; ok: boolean; required?: boolean }[];
     };
   };
@@ -1409,6 +1414,19 @@ export interface OidcDiscoveryProbe {
 export async function probeOidcDiscovery(): Promise<OidcDiscoveryProbe> {
   const res = await fetch(`${API_BASE}/auth/oidc/discovery-check`);
   if (!res.ok) throw new Error(`OIDC discovery: ${res.status}`);
+  return res.json();
+}
+
+export interface StripeWebhookSelfTest {
+  configured: boolean;
+  self_test_ok: boolean;
+  sample_event_type?: string;
+  error?: string | null;
+}
+
+export async function stripeWebhookSelfTest(): Promise<StripeWebhookSelfTest> {
+  const res = await fetch(`${API_BASE}/billing/stripe-webhook-self-test`);
+  if (!res.ok) throw new Error(`Stripe webhook self-test: ${res.status}`);
   return res.json();
 }
 

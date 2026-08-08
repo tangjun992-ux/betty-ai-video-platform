@@ -3,7 +3,11 @@ Stripe production readiness helpers.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import os
+import time
 from dataclasses import dataclass
 
 from app.config import settings
@@ -40,6 +44,100 @@ REQUIRED_STRIPE_WEBHOOK_EVENTS = (
 )
 
 STRIPE_WEBHOOK_PATH = "/api/v1/billing/stripe/webhook"
+
+# Stripe-Signature tolerance (seconds) — matches stripe-python default.
+STRIPE_WEBHOOK_TOLERANCE_SEC = 300
+
+
+def stripe_webhook_sign_payload(payload: bytes | str, secret: str, *, timestamp: int | None = None) -> str:
+    """Build a Stripe-Signature header for test/staging self-checks."""
+    ts = int(timestamp if timestamp is not None else time.time())
+    body = payload.decode("utf-8") if isinstance(payload, (bytes, bytearray)) else payload
+    signed = f"{ts}.{body}"
+    digest = hmac.new(secret.encode("utf-8"), signed.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"t={ts},v1={digest}"
+
+
+def stripe_webhook_verify_payload(
+    payload: bytes,
+    signature_header: str,
+    secret: str,
+    *,
+    tolerance: int = STRIPE_WEBHOOK_TOLERANCE_SEC,
+) -> dict:
+    """Verify Stripe-Signature and return parsed event dict (pure Python, no stripe SDK)."""
+    if not secret:
+        raise ValueError("webhook secret missing")
+    if not signature_header:
+        raise ValueError("Missing Stripe-Signature header")
+    parts = [p.strip() for p in signature_header.split(",")]
+    timestamp: int | None = None
+    signatures: list[str] = []
+    for part in parts:
+        if part.startswith("t="):
+            timestamp = int(part[2:])
+        elif part.startswith("v1="):
+            signatures.append(part[3:])
+    if timestamp is None or not signatures:
+        raise ValueError("invalid Stripe-Signature header")
+    if tolerance > 0 and abs(time.time() - timestamp) > tolerance:
+        raise ValueError("timestamp outside tolerance")
+    body = payload.decode("utf-8")
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        f"{timestamp}.{body}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not any(hmac.compare_digest(expected, sig) for sig in signatures):
+        raise ValueError("signature mismatch")
+    event = json.loads(body)
+    if not isinstance(event, dict):
+        raise ValueError("webhook payload must be JSON object")
+    return event
+
+
+def parse_stripe_webhook_event(payload: bytes, signature_header: str, secret: str) -> dict:
+    """Verify Stripe-Signature and return parsed event (pure Python, no stripe SDK required)."""
+    return stripe_webhook_verify_payload(payload, signature_header, secret)
+
+
+def stripe_webhook_signature_self_test() -> dict:
+    """Round-trip sign/verify using configured whsec (no Stripe API calls)."""
+    secret = (settings.STRIPE_WEBHOOK_SECRET or os.getenv("STRIPE_WEBHOOK_SECRET", "") or "").strip()
+    if not secret:
+        return {
+            "configured": False,
+            "self_test_ok": False,
+            "error": "STRIPE_WEBHOOK_SECRET missing",
+        }
+    if not secret.startswith("whsec_"):
+        return {
+            "configured": True,
+            "self_test_ok": False,
+            "error": "STRIPE_WEBHOOK_SECRET should start with whsec_",
+        }
+    sample = json.dumps({
+        "id": "evt_self_test",
+        "object": "event",
+        "type": "checkout.session.completed",
+        "data": {"object": {"metadata": {"order_no": "SELF_TEST"}}},
+    })
+    try:
+        sig = stripe_webhook_sign_payload(sample, secret)
+        parsed = stripe_webhook_verify_payload(sample.encode("utf-8"), sig, secret)
+        ok = parsed.get("type") == "checkout.session.completed"
+        return {
+            "configured": True,
+            "self_test_ok": ok,
+            "sample_event_type": parsed.get("type"),
+            "error": None if ok else "unexpected parsed event type",
+        }
+    except Exception as ex:
+        return {
+            "configured": True,
+            "self_test_ok": False,
+            "error": str(ex)[:200],
+        }
 
 
 @dataclass
@@ -236,6 +334,9 @@ def stripe_staging_readiness() -> dict:
     blockers = [c["label"] for c in checklist if c.get("required") and not c["ok"]]
     wh = stripe_webhook_staging_check()
     blockers.extend(wh.get("blockers") or [])
+    sig_test = stripe_webhook_signature_self_test()
+    if wh.get("setup_ok") and not sig_test.get("self_test_ok"):
+        blockers.append("Stripe webhook signature self-test failed")
     staging_ready = (
         st.api_key_configured
         and st.webhook_secret_configured
@@ -243,6 +344,7 @@ def stripe_staging_readiness() -> dict:
         and bool(success_url)
         and bool(cancel_url)
         and wh.get("setup_ok", False)
+        and sig_test.get("self_test_ok", False)
     )
     return {
         "staging_ready": staging_ready,
@@ -251,6 +353,7 @@ def stripe_staging_readiness() -> dict:
         "bootstrap": bs,
         "blockers": blockers,
         "webhook_config": wh,
+        "webhook_signature_self_test": sig_test,
         "webhook_events": list(REQUIRED_STRIPE_WEBHOOK_EVENTS),
         "webhook_endpoint": STRIPE_WEBHOOK_PATH,
         "success_page_path": "/billing/success?session_id={CHECKOUT_SESSION_ID}",

@@ -14,6 +14,7 @@ import {
   getWebhookFailuresDigest,
   probeOidcDiscovery,
   sendWebhookFailuresDigest,
+  stripeWebhookSelfTest,
   promoteModel,
   triggerLiveSmoke,
   exportGoLiveReport,
@@ -22,6 +23,7 @@ import {
   type PromotableResponse,
   type SystemReadiness,
   type OidcDiscoveryProbe,
+  type StripeWebhookSelfTest,
   type WebhookFailure,
   type WebhookFailureDigest,
 } from "@/lib/api";
@@ -39,6 +41,7 @@ export default function AdminOpsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [smokeBusy, setSmokeBusy] = useState<string | null>(null);
   const [oidcProbe, setOidcProbe] = useState<OidcDiscoveryProbe | null>(null);
+  const [webhookSelfTest, setWebhookSelfTest] = useState<StripeWebhookSelfTest | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -200,6 +203,40 @@ export default function AdminOpsPage() {
                   endpoint: {readiness.stripe.staging.webhook_endpoint}
                 </p>
               )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={smokeBusy === "webhook-self-test"}
+                  onClick={async () => {
+                    setSmokeBusy("webhook-self-test");
+                    setError("");
+                    try {
+                      const r = await stripeWebhookSelfTest();
+                      setWebhookSelfTest(r);
+                      await load();
+                    } catch (e: unknown) {
+                      setError(e instanceof Error ? e.message : "Webhook 自测失败");
+                    } finally {
+                      setSmokeBusy(null);
+                    }
+                  }}
+                  className="px-2 py-1 rounded text-xs border border-cosmic-border hover:bg-cosmic-subtle disabled:opacity-50"
+                >
+                  {smokeBusy === "webhook-self-test" ? "校验中…" : "Webhook 签名校验自测"}
+                </button>
+                {(webhookSelfTest || readiness.stripe.staging.webhook_signature_self_test) && (
+                  <span className={cn(
+                    "text-[11px]",
+                    (webhookSelfTest?.self_test_ok ?? readiness.stripe.staging.webhook_signature_self_test?.self_test_ok)
+                      ? "text-success"
+                      : "text-amber-600",
+                  )}>
+                    {(webhookSelfTest?.self_test_ok ?? readiness.stripe.staging.webhook_signature_self_test?.self_test_ok)
+                      ? "whsec 签名校验通过"
+                      : (webhookSelfTest?.error || readiness.stripe.staging.webhook_signature_self_test?.error || "待配置 whsec")}
+                  </span>
+                )}
+              </div>
             </section>
           )}
 
