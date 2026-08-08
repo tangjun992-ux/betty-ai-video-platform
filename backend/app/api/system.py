@@ -197,6 +197,14 @@ async def staging_report_endpoint():
     return staging_go_live_report(last_smoke=get_last_smoke())
 
 
+@router.get("/staging-acceptance", summary="Staging 验收记分卡（pass/fail/skip）")
+async def staging_acceptance_endpoint(strict: bool = False):
+    from app.services.go_live_ready import staging_acceptance_scorecard
+    from app.services.model_smoke import get_last_smoke
+
+    return staging_acceptance_scorecard(last_smoke=get_last_smoke(), strict=strict)
+
+
 @router.get("/catalog", summary="模型目录诚信报告")
 async def catalog_report():
     from app.services.model_catalog import catalog_integrity
