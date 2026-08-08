@@ -1508,6 +1508,25 @@ export async function getStripeCliGuide(host = "localhost:8000"): Promise<{ list
   return res.json();
 }
 
+export interface StagingCheckoutSmoke {
+  ok: boolean;
+  mode: string;
+  credits_before: number;
+  credits_after: number;
+  credits_delta: number;
+  order_no?: string;
+  error?: string;
+}
+
+export async function stagingCheckoutSmoke(guestId: string): Promise<StagingCheckoutSmoke> {
+  const res = await fetch(`${API_BASE}/billing/staging-checkout-smoke`, {
+    method: "POST",
+    headers: { "X-Guest-Id": guestId },
+  });
+  if (!res.ok) throw new Error(`Checkout smoke: ${res.status}`);
+  return res.json();
+}
+
 export async function getPromotableModels(token: string): Promise<PromotableResponse> {
   const res = await fetch(`${API_BASE}/admin/model-health/promotable`, {
     headers: { Authorization: `Bearer ${token}` },

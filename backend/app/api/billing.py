@@ -215,6 +215,16 @@ async def billing_stripe_cli_guide(host: str = "localhost:8000"):
     return stripe_cli_webhook_guide(host=host)
 
 
+@router.post("/staging-checkout-smoke", summary="Staging 收款链路自测（checkout → webhook → 积分）")
+async def billing_staging_checkout_smoke(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    from app.services.staging_checkout import run_staging_checkout_smoke
+
+    return await run_staging_checkout_smoke(db, user_id)
+
+
 @router.get("/summary", summary="账户余额与消费概览")
 async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Depends(resolve_user_id)):
     bal = await _get_balance(db, user_id)
