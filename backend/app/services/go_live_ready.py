@@ -163,7 +163,79 @@ def staging_go_live_report(*, last_smoke: dict | None = None) -> dict:
         "last_smoke_ts": (smoke or {}).get("ts"),
         "commands": {
             "staging_check": "python scripts/staging_go_live_check.py",
+            "staging_strict": "python scripts/staging_go_live_check.py --strict --require-webhook",
+            "staging_live": "python scripts/staging_go_live_check.py --live",
             "stripe_bootstrap": "python scripts/bootstrap_stripe_prices.py --validate",
             "live_kpi_admin": "POST /admin/model-health/smoke/live-kpi",
+            "webhook_deliver_test": "POST /billing/stripe-webhook-deliver-test",
         },
+    }
+
+
+def staging_acceptance_scorecard(*, last_smoke: dict | None = None, strict: bool = False) -> dict:
+    """Compact staging acceptance view for ops dashboards and CI gates."""
+    report = staging_go_live_report(last_smoke=last_smoke)
+    stripe = report.get("stripe") or {}
+    wh = stripe.get("webhook_config") or {}
+    sig = stripe.get("webhook_signature_self_test") or {}
+    live = report.get("live_kpi") or {}
+    oidc = report.get("oidc") or {}
+
+    def _status(ok: bool | None) -> str:
+        if ok is True:
+            return "pass"
+        if ok is False:
+            return "fail"
+        return "skip"
+
+    checks = [
+        {"id": "revenue", "label": "Stripe 收款就绪", "status": _status(report.get("revenue_ready")), "required": True},
+        {"id": "webhook_config", "label": "Webhook Dashboard 配置", "status": _status(wh.get("setup_ok")), "required": True},
+        {"id": "webhook_signature", "label": "Webhook whsec 签名校验", "status": _status(sig.get("self_test_ok")), "required": True},
+        {"id": "media", "label": "CDN/S3 媒体分发", "status": _status(report.get("media_ready")), "required": True},
+        {
+            "id": "sso",
+            "label": "OIDC/SSO",
+            "status": _status(report.get("sso_ready")) if oidc.get("required_in_production") or oidc.get("configured") else "skip",
+            "required": bool(oidc.get("required_in_production")),
+        },
+        {
+            "id": "live_kpi",
+            "label": "Live KPI 出片",
+            "status": _status(live.get("kpi_met")) if live.get("available") else "skip",
+            "required": strict,
+        },
+    ]
+    required_checks = [c for c in checks if c.get("required")]
+    required_pass = sum(1 for c in required_checks if c["status"] == "pass")
+    scored = [c for c in checks if c["status"] in ("pass", "fail")]
+    score_pct = round(100 * sum(1 for c in scored if c["status"] == "pass") / len(scored)) if scored else 0
+
+    acceptance_ok = all(c["status"] == "pass" for c in required_checks)
+    if strict and live.get("available"):
+        acceptance_ok = acceptance_ok and bool(live.get("kpi_met"))
+
+    return {
+        "acceptance_ok": acceptance_ok,
+        "strict": strict,
+        "score_pct": score_pct,
+        "checks": checks,
+        "checks_pass": sum(1 for c in checks if c["status"] == "pass"),
+        "checks_fail": sum(1 for c in checks if c["status"] == "fail"),
+        "checks_skip": sum(1 for c in checks if c["status"] == "skip"),
+        "required_pass": required_pass,
+        "required_total": len(required_checks),
+        "go_live_ok": report.get("go_live_ok"),
+        "revenue_ready": report.get("revenue_ready"),
+        "media_ready": report.get("media_ready"),
+        "live_kpi_ready": report.get("live_kpi_ready"),
+        "blockers": report.get("blockers") or [],
+        "next_steps": report.get("next_steps") or [],
+        "generated_at": report.get("generated_at"),
+        "stripe": {
+            "webhook_config": wh,
+            "webhook_signature_self_test": sig,
+            "staging_ready": stripe.get("staging_ready"),
+        },
+        "env": report.get("env"),
     }

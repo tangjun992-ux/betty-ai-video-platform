@@ -140,6 +140,61 @@ def stripe_webhook_signature_self_test() -> dict:
         }
 
 
+def stripe_webhook_ping_payload(*, event_type: str = "account.updated") -> tuple[str, str] | tuple[None, None]:
+    """Build signed ping payload + Stripe-Signature header (ignored event type)."""
+    secret = (settings.STRIPE_WEBHOOK_SECRET or os.getenv("STRIPE_WEBHOOK_SECRET", "") or "").strip()
+    if not secret:
+        return None, None
+    payload = json.dumps({
+        "id": "evt_deliver_ping",
+        "object": "event",
+        "type": event_type,
+        "data": {"object": {}},
+    })
+    return payload, stripe_webhook_sign_payload(payload, secret)
+
+
+async def stripe_webhook_delivery_test(*, app=None) -> dict:
+    """Deliver signed ping event through the webhook route (ASGI in-process)."""
+    import httpx
+    from httpx import ASGITransport
+
+    payload, sig = stripe_webhook_ping_payload()
+    if not payload or not sig:
+        return {"delivery_ok": False, "error": "STRIPE_WEBHOOK_SECRET missing"}
+    if app is None:
+        from app.main import app as default_app
+        app = default_app
+    path = "/api/v1/billing/stripe/webhook"
+    try:
+        async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            r = await client.post(
+                path,
+                content=payload.encode("utf-8"),
+                headers={"Content-Type": "application/json", "Stripe-Signature": sig},
+            )
+        body: dict | str
+        try:
+            body = r.json()
+        except Exception:
+            body = r.text[:300]
+        ok = r.status_code == 200 and isinstance(body, dict) and body.get("received") is True
+        return {
+            "delivery_ok": ok,
+            "status_code": r.status_code,
+            "endpoint": path,
+            "event_type": "account.updated",
+            "response": body,
+            "error": None if ok else f"HTTP {r.status_code}",
+        }
+    except Exception as ex:
+        return {
+            "delivery_ok": False,
+            "endpoint": path,
+            "error": str(ex)[:200],
+        }
+
+
 @dataclass
 class StripeStatus:
     api_key_configured: bool

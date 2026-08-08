@@ -47,4 +47,22 @@ test.describe("Staging Go-Live 验收 API", () => {
     expect(typeof body.probe_ok).toBe("boolean");
     expect(body.staging?.checklist).toBeTruthy();
   });
+
+  test("staging-acceptance 记分卡与 webhook 投递自测", async ({ request }) => {
+    const [acceptance, deliver] = await Promise.all([
+      request.get(`${API_BASE}/system/staging-acceptance`),
+      request.post(`${API_BASE}/billing/stripe-webhook-deliver-test`),
+    ]);
+    expect(acceptance.ok()).toBeTruthy();
+    const accBody = await acceptance.json();
+    expect(typeof accBody.acceptance_ok).toBe("boolean");
+    expect(Array.isArray(accBody.checks)).toBe(true);
+    expect(accBody.checks.some((c: { id: string }) => c.id === "webhook_signature")).toBe(true);
+
+    // deliver test requires whsec — may fail in dev without env; accept 200 with delivery_ok boolean
+    if (deliver.ok()) {
+      const dBody = await deliver.json();
+      expect(typeof dBody.delivery_ok).toBe("boolean");
+    }
+  });
 });

@@ -1430,6 +1430,44 @@ export async function stripeWebhookSelfTest(): Promise<StripeWebhookSelfTest> {
   return res.json();
 }
 
+export interface StagingAcceptanceCheck {
+  id: string;
+  label: string;
+  status: "pass" | "fail" | "skip";
+  required?: boolean;
+}
+
+export interface StagingAcceptanceScorecard {
+  acceptance_ok: boolean;
+  strict: boolean;
+  score_pct: number;
+  checks: StagingAcceptanceCheck[];
+  checks_pass: number;
+  checks_fail: number;
+  next_steps: string[];
+  blockers: string[];
+}
+
+export async function getStagingAcceptance(strict = false): Promise<StagingAcceptanceScorecard> {
+  const res = await fetch(`${API_BASE}/system/staging-acceptance?strict=${strict ? "true" : "false"}`);
+  if (!res.ok) throw new Error(`Staging acceptance: ${res.status}`);
+  return res.json();
+}
+
+export interface StripeWebhookDeliverTest {
+  delivery_ok: boolean;
+  status_code?: number;
+  endpoint?: string;
+  error?: string | null;
+  response?: Record<string, unknown>;
+}
+
+export async function stripeWebhookDeliverTest(): Promise<StripeWebhookDeliverTest> {
+  const res = await fetch(`${API_BASE}/billing/stripe-webhook-deliver-test`, { method: "POST" });
+  if (!res.ok) throw new Error(`Stripe webhook deliver test: ${res.status}`);
+  return res.json();
+}
+
 export async function getPromotableModels(token: string): Promise<PromotableResponse> {
   const res = await fetch(`${API_BASE}/admin/model-health/promotable`, {
     headers: { Authorization: `Bearer ${token}` },

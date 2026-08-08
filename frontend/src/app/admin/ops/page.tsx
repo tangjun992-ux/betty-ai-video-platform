@@ -15,6 +15,8 @@ import {
   probeOidcDiscovery,
   sendWebhookFailuresDigest,
   stripeWebhookSelfTest,
+  stripeWebhookDeliverTest,
+  getStagingAcceptance,
   promoteModel,
   triggerLiveSmoke,
   exportGoLiveReport,
@@ -24,6 +26,7 @@ import {
   type SystemReadiness,
   type OidcDiscoveryProbe,
   type StripeWebhookSelfTest,
+  type StagingAcceptanceScorecard,
   type WebhookFailure,
   type WebhookFailureDigest,
 } from "@/lib/api";
@@ -42,6 +45,7 @@ export default function AdminOpsPage() {
   const [smokeBusy, setSmokeBusy] = useState<string | null>(null);
   const [oidcProbe, setOidcProbe] = useState<OidcDiscoveryProbe | null>(null);
   const [webhookSelfTest, setWebhookSelfTest] = useState<StripeWebhookSelfTest | null>(null);
+  const [acceptance, setAcceptance] = useState<StagingAcceptanceScorecard | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -367,6 +371,45 @@ export default function AdminOpsPage() {
                 <div className="flex flex-wrap gap-2 mb-3">
                   <button
                     type="button"
+                    disabled={smokeBusy === "acceptance"}
+                    onClick={async () => {
+                      setSmokeBusy("acceptance");
+                      setError("");
+                      try {
+                        const sc = await getStagingAcceptance(false);
+                        setAcceptance(sc);
+                        await load();
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : "验收记分失败");
+                      } finally {
+                        setSmokeBusy(null);
+                      }
+                    }}
+                    className="px-2 py-1 rounded text-xs border border-brand/40 text-brand hover:bg-brand/10 disabled:opacity-50"
+                  >
+                    {smokeBusy === "acceptance" ? "刷新中…" : "刷新验收记分卡"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={smokeBusy === "webhook-deliver"}
+                    onClick={async () => {
+                      setSmokeBusy("webhook-deliver");
+                      setError("");
+                      try {
+                        await stripeWebhookDeliverTest();
+                        await load();
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : "Webhook 投递自测失败");
+                      } finally {
+                        setSmokeBusy(null);
+                      }
+                    }}
+                    className="px-2 py-1 rounded text-xs border border-cosmic-border hover:bg-cosmic-subtle disabled:opacity-50"
+                  >
+                    {smokeBusy === "webhook-deliver" ? "投递中…" : "Webhook 投递自测"}
+                  </button>
+                  <button
+                    type="button"
                     disabled={smokeBusy === "export"}
                     onClick={async () => {
                       setSmokeBusy("export");
@@ -411,6 +454,16 @@ export default function AdminOpsPage() {
                       {smokeBusy === kind ? "运行中…" : kind === "live-kpi" ? "Live KPI 抽样" : kind === "live-image" ? "Live 图片" : "Live 视频"}
                     </button>
                   ))}
+                </div>
+              )}
+              {acceptance && (
+                <div className="text-[11px] text-text-tertiary mb-2">
+                  验收得分 {acceptance.score_pct}% · 通过 {acceptance.checks_pass} · 失败 {acceptance.checks_fail}
+                  {acceptance.checks_fail > 0 && (
+                    <span className="text-amber-600 ml-1">
+                      ({acceptance.checks.filter((c) => c.status === "fail").map((c) => c.label).join("、")})
+                    </span>
+                  )}
                 </div>
               )}
               {readiness.go_live.blockers.length > 0 && (
