@@ -205,6 +205,14 @@ async def staging_acceptance_endpoint(strict: bool = False):
     return staging_acceptance_scorecard(last_smoke=get_last_smoke(), strict=strict)
 
 
+@router.get("/staging-runbook", summary="Staging 上线 Runbook（分步命令清单）")
+async def staging_runbook_endpoint(host: str = "localhost:8000"):
+    from app.services.go_live_ready import staging_runbook
+    from app.services.model_smoke import get_last_smoke
+
+    return staging_runbook(last_smoke=get_last_smoke(), host=host)
+
+
 @router.get("/catalog", summary="模型目录诚信报告")
 async def catalog_report():
     from app.services.model_catalog import catalog_integrity
