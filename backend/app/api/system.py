@@ -181,6 +181,14 @@ def _public_last_smoke() -> dict | None:
     }
 
 
+@router.get("/go-live-readiness", summary="上线验收（Stripe + CDN + Live KPI）")
+async def go_live_readiness_endpoint():
+    from app.services.go_live_ready import go_live_readiness
+    from app.services.model_smoke import get_last_smoke
+
+    return go_live_readiness(last_smoke=get_last_smoke())
+
+
 @router.get("/catalog", summary="模型目录诚信报告")
 async def catalog_report():
     from app.services.model_catalog import catalog_integrity
@@ -198,15 +206,19 @@ async def readiness():
     from app.config import settings
 
     from app.services.stripe_ready import stripe_bootstrap_status, stripe_checkout_readiness, stripe_staging_readiness
+    from app.services.storage_ready import storage_staging_readiness
+    from app.services.go_live_ready import go_live_readiness, live_smoke_kpi
 
     stripe = stripe_status().public_dict()
     stripe["bootstrap"] = stripe_bootstrap_status()
     stripe["checkout"] = stripe_checkout_readiness()
     stripe["staging"] = stripe_staging_readiness()
     storage = storage_status().public_dict()
+    storage["staging"] = storage_staging_readiness()
     sso = oidc_status(discover=False).public_dict()
     catalog = catalog_integrity()
     last_smoke = get_last_smoke()
+    go_live = go_live_readiness(last_smoke=last_smoke)
     ok = True
     if settings.is_production:
         ok = (
@@ -236,6 +248,8 @@ async def readiness():
             "last_auto_promote": _last_auto_promote_summary(last_smoke),
         },
         "ops_alerts": __import__("app.services.ops_alerts", fromlist=["ops_alerts_status"]).ops_alerts_status(),
+        "go_live": go_live,
+        "live_kpi": live_smoke_kpi(last_smoke=last_smoke),
     }
 
 

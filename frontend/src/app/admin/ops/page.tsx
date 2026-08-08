@@ -192,6 +192,76 @@ export default function AdminOpsPage() {
             </section>
           )}
 
+          {readiness.storage.staging && (
+            <section className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4">
+              <h2 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-brand" />
+                CDN / 存储 Staging
+                <span className={cn(
+                  "text-xs font-normal px-2 py-0.5 rounded-full",
+                  readiness.storage.staging.staging_ready
+                    ? "bg-success/15 text-success"
+                    : "bg-amber-500/15 text-amber-600",
+                )}>
+                  {readiness.storage.staging.staging_ready ? "就绪" : "待配置"}
+                </span>
+              </h2>
+              <ul className="space-y-1.5 text-xs text-text-secondary mb-2">
+                {readiness.storage.staging.checklist.map((item) => (
+                  <li key={item.id} className="flex items-center gap-2">
+                    {item.ok ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    )}
+                    <span>{item.label}{item.required ? " *" : ""}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-text-tertiary font-mono truncate">
+                public base: {readiness.storage.staging.public_media_base}
+              </p>
+            </section>
+          )}
+
+          {readiness.go_live && (
+            <section className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4">
+              <h2 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Activity className="w-4 h-4 text-brand" />
+                Go-Live 总览
+                <span className={cn(
+                  "text-xs font-normal px-2 py-0.5 rounded-full",
+                  readiness.go_live.go_live_ok
+                    ? "bg-success/15 text-success"
+                    : "bg-amber-500/15 text-amber-600",
+                )}>
+                  {readiness.go_live.go_live_ok ? "可上线" : "未达标"}
+                </span>
+              </h2>
+              <div className="flex flex-wrap gap-3 text-xs text-text-secondary mb-3">
+                <span>收款: {readiness.go_live.revenue_ready ? "✓" : "✗"}</span>
+                <span>CDN: {readiness.go_live.media_ready ? "✓" : "✗"}</span>
+                <span>
+                  Live KPI: {readiness.go_live.live_kpi_ready === null ? "—" : readiness.go_live.live_kpi_ready ? "✓" : "✗"}
+                </span>
+              </div>
+              {readiness.live_kpi && (
+                <p className="text-[11px] text-text-tertiary mb-2">
+                  出片 KPI · video {readiness.live_kpi.video_outframe_ok}/{readiness.live_kpi.targets.video_outframe_min}
+                  {" · "}image {readiness.live_kpi.image_outframe_ok}/{readiness.live_kpi.targets.image_outframe_min}
+                  {readiness.live_kpi.note ? ` · ${readiness.live_kpi.note}` : ""}
+                </p>
+              )}
+              {readiness.go_live.blockers.length > 0 && (
+                <ul className="text-[11px] text-amber-600/90 space-y-0.5">
+                  {readiness.go_live.blockers.slice(0, 6).map((b) => (
+                    <li key={b}>· {b}</li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
+
           <section className="rounded-xl border border-cosmic-border bg-cosmic-elevated p-4">
             <h2 className="text-sm font-medium mb-3 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-brand" />

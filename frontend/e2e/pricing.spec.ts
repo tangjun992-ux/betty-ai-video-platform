@@ -34,7 +34,18 @@ test.describe("定价 · dev-grant Checkout", () => {
   });
 });
 
-test.describe("定价页", () => {
+test.describe("Go-Live 验收 API", () => {
+  test("go-live-readiness 返回聚合清单", async ({ request }) => {
+    const res = await request.get(`${API_BASE}/system/go-live-readiness`);
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(typeof body.go_live_ok).toBe("boolean");
+    expect(body.stripe).toBeTruthy();
+    expect(body.storage).toBeTruthy();
+    expect(body.live_kpi).toBeTruthy();
+  });
+});
+
   test("定价页加载并展示套餐", async ({ page }) => {
     await page.goto("/pricing");
     const accept = page.getByRole("button", { name: /接受全部|Accept all/i });

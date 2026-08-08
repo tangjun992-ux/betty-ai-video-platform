@@ -63,3 +63,52 @@ def assert_storage_production_ready() -> None:
     st = storage_status()
     if settings.is_production and not st.production_ok:
         raise RuntimeError("Storage/CDN production blockers: " + "; ".join(st.blockers))
+
+
+def storage_staging_readiness() -> dict:
+    """Actionable checklist for S3/CDN staging go-live."""
+    st = storage_status()
+    stype = (settings.STORAGE_TYPE or "local").lower()
+    checklist = [
+        {
+            "id": "storage_type",
+            "label": "STORAGE_TYPE=s3（生产禁止 local）",
+            "ok": stype == "s3",
+            "required": settings.is_production,
+        },
+        {
+            "id": "aws_credentials",
+            "label": "AWS_ACCESS_KEY_ID + AWS_S3_BUCKET",
+            "ok": bool(settings.AWS_ACCESS_KEY_ID and settings.AWS_S3_BUCKET),
+            "required": stype == "s3",
+        },
+        {
+            "id": "public_base",
+            "label": "MEDIA_CDN_BASE_URL 或 S3_PUBLIC_BASE_URL",
+            "ok": st.cdn_configured or st.s3_public_configured,
+            "required": stype == "s3",
+        },
+        {
+            "id": "local_dev_ok",
+            "label": "开发环境 local 存储可用",
+            "ok": stype == "local" and not settings.is_production,
+            "required": False,
+        },
+    ]
+    required = [c for c in checklist if c.get("required")]
+    staging_ready = all(c["ok"] for c in required) if required else True
+    if settings.is_production:
+        staging_ready = st.production_ok
+    blockers = [c["label"] for c in required if not c["ok"]]
+    return {
+        "staging_ready": staging_ready,
+        "checklist": checklist,
+        "storage_type": stype,
+        "blockers": blockers,
+        "public_media_base": public_media_base(),
+        "env_hint": {
+            "STORAGE_TYPE": "s3",
+            "AWS_S3_BUCKET": "<bucket>",
+            "MEDIA_CDN_BASE_URL": "https://cdn.example.com",
+        },
+    }

@@ -1297,6 +1297,12 @@ export interface SystemReadiness {
     s3_public_configured: boolean;
     production_ok: boolean;
     blockers: string[];
+    staging?: {
+      staging_ready: boolean;
+      blockers: string[];
+      checklist: { id: string; label: string; ok: boolean; required?: boolean }[];
+      public_media_base: string;
+    };
   };
   sso: {
     configured: boolean;
@@ -1329,6 +1335,21 @@ export interface SystemReadiness {
     digest_enabled?: boolean;
     digest_beat_hourly?: boolean;
     env: string;
+  };
+  go_live?: {
+    go_live_ok: boolean;
+    revenue_ready: boolean;
+    media_ready: boolean;
+    live_kpi_ready: boolean | null;
+    blockers: string[];
+  };
+  live_kpi?: {
+    available: boolean;
+    kpi_met: boolean;
+    video_outframe_ok: number;
+    image_outframe_ok: number;
+    targets: { video_outframe_min: number; image_outframe_min: number };
+    note?: string;
   };
 }
 
