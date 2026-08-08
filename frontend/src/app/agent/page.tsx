@@ -15,6 +15,47 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import { PayModal, type PayTarget } from "@/components/PayModal";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 
+function parseVariantAxes(axes: string[] | undefined) {
+  const list = axes || [];
+  const hook = list.find((a) => !a.startsWith("seed=") && !a.startsWith("cta=")) || "—";
+  const cta = list.find((a) => a.startsWith("cta="))?.slice(4) || "—";
+  const seed = list.find((a) => a.startsWith("seed="))?.slice(5)?.slice(0, 8) || "—";
+  return { hook, cta, seed };
+}
+
+function VariantCompareTable({ rows }: { rows: { id: string; label: string; axes?: string[]; credits?: number }[] }) {
+  if (rows.length < 2) return null;
+  return (
+    <div className="mt-2 overflow-x-auto rounded-lg border border-cosmic-border/40" data-testid="agent-variant-compare-table">
+      <table className="w-full text-[10px] text-left">
+        <thead className="bg-cosmic-subtle/50 text-text-tertiary">
+          <tr>
+            <th className="px-2 py-1.5 font-medium">变体</th>
+            <th className="px-2 py-1.5 font-medium">钩子</th>
+            <th className="px-2 py-1.5 font-medium">CTA</th>
+            <th className="px-2 py-1.5 font-medium">Seed</th>
+            <th className="px-2 py-1.5 font-medium">积分</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const { hook, cta, seed } = parseVariantAxes(r.axes);
+            return (
+              <tr key={r.id} className="border-t border-cosmic-border/30">
+                <td className="px-2 py-1.5 font-medium text-text-primary">{r.label}</td>
+                <td className="px-2 py-1.5 text-text-secondary max-w-[8rem] truncate" title={hook}>{hook}</td>
+                <td className="px-2 py-1.5 text-text-secondary max-w-[10rem] truncate" title={cta}>{cta}</td>
+                <td className="px-2 py-1.5 font-mono text-text-tertiary">{seed}</td>
+                <td className="px-2 py-1.5 text-amber-500/90">{r.credits ?? "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* Compact borderless dropdown chip for the agent composer toolbar. */
 function AgentChip({ icon: Icon, label, value, children }: {
   icon: React.ElementType; label: string; value?: string; children: React.ReactNode;
@@ -1178,6 +1219,14 @@ export default function AgentPage() {
                   </button>
                 ))}
               </div>
+              <VariantCompareTable
+                rows={variantCards.map((v) => ({
+                  id: v.variant_id,
+                  label: v.label || `变体 ${v.variant_id}`,
+                  axes: v.axes_applied,
+                  credits: v.plan?.total_credits,
+                }))}
+              />
             </div>
           )}
 
@@ -1215,6 +1264,16 @@ export default function AgentPage() {
                     );
                   })()}
                 </div>
+              )}
+              {!variantRunning && variantGallery.length > 1 && variantGallery.every((v) => v.done) && (
+                <VariantCompareTable
+                  rows={variantGallery.map((v) => ({
+                    id: v.variant_id,
+                    label: v.label || `变体 ${v.variant_id}`,
+                    axes: v.axes_applied,
+                    credits: v.plan?.total_credits,
+                  }))}
+                />
               )}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {variantGallery.map((v) => {

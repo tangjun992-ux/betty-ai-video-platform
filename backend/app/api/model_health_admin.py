@@ -112,7 +112,7 @@ async def list_promotable(_: User = Depends(require_admin)):
     active = [m for m in MODELS if m.status == "active"]
     return {
         "verified_active_count": len(active),
-        "active_target": 17,
+        "active_target": 18,
         "promotable": items,
         "verified_set_size": len(GATEWAY_VERIFIED_IDS),
         "last_smoke_ts": (report or {}).get("ts"),

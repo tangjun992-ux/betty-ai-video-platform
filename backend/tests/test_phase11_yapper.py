@@ -39,7 +39,7 @@ def test_readiness_includes_catalog_and_smoke():
     data = r.json()
     assert "catalog" in data
     assert data["catalog"]["active_count"] >= 15
-    assert data["catalog"]["active_target"] == 17
+    assert data["catalog"]["active_target"] == 18
     assert "smoke" in data
     assert "auto_promote_enabled" in data["smoke"]
 
@@ -57,7 +57,7 @@ def test_promotable_includes_smoke_hint():
     assert r.status_code == 200
     data = r.json()
     assert data["verified_active_count"] >= 15
-    assert data["active_target"] == 17
+    assert data["active_target"] == 18
     if data["promotable"]:
         assert "last_smoke" in data["promotable"][0] or "media_types" in data["promotable"][0]
 

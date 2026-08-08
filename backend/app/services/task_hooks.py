@@ -83,6 +83,7 @@ def persist_webhook_status(db_task_id: str, delivery: dict[str, Any]) -> None:
             "status_code": delivery.get("status_code"),
             "reason": delivery.get("reason"),
             "at": datetime.now(timezone.utc).isoformat(),
+            "alert_sent": bool(params.get("webhook", {}).get("alert_sent")),
         }
         session.execute(
             text("UPDATE tasks SET parameters = :p WHERE task_id = :tid"),
@@ -94,7 +95,21 @@ def persist_webhook_status(db_task_id: str, delivery: dict[str, Any]) -> None:
             from app.services.ops_alerts import alert_webhook_failure
 
             row_task = _load_task_row(db_task_id)
-            alert_webhook_failure(db_task_id, delivery, task=row_task)
+            wh = _parse_parameters((row_task or {}).get("parameters"))
+            prior = wh.get("webhook") if isinstance(wh.get("webhook"), dict) else {}
+            if prior.get("alert_sent"):
+                return
+            result = alert_webhook_failure(db_task_id, delivery, task=row_task)
+            if result.get("sent"):
+                wh2 = _parse_parameters((row_task or {}).get("parameters"))
+                wh2["webhook"] = {**(wh2.get("webhook") or {}), "alert_sent": True}
+                engine2 = _sync_engine()
+                with Session(engine2) as session2:
+                    session2.execute(
+                        text("UPDATE tasks SET parameters = :p WHERE task_id = :tid"),
+                        {"p": json.dumps(wh2, ensure_ascii=False), "tid": db_task_id},
+                    )
+                    session2.commit()
         except Exception as e:
             logger.debug("ops webhook alert skipped task=%s: %s", db_task_id, e)
 
@@ -132,7 +147,7 @@ def list_failed_webhooks(*, limit: int = 50, scan: int = 500) -> list[dict[str, 
     return out
 
 
-def retry_webhook_delivery(task_id: str) -> dict[str, Any]:
+def retry_webhook_delivery(task_id: str, *, force_alert: bool = False) -> dict[str, Any]:
     """Re-deliver webhook for a terminal task; persist outcome."""
     task = _load_task_row(task_id)
     if not task:
@@ -143,6 +158,13 @@ def retry_webhook_delivery(task_id: str) -> dict[str, Any]:
         return {"ok": False, "delivered": False, "reason": "task_not_terminal"}
 
     delivery = deliver_webhook(task_id, task=task)
+    if force_alert and not delivery.get("delivered"):
+        # Manual retry may re-alert ops even if alert_sent was set earlier.
+        try:
+            from app.services.ops_alerts import alert_webhook_failure
+            alert_webhook_failure(task_id, delivery, task=task)
+        except Exception:
+            pass
     try:
         persist_webhook_status(task_id, delivery)
     except Exception as e:
