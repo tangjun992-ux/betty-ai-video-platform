@@ -167,3 +167,42 @@ def stripe_checkout_readiness() -> dict:
         "checkout_ready": True,
         "note": "开发模式：/billing/checkout 直发积分（无 Stripe key）",
     }
+
+
+def stripe_staging_readiness() -> dict:
+    """Actionable checklist for Stripe test-mode / staging go-live."""
+    st = stripe_status()
+    bs = stripe_bootstrap_status()
+    ck = stripe_checkout_readiness()
+    success_url = (getattr(settings, "STRIPE_SUCCESS_URL", None) or os.getenv("STRIPE_SUCCESS_URL", "") or "").strip()
+    cancel_url = (getattr(settings, "STRIPE_CANCEL_URL", None) or os.getenv("STRIPE_CANCEL_URL", "") or "").strip()
+    checklist = [
+        {"id": "api_key", "label": "STRIPE_API_KEY", "ok": st.api_key_configured, "required": True},
+        {"id": "webhook_secret", "label": "STRIPE_WEBHOOK_SECRET", "ok": st.webhook_secret_configured, "required": True},
+        {
+            "id": "subscription_prices",
+            "label": "至少一个 STRIPE_PRICE_*_MONTHLY",
+            "ok": bs["subscription_prices_ready"],
+            "required": True,
+        },
+        {"id": "success_url", "label": "STRIPE_SUCCESS_URL → /billing/success", "ok": bool(success_url), "required": True},
+        {"id": "cancel_url", "label": "STRIPE_CANCEL_URL", "ok": bool(cancel_url), "required": True},
+        {
+            "id": "checkout_stripe_mode",
+            "label": "Checkout mode=stripe",
+            "ok": ck.get("mode") == "stripe",
+            "required": False,
+        },
+    ]
+    blockers = [c["label"] for c in checklist if c.get("required") and not c["ok"]]
+    staging_ready = st.api_key_configured and st.webhook_secret_configured and bs["subscription_prices_ready"] and bool(success_url) and bool(cancel_url)
+    return {
+        "staging_ready": staging_ready,
+        "checklist": checklist,
+        "checkout": ck,
+        "bootstrap": bs,
+        "blockers": blockers,
+        "webhook_events": ["checkout.session.completed", "invoice.paid"],
+        "success_page_path": "/billing/success?session_id={CHECKOUT_SESSION_ID}",
+        "sync_fallback": "POST /billing/stripe/sync?session_id=…",
+    }

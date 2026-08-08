@@ -197,11 +197,12 @@ async def readiness():
     from app.services.model_smoke import get_last_smoke
     from app.config import settings
 
-    from app.services.stripe_ready import stripe_bootstrap_status, stripe_checkout_readiness
+    from app.services.stripe_ready import stripe_bootstrap_status, stripe_checkout_readiness, stripe_staging_readiness
 
     stripe = stripe_status().public_dict()
     stripe["bootstrap"] = stripe_bootstrap_status()
     stripe["checkout"] = stripe_checkout_readiness()
+    stripe["staging"] = stripe_staging_readiness()
     storage = storage_status().public_dict()
     sso = oidc_status(discover=False).public_dict()
     catalog = catalog_integrity()
