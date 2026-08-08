@@ -189,6 +189,12 @@ async def billing_staging_readiness():
     return stripe_staging_readiness()
 
 
+@router.get("/stripe-webhook-check", summary="Stripe Webhook Dashboard 配置校验")
+async def billing_stripe_webhook_check():
+    from app.services.stripe_ready import stripe_webhook_staging_check
+    return stripe_webhook_staging_check()
+
+
 @router.get("/summary", summary="账户余额与消费概览")
 async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Depends(resolve_user_id)):
     bal = await _get_balance(db, user_id)

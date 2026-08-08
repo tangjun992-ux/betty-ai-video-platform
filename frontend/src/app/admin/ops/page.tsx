@@ -192,6 +192,11 @@ export default function AdminOpsPage() {
               <p className="text-[11px] text-text-tertiary">
                 Webhook: {readiness.stripe.staging.webhook_events.join(" · ")} · 成功页 {readiness.stripe.staging.success_page_path}
               </p>
+              {readiness.stripe.staging.webhook_endpoint && (
+                <p className="text-[11px] text-text-tertiary font-mono truncate mt-1">
+                  endpoint: {readiness.stripe.staging.webhook_endpoint}
+                </p>
+              )}
             </section>
           )}
 

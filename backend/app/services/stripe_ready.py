@@ -34,6 +34,13 @@ _SUBSCRIPTION_MONTHLY_ENVS = (
     "STRIPE_PRICE_PRO_MONTHLY",  # legacy alias of Max
 )
 
+REQUIRED_STRIPE_WEBHOOK_EVENTS = (
+    "checkout.session.completed",
+    "invoice.paid",
+)
+
+STRIPE_WEBHOOK_PATH = "/api/v1/billing/stripe/webhook"
+
 
 @dataclass
 class StripeStatus:
@@ -169,6 +176,38 @@ def stripe_checkout_readiness() -> dict:
     }
 
 
+def stripe_webhook_staging_check() -> dict:
+    """Validate Stripe Dashboard webhook setup expectations (no Stripe API calls)."""
+    secret = (settings.STRIPE_WEBHOOK_SECRET or os.getenv("STRIPE_WEBHOOK_SECRET", "") or "").strip()
+    api = (settings.STRIPE_API_KEY or os.getenv("STRIPE_API_KEY", "") or "").strip()
+    configured = bool(secret)
+    format_ok = secret.startswith("whsec_") if configured else False
+    test_key = api.startswith("sk_test_") if api else False
+    live_key = api.startswith("sk_live_") if api else False
+    setup_ok = configured and format_ok
+    blockers: list[str] = []
+    if not configured:
+        blockers.append("STRIPE_WEBHOOK_SECRET missing")
+    elif not format_ok:
+        blockers.append("STRIPE_WEBHOOK_SECRET should start with whsec_")
+    return {
+        "endpoint_path": STRIPE_WEBHOOK_PATH,
+        "required_events": list(REQUIRED_STRIPE_WEBHOOK_EVENTS),
+        "webhook_secret_configured": configured,
+        "webhook_secret_format_ok": format_ok,
+        "test_mode_api_key": test_key,
+        "live_mode_api_key": live_key,
+        "setup_ok": setup_ok,
+        "blockers": blockers,
+        "dashboard_steps": [
+            "Stripe Dashboard → Developers → Webhooks → Add endpoint",
+            f"URL: https://<your-domain>{STRIPE_WEBHOOK_PATH}",
+            f"Events: {', '.join(REQUIRED_STRIPE_WEBHOOK_EVENTS)}",
+            "Copy signing secret → STRIPE_WEBHOOK_SECRET",
+        ],
+    }
+
+
 def stripe_staging_readiness() -> dict:
     """Actionable checklist for Stripe test-mode / staging go-live."""
     st = stripe_status()
@@ -195,14 +234,25 @@ def stripe_staging_readiness() -> dict:
         },
     ]
     blockers = [c["label"] for c in checklist if c.get("required") and not c["ok"]]
-    staging_ready = st.api_key_configured and st.webhook_secret_configured and bs["subscription_prices_ready"] and bool(success_url) and bool(cancel_url)
+    wh = stripe_webhook_staging_check()
+    blockers.extend(wh.get("blockers") or [])
+    staging_ready = (
+        st.api_key_configured
+        and st.webhook_secret_configured
+        and bs["subscription_prices_ready"]
+        and bool(success_url)
+        and bool(cancel_url)
+        and wh.get("setup_ok", False)
+    )
     return {
         "staging_ready": staging_ready,
         "checklist": checklist,
         "checkout": ck,
         "bootstrap": bs,
         "blockers": blockers,
-        "webhook_events": ["checkout.session.completed", "invoice.paid"],
+        "webhook_config": wh,
+        "webhook_events": list(REQUIRED_STRIPE_WEBHOOK_EVENTS),
+        "webhook_endpoint": STRIPE_WEBHOOK_PATH,
         "success_page_path": "/billing/success?session_id={CHECKOUT_SESSION_ID}",
         "sync_fallback": "POST /billing/stripe/sync?session_id=…",
     }
