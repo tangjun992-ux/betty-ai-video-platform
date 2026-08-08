@@ -183,6 +183,12 @@ async def billing_stripe_status():
     return stripe_status().public_dict()
 
 
+@router.get("/staging-readiness", summary="Stripe staging 收款验收清单")
+async def billing_staging_readiness():
+    from app.services.stripe_ready import stripe_staging_readiness
+    return stripe_staging_readiness()
+
+
 @router.get("/summary", summary="账户余额与消费概览")
 async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Depends(resolve_user_id)):
     bal = await _get_balance(db, user_id)

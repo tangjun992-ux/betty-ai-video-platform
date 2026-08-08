@@ -1282,6 +1282,14 @@ export interface SystemReadiness {
       note?: string;
       blockers?: string[];
     };
+    staging?: {
+      staging_ready: boolean;
+      blockers: string[];
+      webhook_events: string[];
+      success_page_path: string;
+      sync_fallback: string;
+      checklist: { id: string; label: string; ok: boolean; required?: boolean }[];
+    };
   };
   storage: {
     storage_type: string;
