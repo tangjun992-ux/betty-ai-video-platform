@@ -435,7 +435,7 @@ def merge_smoke_reports(*reports: dict) -> dict:
     return merged
 
 
-def run_live_video_sample(models: list[str] | tuple[str, ...] | None = None) -> dict:
+def run_live_video_sample(models: list[str] | tuple[str, ...] | None = None, *, persist: bool = True) -> dict:
     """Shared paid live-video sample (scripts + weekly Beat). Only live_video → outframe_ok."""
     from app.api.models_info import MODELS
     from app.services.model_health import model_health, quarantine_ttl_for_reason
@@ -485,11 +485,12 @@ def run_live_video_sample(models: list[str] | tuple[str, ...] | None = None) -> 
             "MODEL_HEALTH_ALERT live_video_sample outframe_ok=0 probed=%s failed=%s",
             report["probed"], report["failed"],
         )
-    save_last_smoke(report)
+    if persist:
+        save_last_smoke(report)
     return report
 
 
-def run_live_image_sample(models: list[str] | tuple[str, ...] | None = None) -> dict:
+def run_live_image_sample(models: list[str] | tuple[str, ...] | None = None, *, persist: bool = True) -> dict:
     """Paid live-image sample for active image SKUs — feeds Auto router honesty."""
     from app.api.models_info import MODELS
     from app.services.model_health import model_health, quarantine_ttl_for_reason
@@ -532,5 +533,18 @@ def run_live_image_sample(models: list[str] | tuple[str, ...] | None = None) -> 
             report["quarantined"].append(mid)
 
     report["ts"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    save_last_smoke(report)
+    if persist:
+        save_last_smoke(report)
     return report
+
+
+def run_live_kpi_smoke() -> dict:
+    """Run image + video live samples and persist merged report for go-live KPI."""
+    img = run_live_image_sample(persist=False)
+    vid = run_live_video_sample(persist=False)
+    merged = merge_smoke_reports(img, vid)
+    merged["mode"] = "live_kpi_combined"
+    merged["image_sample"] = {"outframe_ok": img.get("outframe_ok"), "failed": img.get("failed")}
+    merged["video_sample"] = {"outframe_ok": vid.get("outframe_ok"), "failed": vid.get("failed")}
+    save_last_smoke(merged)
+    return merged

@@ -115,3 +115,50 @@ def oidc_status(*, discover: bool = False) -> OidcStatus:
         production_ok=not blockers,
         blockers=blockers,
     )
+
+
+def oidc_staging_readiness(*, discover: bool = False) -> dict:
+    """Actionable OIDC/SSO checklist for enterprise staging."""
+    from app.config import settings
+
+    st = oidc_status(discover=discover)
+    checklist = [
+        {"id": "issuer", "label": "OIDC_ISSUER", "ok": bool(st.issuer), "required": st.required_in_production},
+        {"id": "client_id", "label": "OIDC_CLIENT_ID", "ok": st.client_id_set, "required": st.required_in_production},
+        {
+            "id": "client_secret",
+            "label": "OIDC_CLIENT_SECRET",
+            "ok": bool(oidc_env().get("client_secret")),
+            "required": st.required_in_production,
+        },
+        {"id": "redirect_uri", "label": "OIDC_REDIRECT_URI", "ok": bool(st.redirect_uri), "required": st.required_in_production},
+        {
+            "id": "discovery",
+            "label": "IdP discovery（/.well-known）",
+            "ok": st.discovery_ok if discover else st.configured,
+            "required": False,
+        },
+    ]
+    required = [c for c in checklist if c.get("required")]
+    staging_ready = all(c["ok"] for c in required) if required else True
+    if settings.is_production and st.required_in_production:
+        staging_ready = st.configured and st.production_ok
+    elif not st.required_in_production:
+        staging_ready = True if not st.configured else st.configured
+    blockers = [c["label"] for c in required if not c["ok"]]
+    return {
+        "staging_ready": staging_ready,
+        "required_in_production": st.required_in_production,
+        "configured": st.configured,
+        "checklist": checklist,
+        "blockers": blockers,
+        "issuer": st.issuer,
+        "redirect_uri": st.redirect_uri,
+        "callback_path": "/auth/callback",
+        "env_hint": {
+            "OIDC_ISSUER": "https://idp.example.com",
+            "OIDC_CLIENT_ID": "<client_id>",
+            "OIDC_CLIENT_SECRET": "<secret>",
+            "OIDC_REDIRECT_URI": "https://app.example.com/auth/callback",
+        },
+    }

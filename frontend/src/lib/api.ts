@@ -1308,6 +1308,14 @@ export interface SystemReadiness {
     configured: boolean;
     production_ok: boolean;
     blockers: string[];
+    staging?: {
+      staging_ready: boolean;
+      required_in_production: boolean;
+      configured: boolean;
+      blockers: string[];
+      checklist: { id: string; label: string; ok: boolean; required?: boolean }[];
+      callback_path?: string;
+    };
   };
   catalog: {
     active_count: number;
@@ -1341,6 +1349,7 @@ export interface SystemReadiness {
     revenue_ready: boolean;
     media_ready: boolean;
     live_kpi_ready: boolean | null;
+    sso_ready?: boolean;
     blockers: string[];
   };
   live_kpi?: {
@@ -1402,6 +1411,18 @@ export async function getLastModelSmoke(token: string) {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Last smoke: ${res.status}`);
+  return res.json();
+}
+
+export async function triggerLiveSmoke(token: string, kind: "live-image" | "live-video" | "live-kpi") {
+  const res = await fetch(`${API_BASE}/admin/model-health/smoke/${kind}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `Live smoke failed: ${res.status}`);
+  }
   return res.json();
 }
 
