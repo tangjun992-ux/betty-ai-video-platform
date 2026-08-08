@@ -25,6 +25,26 @@ class PromoteRequest(BaseModel):
     note: str | None = Field(None, description="Audit note for promotion")
 
 
+@router.post("/webhook-failures/digest/send", summary="手动发送 Webhook 失败 digest 到 Ops")
+async def send_webhook_failures_digest(
+    user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.ops_alerts import send_webhook_failure_digest
+    from app.services.audit import record_audit
+
+    result = send_webhook_failure_digest(limit=50)
+    await record_audit(
+        db,
+        action="admin.webhook_digest_send",
+        actor_user_id=user.id,
+        target_type="webhook",
+        meta={"sent": result.get("sent"), "total": (result.get("digest") or {}).get("total")},
+    )
+    await db.commit()
+    return result
+
+
 @router.get("/webhook-failures/digest", summary="Webhook 投递失败聚合摘要")
 async def get_webhook_failures_digest(
     limit: int = 50,
@@ -122,7 +142,7 @@ async def list_promotable(_: User = Depends(require_admin)):
     active = [m for m in MODELS if m.status == "active"]
     return {
         "verified_active_count": len(active),
-        "active_target": 19,
+        "active_target": 20,
         "promotable": items,
         "verified_set_size": len(GATEWAY_VERIFIED_IDS),
         "last_smoke_ts": (report or {}).get("ts"),

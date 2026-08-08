@@ -140,6 +140,11 @@ app.conf.update(
             "schedule": 604800.0,
             "options": {"queue": "pipeline_q"},
         },
+        "ops-webhook-failure-digest-hourly": {
+            "task": "app.tasks.health_tasks.webhook_failure_digest_hourly",
+            "schedule": 3600.0,
+            "options": {"queue": "pipeline_q"},
+        },
     } if os.getenv("VIS_COLLECTION_AUTO", "true").lower() == "true" else {
         "model-health-smoke-daily": {
             "task": "app.tasks.health_tasks.smoke_active_models",
@@ -154,6 +159,11 @@ app.conf.update(
         "model-health-live-image-weekly": {
             "task": "app.tasks.health_tasks.smoke_live_image_weekly",
             "schedule": 604800.0,
+            "options": {"queue": "pipeline_q"},
+        },
+        "ops-webhook-failure-digest-hourly": {
+            "task": "app.tasks.health_tasks.webhook_failure_digest_hourly",
+            "schedule": 3600.0,
             "options": {"queue": "pipeline_q"},
         },
     },

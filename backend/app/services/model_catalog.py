@@ -34,10 +34,13 @@ GATEWAY_VERIFIED_IDS: frozenset[str] = frozenset({
     "veo-3",
     # Phase 17 — Kling 2.6 verified gateway SKU
     "kling-2.6",
+    # Phase 19 — Imagen 4 Ultra verified gateway SKU
+    "imagen-4-ultra",
 })
 
 # Mapped in kie_adapter with concrete SKU — eligible for admin promote, stay beta until promoted.
 GATEWAY_MAPPED_BETA_IDS: frozenset[str] = frozenset({
+    "imagen-4-ultra",
     "imagen-4-fast",
     "veo-3.1",
     "veo-3.1-fast",
