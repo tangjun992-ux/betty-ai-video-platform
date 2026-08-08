@@ -1468,6 +1468,41 @@ export async function stripeWebhookDeliverTest(): Promise<StripeWebhookDeliverTe
   return res.json();
 }
 
+export interface StagingRunbookStep {
+  id: string;
+  title: string;
+  status: "done" | "pending" | "skipped";
+  commands: string[];
+  env_keys?: string[];
+}
+
+export interface StagingRunbook {
+  acceptance_ok: boolean;
+  score_pct: number;
+  steps_done: number;
+  steps_pending: number;
+  steps_total: number;
+  steps: StagingRunbookStep[];
+  stripe_cli: {
+    listen_command: string;
+    forward_url: string;
+    whsec_hint: string;
+  };
+  blockers: string[];
+}
+
+export async function getStagingRunbook(host = "localhost:8000"): Promise<StagingRunbook> {
+  const res = await fetch(`${API_BASE}/system/staging-runbook?host=${encodeURIComponent(host)}`);
+  if (!res.ok) throw new Error(`Staging runbook: ${res.status}`);
+  return res.json();
+}
+
+export async function getStripeCliGuide(host = "localhost:8000"): Promise<{ listen_command: string; forward_url: string }> {
+  const res = await fetch(`${API_BASE}/billing/stripe-cli-guide?host=${encodeURIComponent(host)}`);
+  if (!res.ok) throw new Error(`Stripe CLI guide: ${res.status}`);
+  return res.json();
+}
+
 export async function getPromotableModels(token: string): Promise<PromotableResponse> {
   const res = await fetch(`${API_BASE}/admin/model-health/promotable`, {
     headers: { Authorization: `Bearer ${token}` },

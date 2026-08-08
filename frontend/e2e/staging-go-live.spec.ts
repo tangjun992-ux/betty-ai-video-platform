@@ -65,4 +65,18 @@ test.describe("Staging Go-Live 验收 API", () => {
       expect(typeof dBody.delivery_ok).toBe("boolean");
     }
   });
+
+  test("staging-runbook 与 stripe-cli-guide", async ({ request }) => {
+    const [rb, cli] = await Promise.all([
+      request.get(`${API_BASE}/system/staging-runbook`),
+      request.get(`${API_BASE}/billing/stripe-cli-guide`),
+    ]);
+    expect(rb.ok()).toBeTruthy();
+    expect(cli.ok()).toBeTruthy();
+    const rbBody = await rb.json();
+    const cliBody = await cli.json();
+    expect(rbBody.steps?.length).toBeGreaterThanOrEqual(6);
+    expect(cliBody.listen_command).toContain("stripe listen");
+    expect(cliBody.forward_url).toContain("/billing/stripe/webhook");
+  });
 });

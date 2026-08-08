@@ -168,6 +168,8 @@ def staging_go_live_report(*, last_smoke: dict | None = None) -> dict:
             "stripe_bootstrap": "python scripts/bootstrap_stripe_prices.py --validate",
             "live_kpi_admin": "POST /admin/model-health/smoke/live-kpi",
             "webhook_deliver_test": "POST /billing/stripe-webhook-deliver-test",
+            "staging_runbook": "python scripts/staging_runbook.py",
+            "stripe_cli_listen": "stripe listen --forward-to localhost:8000/api/v1/billing/stripe/webhook",
         },
     }
 
@@ -238,4 +240,135 @@ def staging_acceptance_scorecard(*, last_smoke: dict | None = None, strict: bool
             "staging_ready": stripe.get("staging_ready"),
         },
         "env": report.get("env"),
+    }
+
+
+def staging_runbook(*, last_smoke: dict | None = None, host: str = "localhost:8000") -> dict:
+    """Ordered staging go-live runbook with step status and copy-paste commands."""
+    from app.services.stripe_ready import (
+        stripe_bootstrap_status,
+        stripe_cli_webhook_guide,
+        stripe_staging_readiness,
+        stripe_webhook_signature_self_test,
+    )
+    from app.services.storage_ready import storage_staging_readiness
+    from app.services.oidc_ready import oidc_staging_readiness
+
+    scorecard = staging_acceptance_scorecard(last_smoke=last_smoke, strict=False)
+    stripe = stripe_staging_readiness()
+    storage = storage_staging_readiness()
+    bootstrap = stripe_bootstrap_status()
+    cli = stripe_cli_webhook_guide(host=host)
+    sig = stripe_webhook_signature_self_test()
+    oidc = oidc_staging_readiness(discover=False)
+    live = scorecard.get("live_kpi_ready")
+
+    def step_status(ok: bool | None, *, optional: bool = False) -> str:
+        if ok is True:
+            return "done"
+        if ok is False:
+            return "pending"
+        return "skipped" if optional else "pending"
+
+    steps = [
+        {
+            "id": "stripe_bootstrap",
+            "title": "Stripe Price Bootstrap",
+            "status": step_status(bootstrap.get("subscription_prices_ready")),
+            "commands": [
+                "python scripts/bootstrap_stripe_prices.py --dry-run --json-only",
+                "STRIPE_API_KEY=sk_test_... python scripts/bootstrap_stripe_prices.py --write-env .env",
+                "python scripts/bootstrap_stripe_prices.py --validate --json-only",
+            ],
+            "env_keys": list(bootstrap.get("price_envs", {}).keys())[:4] + ["STRIPE_API_KEY"],
+        },
+        {
+            "id": "stripe_env",
+            "title": "Stripe 收款环境变量",
+            "status": step_status(stripe.get("staging_ready")),
+            "commands": [
+                "export STRIPE_API_KEY=sk_test_...",
+                "export STRIPE_WEBHOOK_SECRET=whsec_...",
+                "export STRIPE_SUCCESS_URL=http://localhost:3000/billing/success",
+                "export STRIPE_CANCEL_URL=http://localhost:3000/pricing",
+            ],
+            "env_keys": ["STRIPE_API_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_SUCCESS_URL", "STRIPE_CANCEL_URL"],
+        },
+        {
+            "id": "stripe_cli_webhook",
+            "title": "Stripe CLI 本地 Webhook 转发",
+            "status": step_status(sig.get("self_test_ok") if stripe.get("webhook_config", {}).get("setup_ok") else False, optional=True),
+            "commands": [cli["listen_command"], cli["whsec_hint"]],
+            "env_keys": ["STRIPE_WEBHOOK_SECRET"],
+            "notes": cli.get("local_dev_steps") or [],
+        },
+        {
+            "id": "webhook_verify",
+            "title": "Webhook 签名 + 投递自测",
+            "status": step_status(sig.get("self_test_ok")),
+            "commands": [
+                "curl http://localhost:8000/api/v1/billing/stripe-webhook-self-test",
+                "curl -X POST http://localhost:8000/api/v1/billing/stripe-webhook-deliver-test",
+            ],
+            "env_keys": ["STRIPE_WEBHOOK_SECRET"],
+        },
+        {
+            "id": "cdn_storage",
+            "title": "CDN / S3 媒体分发",
+            "status": step_status(storage.get("staging_ready"), optional=not storage.get("blockers")),
+            "commands": [
+                "export STORAGE_TYPE=s3",
+                "export AWS_ACCESS_KEY_ID=... AWS_S3_BUCKET=...",
+                "export MEDIA_CDN_BASE_URL=https://cdn.example.com",
+            ],
+            "env_keys": ["STORAGE_TYPE", "AWS_S3_BUCKET", "MEDIA_CDN_BASE_URL"],
+        },
+        {
+            "id": "oidc_sso",
+            "title": "OIDC / SSO（企业可选）",
+            "status": step_status(oidc.get("staging_ready") if oidc.get("configured") or oidc.get("required_in_production") else None, optional=not oidc.get("required_in_production")),
+            "commands": [
+                "export OIDC_ISSUER=https://idp.example.com",
+                "curl http://localhost:8000/api/v1/auth/oidc/discovery-check",
+            ],
+            "env_keys": ["OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URI"],
+        },
+        {
+            "id": "live_kpi",
+            "title": "Live KPI 出片抽样",
+            "status": step_status(live if live is not None else None, optional=True),
+            "commands": [
+                "export MODEL_SMOKE_LIVE=1  # 或 MODEL_SMOKE_LIVE_VIDEO=1",
+                "python scripts/staging_go_live_check.py --live",
+                "POST /admin/model-health/smoke/live-kpi",
+            ],
+            "env_keys": ["MODEL_SMOKE_LIVE", "MODEL_SMOKE_LIVE_VIDEO"],
+        },
+        {
+            "id": "final_acceptance",
+            "title": "最终验收",
+            "status": step_status(scorecard.get("acceptance_ok")),
+            "commands": [
+                "python scripts/staging_go_live_check.py --strict --require-webhook",
+                "python scripts/staging_go_live_check.py --json-only",
+                "curl http://localhost:8000/api/v1/system/staging-acceptance?strict=true",
+            ],
+            "env_keys": [],
+        },
+    ]
+    done = sum(1 for s in steps if s["status"] == "done")
+    pending = sum(1 for s in steps if s["status"] == "pending")
+
+    return {
+        "generated_at": scorecard.get("generated_at"),
+        "env": scorecard.get("env"),
+        "acceptance_ok": scorecard.get("acceptance_ok"),
+        "score_pct": scorecard.get("score_pct"),
+        "steps_done": done,
+        "steps_pending": pending,
+        "steps_total": len(steps),
+        "steps": steps,
+        "stripe_cli": cli,
+        "blockers": scorecard.get("blockers") or [],
+        "next_steps": scorecard.get("next_steps") or [],
     }

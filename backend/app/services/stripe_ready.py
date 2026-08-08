@@ -361,6 +361,37 @@ def stripe_webhook_staging_check() -> dict:
     }
 
 
+def stripe_cli_webhook_guide(*, host: str = "localhost:8000", use_https: bool = False) -> dict:
+    """Stripe CLI local webhook forwarding guide for staging/dev."""
+    scheme = "https" if use_https else "http"
+    forward_url = f"{scheme}://{host.rstrip('/')}/api/v1/billing/stripe/webhook"
+    events = ", ".join(REQUIRED_STRIPE_WEBHOOK_EVENTS)
+    listen_cmd = (
+        f"stripe listen --forward-to {forward_url} "
+        f"--events {events}"
+    )
+    trigger_checkout = (
+        "stripe trigger checkout.session.completed "
+        "(requires test checkout session metadata.order_no)"
+    )
+    return {
+        "forward_url": forward_url,
+        "required_events": list(REQUIRED_STRIPE_WEBHOOK_EVENTS),
+        "listen_command": listen_cmd,
+        "trigger_checkout_hint": trigger_checkout,
+        "whsec_hint": "Copy whsec_... from `stripe listen` output → STRIPE_WEBHOOK_SECRET",
+        "local_dev_steps": [
+            "Install Stripe CLI: https://stripe.com/docs/stripe-cli",
+            "stripe login",
+            listen_cmd,
+            "Export STRIPE_WEBHOOK_SECRET from CLI output",
+            "POST /billing/stripe-webhook-deliver-test to verify delivery",
+            "python scripts/staging_go_live_check.py --require-webhook --soft",
+        ],
+        "dashboard_alternative": stripe_webhook_staging_check().get("dashboard_steps") or [],
+    }
+
+
 def stripe_staging_readiness() -> dict:
     """Actionable checklist for Stripe test-mode / staging go-live."""
     st = stripe_status()

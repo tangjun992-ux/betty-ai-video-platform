@@ -17,6 +17,8 @@ import {
   stripeWebhookSelfTest,
   stripeWebhookDeliverTest,
   getStagingAcceptance,
+  getStagingRunbook,
+  getStripeCliGuide,
   promoteModel,
   triggerLiveSmoke,
   exportGoLiveReport,
@@ -27,6 +29,7 @@ import {
   type OidcDiscoveryProbe,
   type StripeWebhookSelfTest,
   type StagingAcceptanceScorecard,
+  type StagingRunbook,
   type WebhookFailure,
   type WebhookFailureDigest,
 } from "@/lib/api";
@@ -46,6 +49,7 @@ export default function AdminOpsPage() {
   const [oidcProbe, setOidcProbe] = useState<OidcDiscoveryProbe | null>(null);
   const [webhookSelfTest, setWebhookSelfTest] = useState<StripeWebhookSelfTest | null>(null);
   const [acceptance, setAcceptance] = useState<StagingAcceptanceScorecard | null>(null);
+  const [runbook, setRunbook] = useState<StagingRunbook | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -371,6 +375,25 @@ export default function AdminOpsPage() {
                 <div className="flex flex-wrap gap-2 mb-3">
                   <button
                     type="button"
+                    disabled={smokeBusy === "runbook"}
+                    onClick={async () => {
+                      setSmokeBusy("runbook");
+                      setError("");
+                      try {
+                        const rb = await getStagingRunbook();
+                        setRunbook(rb);
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : "Runbook 加载失败");
+                      } finally {
+                        setSmokeBusy(null);
+                      }
+                    }}
+                    className="px-2 py-1 rounded text-xs border border-cosmic-border hover:bg-cosmic-subtle disabled:opacity-50"
+                  >
+                    {smokeBusy === "runbook" ? "加载中…" : "加载 Runbook"}
+                  </button>
+                  <button
+                    type="button"
                     disabled={smokeBusy === "acceptance"}
                     onClick={async () => {
                       setSmokeBusy("acceptance");
@@ -463,6 +486,23 @@ export default function AdminOpsPage() {
                     <span className="text-amber-600 ml-1">
                       ({acceptance.checks.filter((c) => c.status === "fail").map((c) => c.label).join("、")})
                     </span>
+                  )}
+                </div>
+              )}
+              {runbook && (
+                <div className="text-[11px] text-text-tertiary mb-2 border-t border-cosmic-border/50 pt-2 mt-2">
+                  <p className="font-medium text-text-secondary mb-1">Runbook {runbook.steps_done}/{runbook.steps_total} 完成</p>
+                  <ul className="space-y-0.5 max-h-32 overflow-y-auto">
+                    {runbook.steps.map((s) => (
+                      <li key={s.id} className={cn(s.status === "done" ? "text-success" : s.status === "pending" ? "text-amber-600" : "text-text-tertiary")}>
+                        {s.status === "done" ? "✓" : s.status === "pending" ? "○" : "—"} {s.title}
+                      </li>
+                    ))}
+                  </ul>
+                  {runbook.stripe_cli?.listen_command && (
+                    <p className="font-mono text-[10px] mt-1 truncate" title={runbook.stripe_cli.listen_command}>
+                      CLI: {runbook.stripe_cli.listen_command}
+                    </p>
                   )}
                 </div>
               )}

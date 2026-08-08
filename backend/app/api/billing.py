@@ -208,6 +208,13 @@ async def billing_stripe_webhook_deliver_test():
     return await stripe_webhook_delivery_test()
 
 
+@router.get("/stripe-cli-guide", summary="Stripe CLI 本地 Webhook 转发指南")
+async def billing_stripe_cli_guide(host: str = "localhost:8000"):
+    from app.services.stripe_ready import stripe_cli_webhook_guide
+
+    return stripe_cli_webhook_guide(host=host)
+
+
 @router.get("/summary", summary="账户余额与消费概览")
 async def billing_summary(db: AsyncSession = Depends(get_db), user_id: int = Depends(resolve_user_id)):
     bal = await _get_balance(db, user_id)
