@@ -15,6 +15,7 @@ GATEWAY_VERIFIED_IDS: frozenset[str] = frozenset({
     "nano-banana",
     "nano-banana-pro",
     "imagen-4",
+    "imagen-4-fast",
     "seedance-2.0",
     "seedance-2.0-fast",
     "kling-2.5-turbo",
@@ -37,6 +38,7 @@ GATEWAY_VERIFIED_IDS: frozenset[str] = frozenset({
 
 # Mapped in kie_adapter with concrete SKU — eligible for admin promote, stay beta until promoted.
 GATEWAY_MAPPED_BETA_IDS: frozenset[str] = frozenset({
+    "imagen-4-fast",
     "veo-3.1",
     "veo-3.1-fast",
     "veo-3",

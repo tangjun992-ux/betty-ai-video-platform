@@ -55,5 +55,6 @@ def ops_alerts_status() -> dict[str, Any]:
     return {
         "webhook_failure_alerts": configured,
         "alert_dedupe": True,
+        "digest_enabled": True,
         "env": "OPS_ALERT_WEBHOOK_URL or SLACK_WEBHOOK_URL",
     }

@@ -1317,6 +1317,8 @@ export interface SystemReadiness {
   };
   ops_alerts?: {
     webhook_failure_alerts: boolean;
+    alert_dedupe?: boolean;
+    digest_enabled?: boolean;
     env: string;
   };
 }
@@ -1381,7 +1383,17 @@ export interface WebhookFailure {
   status_code?: number;
   reason?: string;
   at?: string;
+  alert_sent?: boolean;
   updated_at?: string;
+}
+
+export interface WebhookFailureDigest {
+  total: number;
+  alert_sent_count: number;
+  pending_alert: number;
+  by_status: Record<string, number>;
+  top_reasons: { reason: string; count: number }[];
+  sample_task_ids: string[];
 }
 
 export async function getWebhookFailures(token: string, limit = 30): Promise<{ total: number; failures: WebhookFailure[] }> {
@@ -1389,6 +1401,14 @@ export async function getWebhookFailures(token: string, limit = 30): Promise<{ t
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Webhook failures: ${res.status}`);
+  return res.json();
+}
+
+export async function getWebhookFailuresDigest(token: string, limit = 50): Promise<WebhookFailureDigest> {
+  const res = await fetch(`${API_BASE}/admin/model-health/webhook-failures/digest?limit=${limit}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Webhook digest: ${res.status}`);
   return res.json();
 }
 
