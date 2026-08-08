@@ -47,6 +47,24 @@ jobs:
         run: |
           python scripts/bootstrap_stripe_prices.py --dry-run --json-only | python -c "import json,sys; d=json.load(sys.stdin); assert d['mode']=='dry-run'"
           python scripts/bootstrap_stripe_prices.py --validate --json-only
+      - name: Staging go-live report (CI structure gate)
+        env:
+          ENV: test
+        run: |
+          python scripts/staging_go_live_check.py --json-only | python -c "
+          import json,sys
+          d=json.load(sys.stdin)
+          assert 'go_live_ok' in d and 'next_steps' in d
+          assert 'stripe' in d and 'storage' in d
+          wh=d.get('stripe',{}).get('webhook_config') or {}
+          assert wh.get('endpoint_path')=='/api/v1/billing/stripe/webhook'
+          print('staging report structure ok')
+          "
+      - name: Phase parity tests (17–24)
+        env:
+          ENV: test
+          DATABASE_URL: "sqlite+aiosqlite:////tmp/ci_phase.db"
+        run: pytest tests/test_phase17_yapper.py tests/test_phase18_yapper.py tests/test_phase19_yapper.py tests/test_phase20_yapper.py tests/test_phase21_yapper.py tests/test_phase22_yapper.py tests/test_phase23_yapper.py tests/test_phase24_yapper.py -q --tb=line
 
   frontend:
     name: Frontend · lint + build

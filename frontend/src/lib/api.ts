@@ -1286,8 +1286,14 @@ export interface SystemReadiness {
       staging_ready: boolean;
       blockers: string[];
       webhook_events: string[];
+      webhook_endpoint?: string;
       success_page_path: string;
       sync_fallback: string;
+      webhook_config?: {
+        endpoint_path: string;
+        setup_ok: boolean;
+        dashboard_steps: string[];
+      };
       checklist: { id: string; label: string; ok: boolean; required?: boolean }[];
     };
   };
