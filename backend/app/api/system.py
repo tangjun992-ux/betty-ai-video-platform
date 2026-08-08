@@ -213,6 +213,13 @@ async def staging_runbook_endpoint(host: str = "localhost:8000"):
     return staging_runbook(last_smoke=get_last_smoke(), host=host)
 
 
+@router.get("/staging-env-audit", summary="Staging 环境变量缺口审计")
+async def staging_env_audit_endpoint():
+    from app.services.staging_env import staging_env_audit
+
+    return staging_env_audit()
+
+
 @router.get("/catalog", summary="模型目录诚信报告")
 async def catalog_report():
     from app.services.model_catalog import catalog_integrity

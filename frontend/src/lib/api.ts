@@ -1488,6 +1488,11 @@ export interface StagingRunbook {
     forward_url: string;
     whsec_hint: string;
   };
+  env_audit?: {
+    missing_required: string[];
+    staging_ready_without_live: boolean;
+    demo_export_snippet: string;
+  };
   blockers: string[];
 }
 

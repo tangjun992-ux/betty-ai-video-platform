@@ -96,11 +96,15 @@ jobs:
         env:
           ENV: development
         run: python scripts/staging_runbook.py --json-only | python -c "import json,sys; d=json.load(sys.stdin); assert d['steps_total']>=6; assert 'stripe_cli' in d; print('runbook ok')"
-      - name: Phase parity tests (17–28)
+      - name: Staging env audit gate
+        env:
+          ENV: development
+        run: python scripts/staging_env_audit.py --json-only | python -c "import json,sys; d=json.load(sys.stdin); assert 'missing_required' in d; print('env audit ok')"
+      - name: Phase parity tests (17–29)
         env:
           ENV: test
           DATABASE_URL: "sqlite+aiosqlite:////tmp/ci_phase.db"
-        run: pytest tests/test_phase17_yapper.py tests/test_phase18_yapper.py tests/test_phase19_yapper.py tests/test_phase20_yapper.py tests/test_phase21_yapper.py tests/test_phase22_yapper.py tests/test_phase23_yapper.py tests/test_phase24_yapper.py tests/test_phase25_yapper.py tests/test_phase26_yapper.py tests/test_phase27_yapper.py tests/test_phase28_yapper.py -q --tb=line
+        run: pytest tests/test_phase17_yapper.py tests/test_phase18_yapper.py tests/test_phase19_yapper.py tests/test_phase20_yapper.py tests/test_phase21_yapper.py tests/test_phase22_yapper.py tests/test_phase23_yapper.py tests/test_phase24_yapper.py tests/test_phase25_yapper.py tests/test_phase26_yapper.py tests/test_phase27_yapper.py tests/test_phase28_yapper.py tests/test_phase29_yapper.py -q --tb=line
 
   frontend:
     name: Frontend · lint + build
