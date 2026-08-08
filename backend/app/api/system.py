@@ -189,6 +189,14 @@ async def go_live_readiness_endpoint():
     return go_live_readiness(last_smoke=get_last_smoke())
 
 
+@router.get("/staging-report", summary="Staging 验收报告（含 next_steps）")
+async def staging_report_endpoint():
+    from app.services.go_live_ready import staging_go_live_report
+    from app.services.model_smoke import get_last_smoke
+
+    return staging_go_live_report(last_smoke=get_last_smoke())
+
+
 @router.get("/catalog", summary="模型目录诚信报告")
 async def catalog_report():
     from app.services.model_catalog import catalog_integrity

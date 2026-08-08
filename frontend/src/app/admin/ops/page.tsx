@@ -15,6 +15,7 @@ import {
   sendWebhookFailuresDigest,
   promoteModel,
   triggerLiveSmoke,
+  exportGoLiveReport,
   retryAllWebhookFailures,
   retryWebhookDelivery,
   type PromotableResponse,
@@ -289,6 +290,30 @@ export default function AdminOpsPage() {
               )}
               {token && (
                 <div className="flex flex-wrap gap-2 mb-3">
+                  <button
+                    type="button"
+                    disabled={smokeBusy === "export"}
+                    onClick={async () => {
+                      setSmokeBusy("export");
+                      try {
+                        const report = await exportGoLiveReport(token);
+                        const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `betty-go-live-${report.generated_at?.slice(0, 10) || "report"}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : "导出失败");
+                      } finally {
+                        setSmokeBusy(null);
+                      }
+                    }}
+                    className="px-2 py-1 rounded text-xs border border-brand/40 text-brand hover:bg-brand/10 disabled:opacity-50"
+                  >
+                    {smokeBusy === "export" ? "导出中…" : "导出验收报告"}
+                  </button>
                   {(["live-image", "live-video", "live-kpi"] as const).map((kind) => (
                     <button
                       key={kind}
