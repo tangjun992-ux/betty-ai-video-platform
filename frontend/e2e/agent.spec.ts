@@ -43,6 +43,9 @@ test.describe("Director Agent 黄金路径", () => {
     // Total credits summary (Phase 10 UX)
     await expect(page.getByTestId("agent-variant-total-credits")).toBeVisible();
 
+    await expect(page.getByTestId("agent-variant-compare-table")).toBeVisible();
+    await expect(page.getByText(/钩子|CTA|Seed/).first()).toBeVisible();
+
     // Adopt first variant → planned DAG
     await cards.locator("button").first().click();
 

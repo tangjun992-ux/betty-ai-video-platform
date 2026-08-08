@@ -49,7 +49,7 @@ def test_readiness_includes_stripe_bootstrap():
     r = c.get("/api/v1/system/readiness")
     assert r.status_code == 200
     data = r.json()
-    assert data["catalog"]["active_target"] == 17
+    assert data["catalog"]["active_target"] == 18
     assert "bootstrap" in data["stripe"]
     assert data["stripe"]["bootstrap"]["price_envs_total"] >= 9
 
@@ -63,7 +63,7 @@ def test_active_shelf_17_veo_promoted():
         assert next(m for m in MODELS if m.id == mid).status == "active"
 
     cat = catalog_integrity()
-    assert cat["active_count"] >= 17
+    assert cat["active_count"] >= 18
 
 
 def test_list_failed_webhooks_empty():

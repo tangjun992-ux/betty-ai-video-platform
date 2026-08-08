@@ -170,6 +170,12 @@ MODELS = [
         cost_tier="medium", status="active",
     ),
     ModelInfo(
+        id="kling-2.6", provider="KIE.ai → Kuaishou", display_name="Kling 2.6",
+        description="Kling 2.6 文生视频，网关 ID 已识别",
+        capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=65, styles=["cinematic", "realistic", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=7),
+        cost_tier="medium", status="active",
+    ),
+    ModelInfo(
         id="kling-2.1-master", provider="KIE.ai → Kuaishou", display_name="Kling 2.1 Master",
         description="大师版，复杂运镜（网关 ID 已识别）",
         capabilities=ModelCapability(media_types=["video"], max_resolution="1080p", max_duration_s=10, avg_latency_s=90, styles=["cinematic", "dynamic"], cost_per_image_credits=0, cost_per_5s_video_credits=9),
