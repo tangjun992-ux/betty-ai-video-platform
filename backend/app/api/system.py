@@ -222,7 +222,7 @@ async def readiness():
         "catalog": {
             "active_count": catalog["active_count"],
             "beta_count": catalog["beta_count"],
-            "active_target": 19,
+            "active_target": 20,
             "active_outside_verified_set": catalog.get("active_outside_verified_set") or [],
         },
         "smoke": {

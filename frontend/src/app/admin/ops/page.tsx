@@ -12,6 +12,7 @@ import {
   getSystemReadiness,
   getWebhookFailures,
   getWebhookFailuresDigest,
+  sendWebhookFailuresDigest,
   promoteModel,
   retryAllWebhookFailures,
   retryWebhookDelivery,
@@ -180,6 +181,9 @@ export default function AdminOpsPage() {
               {readiness.ops_alerts?.digest_enabled && (
                 <span>Digest 聚合: 开启</span>
               )}
+              {readiness.ops_alerts?.digest_beat_hourly && (
+                <span>Digest Beat: 小时</span>
+              )}
             </div>
             {promotable && promotable.promotable.length > 0 ? (
               <div className="space-y-2">
@@ -217,7 +221,29 @@ export default function AdminOpsPage() {
                 Webhook 投递失败
                 <span className="text-text-tertiary font-normal">({webhookFailures.length})</span>
               </h2>
-              {webhookFailures.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {token && (
+                  <button
+                    type="button"
+                    disabled={whBusy === "digest"}
+                    onClick={async () => {
+                      setWhBusy("digest");
+                      try {
+                        await sendWebhookFailuresDigest(token);
+                        const digest = await getWebhookFailuresDigest(token);
+                        setWebhookDigest(digest);
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : "Digest 发送失败");
+                      } finally {
+                        setWhBusy(null);
+                      }
+                    }}
+                    className="px-2 py-1 rounded text-xs border border-cosmic-border hover:bg-cosmic-subtle disabled:opacity-50"
+                  >
+                    {whBusy === "digest" ? "发送中…" : "发送 Digest"}
+                  </button>
+                )}
+                {webhookFailures.length > 0 && (
                 <button
                   type="button"
                   disabled={whBusy === "all"}
@@ -238,7 +264,8 @@ export default function AdminOpsPage() {
                 >
                   {whBusy === "all" ? "重试中…" : "全部重试"}
                 </button>
-              )}
+                )}
+              </div>
             </div>
             {webhookDigest && webhookDigest.total > 0 && (
               <div className="mb-3 p-2 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs space-y-1">

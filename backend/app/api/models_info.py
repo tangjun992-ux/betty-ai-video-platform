@@ -78,6 +78,12 @@ MODELS = [
         cost_tier="medium", status="active",
     ),
     ModelInfo(
+        id="imagen-4-ultra", provider="KIE.ai → Google", display_name="Imagen 4 Ultra",
+        description="Imagen 4 旗舰档，最高保真写实（网关 ID 已识别）",
+        capabilities=ModelCapability(media_types=["image"], max_resolution="4K", max_duration_s=0, avg_latency_s=14, styles=["photorealistic", "landscape", "product", "portrait"], cost_per_image_credits=5, cost_per_5s_video_credits=0),
+        cost_tier="high", status="active",
+    ),
+    ModelInfo(
         id="ideogram-v3", provider="KIE.ai → Ideogram", display_name="Ideogram V3",
         description="最强文字排版与 Logo 设计",
         capabilities=ModelCapability(media_types=["image"], max_resolution="2K", max_duration_s=0, avg_latency_s=10, styles=["typography", "logo", "poster", "design"], cost_per_image_credits=3, cost_per_5s_video_credits=0),

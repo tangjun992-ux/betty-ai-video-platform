@@ -93,3 +93,27 @@ def smoke_live_image_weekly(self):
         report["probed"], report["outframe_ok"], report["failed"], promote.get("promoted", []),
     )
     return report
+
+
+@app.task(name="app.tasks.health_tasks.webhook_failure_digest_hourly", bind=True, max_retries=0)
+def webhook_failure_digest_hourly(self):
+    """Hourly webhook failure digest to Slack/ops — no-op when alert URL unset."""
+    import os
+
+    hourly = os.getenv("OPS_WEBHOOK_DIGEST_HOURLY", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    from app.services.ops_alerts import alert_webhook_url, send_webhook_failure_digest
+
+    if not alert_webhook_url():
+        return {"skipped": True, "reason": "no_alert_url"}
+    if not hourly:
+        return {"skipped": True, "reason": "OPS_WEBHOOK_DIGEST_HOURLY not enabled"}
+
+    result = send_webhook_failure_digest(limit=50)
+    logger.info(
+        "webhook digest hourly: sent=%s total=%s",
+        result.get("sent"),
+        (result.get("digest") or {}).get("total"),
+    )
+    return result

@@ -1319,6 +1319,7 @@ export interface SystemReadiness {
     webhook_failure_alerts: boolean;
     alert_dedupe?: boolean;
     digest_enabled?: boolean;
+    digest_beat_hourly?: boolean;
     env: string;
   };
 }
@@ -1409,6 +1410,15 @@ export async function getWebhookFailuresDigest(token: string, limit = 50): Promi
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) throw new Error(`Webhook digest: ${res.status}`);
+  return res.json();
+}
+
+export async function sendWebhookFailuresDigest(token: string) {
+  const res = await fetch(`${API_BASE}/admin/model-health/webhook-failures/digest/send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Webhook digest send: ${res.status}`);
   return res.json();
 }
 
