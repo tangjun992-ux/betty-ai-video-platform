@@ -1,5 +1,8 @@
 """System capabilities — demo vs real mode for honest UI disclosure."""
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db import get_db
 
 router = APIRouter()
 
@@ -211,6 +214,17 @@ async def staging_runbook_endpoint(host: str = "localhost:8000"):
     from app.services.model_smoke import get_last_smoke
 
     return staging_runbook(last_smoke=get_last_smoke(), host=host)
+
+
+@router.post("/staging-runbook-execute", summary="自动执行 Runbook 自测步骤")
+async def staging_runbook_execute_endpoint(
+    db: AsyncSession = Depends(get_db),
+    strict: bool = False,
+    guest_id: str = "runbook-exec-guest",
+):
+    from app.services.staging_runbook_exec import execute_staging_runbook
+
+    return await execute_staging_runbook(db, guest_id=guest_id, strict=strict)
 
 
 @router.get("/staging-env-audit", summary="Staging 环境变量缺口审计")

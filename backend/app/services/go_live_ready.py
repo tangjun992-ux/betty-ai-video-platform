@@ -169,6 +169,7 @@ def staging_go_live_report(*, last_smoke: dict | None = None) -> dict:
             "live_kpi_admin": "POST /admin/model-health/smoke/live-kpi",
             "webhook_deliver_test": "POST /billing/stripe-webhook-deliver-test",
             "staging_runbook": "python scripts/staging_runbook.py",
+            "staging_runbook_execute": "python scripts/staging_runbook_execute.py",
             "staging_env_audit": "python scripts/staging_env_audit.py",
             "staging_checkout_smoke": "POST /billing/staging-checkout-smoke",
             "stripe_cli_listen": "stripe listen --forward-to localhost:8000/api/v1/billing/stripe/webhook",

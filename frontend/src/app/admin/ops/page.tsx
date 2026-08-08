@@ -18,6 +18,7 @@ import {
   stripeWebhookDeliverTest,
   getStagingAcceptance,
   getStagingRunbook,
+  executeStagingRunbook,
   getStripeCliGuide,
   stagingCheckoutSmoke,
   promoteModel,
@@ -393,6 +394,31 @@ export default function AdminOpsPage() {
                     className="px-2 py-1 rounded text-xs border border-cosmic-border hover:bg-cosmic-subtle disabled:opacity-50"
                   >
                     {smokeBusy === "checkout-smoke" ? "测试中…" : "收款链路自测"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={smokeBusy === "runbook-exec"}
+                    onClick={async () => {
+                      setSmokeBusy("runbook-exec");
+                      setError("");
+                      try {
+                        const rep = await executeStagingRunbook(false);
+                        if (!rep.execute_ok) {
+                          const failed = rep.results.filter((r) => r.executed && !r.ok).map((r) => r.title);
+                          throw new Error(failed.length ? failed.join("、") : "Runbook 执行未全通过");
+                        }
+                        const rb = await getStagingRunbook();
+                        setRunbook(rb);
+                        await load();
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : "Runbook 执行失败");
+                      } finally {
+                        setSmokeBusy(null);
+                      }
+                    }}
+                    className="px-2 py-1 rounded text-xs border border-brand/40 text-brand hover:bg-brand/10 disabled:opacity-50"
+                  >
+                    {smokeBusy === "runbook-exec" ? "执行中…" : "执行 Runbook 自动化"}
                   </button>
                   <button
                     type="button"
