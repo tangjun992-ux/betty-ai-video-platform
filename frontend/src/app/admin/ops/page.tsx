@@ -499,6 +499,11 @@ export default function AdminOpsPage() {
                       </li>
                     ))}
                   </ul>
+                  {runbook.env_audit && runbook.env_audit.missing_required.length > 0 && (
+                    <p className="text-amber-600 mt-1">
+                      缺 env: {runbook.env_audit.missing_required.slice(0, 4).join(", ")}
+                    </p>
+                  )}
                   {runbook.stripe_cli?.listen_command && (
                     <p className="font-mono text-[10px] mt-1 truncate" title={runbook.stripe_cli.listen_command}>
                       CLI: {runbook.stripe_cli.listen_command}

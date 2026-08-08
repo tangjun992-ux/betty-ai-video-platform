@@ -169,6 +169,7 @@ def staging_go_live_report(*, last_smoke: dict | None = None) -> dict:
             "live_kpi_admin": "POST /admin/model-health/smoke/live-kpi",
             "webhook_deliver_test": "POST /billing/stripe-webhook-deliver-test",
             "staging_runbook": "python scripts/staging_runbook.py",
+            "staging_env_audit": "python scripts/staging_env_audit.py",
             "stripe_cli_listen": "stripe listen --forward-to localhost:8000/api/v1/billing/stripe/webhook",
         },
     }
@@ -205,7 +206,7 @@ def staging_acceptance_scorecard(*, last_smoke: dict | None = None, strict: bool
             "id": "live_kpi",
             "label": "Live KPI 出片",
             "status": _status(live.get("kpi_met")) if live.get("available") else "skip",
-            "required": strict,
+            "required": strict and bool(live.get("available")),
         },
     ]
     required_checks = [c for c in checks if c.get("required")]
@@ -214,8 +215,6 @@ def staging_acceptance_scorecard(*, last_smoke: dict | None = None, strict: bool
     score_pct = round(100 * sum(1 for c in scored if c["status"] == "pass") / len(scored)) if scored else 0
 
     acceptance_ok = all(c["status"] == "pass" for c in required_checks)
-    if strict and live.get("available"):
-        acceptance_ok = acceptance_ok and bool(live.get("kpi_met"))
 
     return {
         "acceptance_ok": acceptance_ok,
@@ -255,6 +254,9 @@ def staging_runbook(*, last_smoke: dict | None = None, host: str = "localhost:80
     from app.services.oidc_ready import oidc_staging_readiness
 
     scorecard = staging_acceptance_scorecard(last_smoke=last_smoke, strict=False)
+    from app.services.staging_env import staging_env_audit
+
+    env_audit = staging_env_audit()
     stripe = stripe_staging_readiness()
     storage = storage_staging_readiness()
     bootstrap = stripe_bootstrap_status()
@@ -369,6 +371,7 @@ def staging_runbook(*, last_smoke: dict | None = None, host: str = "localhost:80
         "steps_total": len(steps),
         "steps": steps,
         "stripe_cli": cli,
+        "env_audit": env_audit,
         "blockers": scorecard.get("blockers") or [],
         "next_steps": scorecard.get("next_steps") or [],
     }

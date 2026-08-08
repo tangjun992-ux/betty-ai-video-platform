@@ -79,4 +79,12 @@ test.describe("Staging Go-Live 验收 API", () => {
     expect(cliBody.listen_command).toContain("stripe listen");
     expect(cliBody.forward_url).toContain("/billing/stripe/webhook");
   });
+
+  test("staging-env-audit 可达", async ({ request }) => {
+    const res = await request.get(`${API_BASE}/system/staging-env-audit`);
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(Array.isArray(body.missing_required)).toBe(true);
+    expect(body.groups?.stripe).toBeTruthy();
+  });
 });
