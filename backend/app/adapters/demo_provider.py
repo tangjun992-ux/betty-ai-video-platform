@@ -1264,6 +1264,7 @@ def run_demo_image_tool(op: str, data: bytes, factor: str = "2", ratio: str = "1
     """Offline image-tool fallback (used only when no KIE key is configured).
     upscale = Lanczos resize; bg-remove/edit/extend = pass-through re-encode."""
     import io as _io
+    from PIL import Image
     gen_dir = _generated_dir()
     name = f"tool_{op}_{uuid.uuid4().hex[:10]}.png"
     out = gen_dir / name

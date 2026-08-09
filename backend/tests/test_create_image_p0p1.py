@@ -23,7 +23,7 @@ def test_kie_generate_image_includes_negative_prompt(monkeypatch):
     monkeypatch.setattr(KieAdapter, "_submit_and_poll", fake_submit, raising=True)
 
     adapter = KieAdapter()
-    res = asyncio.get_event_loop().run_until_complete(
+    res = asyncio.run(
         adapter.generate_image(
             prompt="a cat",
             model_id="sdxl",
@@ -47,7 +47,7 @@ def test_kie_generate_image_omits_empty_negative(monkeypatch):
     monkeypatch.setattr(KieAdapter, "_submit_and_poll", fake_submit, raising=True)
 
     adapter = KieAdapter()
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.run(
         adapter.generate_image(prompt="a cat", model_id="sdxl", size="1024x1024", negative_prompt="  ")
     )
     assert "negativePrompt" not in captured["payload"]

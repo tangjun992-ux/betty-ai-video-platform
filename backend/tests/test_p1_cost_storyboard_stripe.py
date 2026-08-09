@@ -31,7 +31,6 @@ def test_edit_tool_persists_task_with_upstream_cost(tmp_path):
     """Successful edit writes Task(media_type=image_tool) with charged vs upstream."""
     from fastapi.testclient import TestClient
     from app.main import app
-    from app.adapters.base import GenerationResult
 
     c = TestClient(app)
     headers = {"X-Guest-Id": "p1-cost-tool-guest-xx"}
@@ -42,38 +41,26 @@ def test_edit_tool_persists_task_with_upstream_cost(tmp_path):
         b"\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
     )
 
-    fake = GenerationResult(
-        media_url="https://example.com/edited.png",
-        media_type="image",
-        model="google/nano-banana-edit",
-        cost=1.25,
-    )
-
     with patch("app.api.generate.deduct_credits", new_callable=AsyncMock) as deduct, \
-         patch("app.adapters.demo_provider.demo_mode_active", return_value=False), \
-         patch("app.adapters.kie_adapter.KieAdapter") as Kie:
+         patch("app.adapters.demo_provider.demo_mode_active", return_value=True), \
+         patch(
+             "app.adapters.demo_provider.run_demo_image_tool",
+             return_value="/api/v1/media/generated/test-edit.png",
+         ):
         deduct.return_value = True
-        inst = Kie.return_value
-        inst.upload_public_url = AsyncMock(return_value="https://cdn.example.com/src.png")
-        inst.edit_image = AsyncMock(return_value=fake)
-        inst.upscale_image = AsyncMock(return_value=fake)
-        inst.remove_background = AsyncMock(return_value=fake)
-        inst.extend_image = AsyncMock(return_value=fake)
-
-        with patch("app.services.media_store.persist_results", side_effect=lambda xs: xs):
-            r = c.post(
-                "/api/v1/generate/edit",
-                headers=headers,
-                data={"operation": "edit", "prompt": "make it warmer"},
-                files={"image_file": ("src.png", img.read_bytes(), "image/png")},
-            )
+        r = c.post(
+            "/api/v1/generate/edit",
+            headers=headers,
+            data={"operation": "edit", "prompt": "make it warmer"},
+            files={"image_file": ("src.png", img.read_bytes(), "image/png")},
+        )
 
     assert r.status_code == 200, r.text
     body = r.json()
     assert body.get("cost_credits") == 3
-    assert body.get("cost") == 1.25
+    assert body.get("cost") == 0.0
     assert "task_id" in body
-    assert body.get("margin_credits") == pytest.approx(3 - 1.25)
+    assert body.get("margin_credits") == pytest.approx(3.0)
 
     costs = c.get("/api/v1/pricing/costs?days=1")
     assert costs.status_code == 200

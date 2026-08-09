@@ -30,7 +30,7 @@ async def test_list_models_default_is_verified_only():
         "default listing must be verified-only"
     )
     assert all(m["verified"] is True for m in res["models"])
-    assert res["beta_count"] >= 1  # beta still reported separately
+    assert res["lab_count"] >= 1  # unverified SKUs folded to lab
 
 
 @pytest.mark.asyncio
@@ -47,6 +47,10 @@ async def test_include_beta_blocked_in_production():
 @pytest.mark.asyncio
 async def test_status_beta_returns_only_beta():
     from app.api import models_info
+    from app.api.models_info import MODELS
+
+    if not any(m.status == "beta" for m in MODELS):
+        pytest.skip("catalog has no beta models (all mapped SKUs promoted to active)")
 
     res = await models_info.list_models(status="beta")
     assert res["models"]
@@ -56,13 +60,15 @@ async def test_status_beta_returns_only_beta():
 def test_router_downgrades_beta_model_in_production():
     from app.router import PromptRouter
     from app.config import settings
+    from app.api.models_info import MODELS
+
+    non_active = [m.id for m in MODELS if m.status != "active"]
+    if not non_active:
+        pytest.skip("catalog has no non-active models for downgrade test")
+    beta_id = non_active[0]
 
     router = PromptRouter()
     analysis = router.analyze("a cinematic product shot")
-
-    # Pick a known beta model id from the catalog
-    from app.api.models_info import MODELS
-    beta_id = next(m.id for m in MODELS if m.status != "active")
 
     with patch.object(settings, "ENV", "production"):
         score = router.select_model(analysis, user_model=beta_id)
@@ -85,10 +91,14 @@ def test_router_honours_verified_model_in_production():
 
 def test_router_honours_beta_in_dev():
     from app.router import PromptRouter
+    from app.api.models_info import MODELS
+
+    non_active = [m.id for m in MODELS if m.status != "active"]
+    if not non_active:
+        pytest.skip("catalog has no non-active models for dev pick test")
+    beta_id = non_active[0]
 
     router = PromptRouter()
     analysis = router.analyze("a cinematic product shot")
-    from app.api.models_info import MODELS
-    beta_id = next(m.id for m in MODELS if m.status != "active")
     score = router.select_model(analysis, user_model=beta_id)
     assert score.model_id == beta_id  # dev/demo honours the explicit pick

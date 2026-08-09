@@ -71,6 +71,7 @@ def test_local_cdn():
 
 
 def test_s3_backend_moto():
+    pytest.importorskip("moto")
     import boto3
     from moto import mock_aws
     with mock_aws():

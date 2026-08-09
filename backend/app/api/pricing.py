@@ -228,16 +228,22 @@ async def get_cost_stats(days: int = 30):
     """Return cost statistics: total, by-model, by-type, recent history."""
     import sqlite3, os, json
     from datetime import datetime, timedelta, timezone
+    from app.tasks.task_db import get_db_url_sync
 
-    db_url = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
-    if db_url.startswith("sqlite"):
-        db_path = db_url.replace("sqlite:///", "").replace("sqlite+aiosqlite:///", "")
-        if not os.path.isabs(db_path):
-            db_path = os.path.join(os.path.dirname(__file__), "..", "..", db_path)
-        conn = sqlite3.connect(db_path)
-        cur = conn.cursor()
-    else:
+    db_url = get_db_url_sync()
+    if not db_url.startswith("sqlite"):
         return {"error": "Cost stats only available with SQLite backend"}, 501
+
+    db_path = db_url
+    for prefix in ("sqlite:///", "sqlite:"):
+        if db_path.startswith(prefix):
+            db_path = db_path[len(prefix):]
+            break
+    if not os.path.isabs(db_path):
+        db_path = os.path.join(os.path.dirname(__file__), "..", "..", db_path)
+    os.makedirs(os.path.dirname(db_path) or ".", exist_ok=True)
+    conn = sqlite3.connect(db_path, timeout=30)
+    cur = conn.cursor()
 
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 

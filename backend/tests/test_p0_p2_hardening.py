@@ -33,6 +33,7 @@ def test_model_smoke_live_mocked_image():
     adapter.generate_image = AsyncMock(return_value=fake)
 
     with patch("app.adapters.demo_provider.demo_mode_active", return_value=False), \
+         patch("app.gateway.gateway_enabled", return_value=False), \
          patch("app.adapters.kie_adapter.KieAdapter", return_value=adapter):
         r = probe_model("nano-banana", ["image"], mode="live")
     assert r["ok"] is True

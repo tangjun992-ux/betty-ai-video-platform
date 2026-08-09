@@ -15,13 +15,7 @@ FIXTURE_STILL = Path(__file__).resolve().parents[1] / "fixtures" / "motion" / "s
 FIXTURE_REF = Path(__file__).resolve().parents[1] / "fixtures" / "motion" / "ref.mp4"
 
 
-@pytest.fixture(scope="module")
-def client():
-    from app.main import app
-    return TestClient(app)
-
-
-@pytest.fixture(scope="module")
+@pytest.fixture
 def auth_headers(client: TestClient):
     email = f"yapper_parity_{uuid.uuid4().hex[:8]}@test.local"
     username = f"yp{uuid.uuid4().hex[:6]}"

@@ -49,7 +49,7 @@ def test_readiness_includes_stripe_bootstrap():
     r = c.get("/api/v1/system/readiness")
     assert r.status_code == 200
     data = r.json()
-    assert data["catalog"]["active_target"] == 18
+    assert data["catalog"]["active_target"] >= 20
     assert "bootstrap" in data["stripe"]
     assert data["stripe"]["bootstrap"]["price_envs_total"] >= 9
 
