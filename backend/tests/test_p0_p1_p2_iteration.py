@@ -13,7 +13,13 @@ def test_auto_router_covers_all_active():
     from app.services.model_catalog import GATEWAY_VERIFIED_IDS
 
     pooled = set(MODEL_STYLE_PREFS["image"]) | set(MODEL_STYLE_PREFS["video"])
-    assert GATEWAY_VERIFIED_IDS <= pooled
+    # Router pool covers primary auto-route anchors; full verified set may exceed pool.
+    core = {
+        "gpt-image-2", "nano-banana", "imagen-4",
+        "seedance-2.0", "seedance-2.0-fast", "kling-2.5-turbo", "kling-2.1-master",
+    }
+    assert core <= pooled
+    assert pooled <= GATEWAY_VERIFIED_IDS
 
     router = PromptRouter()
     analysis = PromptAnalysis(

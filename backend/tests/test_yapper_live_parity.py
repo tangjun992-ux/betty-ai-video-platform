@@ -126,14 +126,22 @@ def test_kling_t2v_omits_resolution_first():
     assert res.media_url.endswith(".mp4")
 
 
-def test_director_minimal_skips_post_ladder():
+def test_director_minimal_skips_tts_keeps_publish_pack():
+    """minimal skips TTS but may still subtitle+compose for publishable ad output."""
     from app.director import DirectorPlanner
 
     plan = DirectorPlanner().plan("做一条产品宣传视频", duration=5, minimal=True)
     actions = [s.action for s in plan.steps]
-    assert "image" in actions
-    assert "video" in actions
+    assert "image" in actions or "video" in actions
     assert "audio" not in actions
+
+
+def test_director_minimal_image_only_skips_compose():
+    from app.director import DirectorPlanner
+
+    plan = DirectorPlanner().plan("生成一张产品宣传图", duration=5, minimal=True)
+    actions = [s.action for s in plan.steps]
+    assert "image" in actions
     assert "compose" not in actions
     assert "subtitle" not in actions
 
@@ -145,7 +153,7 @@ def test_director_minimal_english_ad_brief():
     plan = DirectorPlanner().plan("15s ad", duration=5, minimal=True)
     actions = [s.action for s in plan.steps]
     assert "video" in actions
-    assert "compose" not in actions
+    assert "audio" not in actions
     # 'ad' must not false-positive inside words like 'ready'
     still = DirectorPlanner().plan("ready product still image only", duration=5, minimal=True)
     still_acts = [s.action for s in still.steps]

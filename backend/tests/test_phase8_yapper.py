@@ -38,11 +38,20 @@ def test_promote_mapped_beta():
     from app.api.models_info import MODELS
 
     mid = "veo-3.1"
-    before = next(m for m in MODELS if m.id == mid)
-    assert before.status == "beta"
-    r = promote_model(mid, note="test promote")
-    assert r["status"] == "active"
-    demote_model(mid, note="test cleanup")
+    m = next(x for x in MODELS if x.id == mid)
+    orig_status = m.status
+    try:
+        if m.status != "beta":
+            demote_model(mid, note="test setup")
+        before = next(x for x in MODELS if x.id == mid)
+        assert before.status == "beta"
+        r = promote_model(mid, note="test promote")
+        assert r["status"] == "active"
+    finally:
+        if orig_status == "active":
+            promote_model(mid, note="test cleanup restore")
+        elif orig_status == "lab":
+            demote_model(mid, to="lab", note="test cleanup restore")
 
 
 def test_oidc_exchange_roundtrip():

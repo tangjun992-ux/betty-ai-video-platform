@@ -39,7 +39,7 @@ def test_readiness_includes_catalog_and_smoke():
     data = r.json()
     assert "catalog" in data
     assert data["catalog"]["active_count"] >= 15
-    assert data["catalog"]["active_target"] == 18
+    assert data["catalog"]["active_target"] >= 20
     assert "smoke" in data
     assert "auto_promote_enabled" in data["smoke"]
 

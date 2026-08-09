@@ -4,8 +4,22 @@ from __future__ import annotations
 import asyncio
 import uuid
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _mock_celery_enqueue(monkeypatch):
+    """Face swap / performance enqueue must not require Redis in unit tests."""
+    monkeypatch.setattr(
+        "app.api.face_swap.celery_app.send_task",
+        MagicMock(return_value=MagicMock(id="test-celery-mock")),
+    )
+    monkeypatch.setattr(
+        "app.api.performance.celery_app.send_task",
+        MagicMock(return_value=MagicMock(id="test-celery-mock")),
+    )
 
 
 @pytest.fixture

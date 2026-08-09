@@ -278,11 +278,17 @@ def run_contract(client, headers: dict) -> list[dict]:
         # edit enqueue via multipart may be heavy; use analyze-only already done
         pass
 
-    gen_img = client.post(
-        "/api/v1/generate/",
-        json={"prompt": "audit smoke still life", "media_type": "image", "model": "auto", "dry_run": True},
-        headers=headers,
-    )
+    from unittest.mock import MagicMock, patch
+
+    mock_celery = MagicMock(id="audit-mock-celery")
+    with patch("app.api.generate.generate_image_task.delay", return_value=mock_celery), \
+         patch("app.api.generate.generate_video_task.delay", return_value=mock_celery), \
+         patch("app.api.generate.run_pipeline.delay", return_value=mock_celery):
+        gen_img = client.post(
+            "/api/v1/generate/",
+            json={"prompt": "audit smoke still life", "media_type": "image", "model": "auto"},
+            headers=headers,
+        )
     # dry_run may or may not exist — accept 200 with task or 422
     checks.append(_row(
         "enqueue:generate_image",
@@ -631,6 +637,11 @@ def main() -> int:
 
     logging.disable(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
+    import asyncio
+    from app.db import init_db
+
+    asyncio.run(init_db())
 
     from fastapi.testclient import TestClient
     from app.main import app
