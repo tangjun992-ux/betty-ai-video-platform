@@ -63,9 +63,11 @@ def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str |
         os.chdir(backend_dir)
 
     from app.director import plan_from_dict, DirectorExecutor
+    from app.services.concurrency import concurrency_limit_for_user_id_sync, release_slot_sync
 
     plan = plan_from_dict(plan_dict)
-    executor = DirectorExecutor(dry_run=dry_run)
+    shot_cap = concurrency_limit_for_user_id_sync(user_id)
+    executor = DirectorExecutor(dry_run=dry_run, video_concurrency=shot_cap)
     t0 = time.time()
 
     # Seed initial state (all steps pending / skipped).
@@ -117,6 +119,7 @@ def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str |
                                  "user_id": user_id, "session_uid": session_uid,
                                  "error": str(e), "steps": list(steps_state.values()),
                                  "assets": assets, "asset_count": len(assets)})
+        release_slot_sync(user_id, f"director:{job_id}")
         return {"status": "failed", "error": str(e)}
 
     total_ms = int((time.time() - t0) * 1000)
@@ -127,6 +130,7 @@ def run_director(job_id: str, plan_dict: dict, dry_run: bool, session_uid: str |
         except Exception as e:
             logger.warning("[director_task] session persist failed: %s", e)
 
+    release_slot_sync(user_id, f"director:{job_id}")
     return {"status": "done", "asset_count": len(assets), "total_ms": total_ms}
 
 

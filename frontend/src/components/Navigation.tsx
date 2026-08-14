@@ -40,7 +40,7 @@ import { useTheme } from "@/components/ThemeProvider";
 
 // ─── NAV ITEMS ──────────────────────────────────────────
 const mainNav = [
-  { href: "/", icon: Home, label: "首页", exact: true },
+  { href: "/dashboard", icon: Home, label: "首页", exact: true },
   { href: "/create/image", icon: ImageIcon, label: "图片创作" },
   { href: "/create/video", icon: Video, label: "视频创作" },
   { href: "/agent", icon: Bot, label: "AI Agent" },

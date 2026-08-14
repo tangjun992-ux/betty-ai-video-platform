@@ -1,9 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { X, ArrowUp, Wand2, Info, CircleDollarSign, Plus, ImageIcon, VideoIcon, Music } from "lucide-react";
+import { X, ArrowUp, Wand2, Plus, ImageIcon, VideoIcon, Music } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { VideoParamBar, type VideoParamModel } from "@/components/VideoParamBar";
+import { QuoteBar } from "@/components/QuoteBar";
+import type { GenerationQuote } from "@/lib/api";
 import type { Quality } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
@@ -41,10 +43,13 @@ interface Props {
   onGenerateAudioChange: (v: boolean) => void;
   postLipsync: boolean;
   onPostLipsyncChange: (v: boolean) => void;
+  lipsyncText?: string;
+  onLipsyncTextChange?: (v: string) => void;
   multiShot: boolean;
   onMultiShotChange: (v: boolean) => void;
 
   estimatedCredits: number | null;
+  quote?: GenerationQuote | null;
 }
 
 const REF_ICON: Record<RefType, React.ElementType> = { image: ImageIcon, video: VideoIcon, audio: Music };
@@ -108,6 +113,19 @@ export function VideoComposer(p: Props) {
         </div>
       </div>
 
+      {p.postLipsync && (
+        <div className="px-4 pb-2">
+          <textarea
+            value={p.lipsyncText || ""}
+            onChange={(e) => p.onLipsyncTextChange?.(e.target.value)}
+            placeholder="口播文案（与参考图一次提交，成片后自动唇形，不再跳转唇形页）"
+            rows={2}
+            data-testid="lipsync-text"
+            className="w-full resize-none rounded-lg bg-cosmic-subtle/60 border border-cosmic-border/50 px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-tertiary/50 focus:outline-none focus:border-accent-cyan/40"
+          />
+        </div>
+      )}
+
       {/* Bottom toolbar */}
       <div className="flex items-center gap-1 flex-wrap px-3 pb-3 pt-1">
         {/* Reference thumbnails */}
@@ -169,12 +187,8 @@ export function VideoComposer(p: Props) {
           onMultiShotChange={p.onMultiShotChange}
         />
 
-        {/* Credits */}
-        <div className="ml-auto inline-flex items-center gap-1 text-xs text-text-secondary/80 pr-1" title="预估消耗积分">
-          <CircleDollarSign className="w-3.5 h-3.5 text-accent-cyan/90" />
-          <span className="font-medium text-text-primary/90">{p.estimatedCredits != null ? p.estimatedCredits : "—"}</span>
-          <Info className="w-3 h-3 opacity-45" />
-        </div>
+        {/* Credits + ETA + queue (对标 Yapper 提交前报价) */}
+        <QuoteBar quote={p.quote ?? null} fallbackCredits={p.estimatedCredits} />
       </div>
     </div>
   );

@@ -198,7 +198,7 @@ export function VideoParamBar(p: Props) {
         <div className="space-y-0.5">
           <Toggle label="生成配音" icon={Music} on={p.generateAudio} onChange={p.onGenerateAudioChange} note="Seedance Omni 同时生成音轨" />
           <Toggle label="多镜头分镜" icon={SlidersHorizontal} on={p.multiShot} onChange={p.onMultiShotChange} note="每镜独立生成后合成" />
-          <Toggle label="后续唇形同步" icon={Mic} on={p.postLipsync} onChange={p.onPostLipsyncChange} note="成片后带入 Kling 口型" />
+          <Toggle label="后续唇形同步" icon={Mic} on={p.postLipsync} onChange={p.onPostLipsyncChange} note="同一任务完成后自动口型（一次提交）" />
         </div>
       </Chip>
     </>

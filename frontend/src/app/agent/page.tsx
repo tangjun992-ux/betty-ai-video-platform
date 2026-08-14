@@ -308,8 +308,11 @@ export default function AgentPage() {
     } catch { setErr("加载会话失败"); }
   }, []);
   useEffect(() => {
-    const uid = new URLSearchParams(window.location.search).get("session");
+    const params = new URLSearchParams(window.location.search);
+    const uid = params.get("session");
     if (uid) loadSession(uid);
+    const incoming = params.get("brief") || params.get("prompt");
+    if (incoming && !uid) setBrief(incoming);
   }, [loadSession]);
 
   const saveSession = async (p: Plan, a: Asset[]) => {

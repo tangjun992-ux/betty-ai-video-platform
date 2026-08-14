@@ -309,4 +309,9 @@ def on_task_terminal(db_task_id: str, *, status: str) -> dict[str, Any]:
         except Exception as e:
             logger.warning("persist webhook status failed task=%s: %s", db_task_id, e)
     em = notify_task_email(db_task_id, task=task)
+    try:
+        from app.services.concurrency import release_slot_sync
+        release_slot_sync(task.get("user_id"), db_task_id)
+    except Exception as e:
+        logger.warning("concurrency release failed task=%s: %s", db_task_id, e)
     return {"ok": True, "webhook": wh, "email": em, "refund": refund}

@@ -60,6 +60,11 @@ class GenerateRequest(BaseModel):
         default=False,
         description="Seedance Omni 是否同时生成音轨",
     )
+    lipsync_text: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="口播文案：视频完成后在同一任务内走唇形同步（一次提交，不再跳转唇形页）",
+    )
     seed: Optional[int] = Field(default=None, ge=0, le=2147483647, description="随机种子（复现同一结果；留空则随机）")
     negative_prompt: Optional[str] = Field(
         default=None,
@@ -86,6 +91,26 @@ class RouterAnalysisResponse(BaseModel):
     analysis: dict
     recommended_model: dict
     all_scores: list[dict]
+
+
+class QuoteResponse(BaseModel):
+    """Pre-submit quote: credits + catalog ETA + queue + concurrency (对标 Yapper)."""
+    recommended_model: str
+    media_type: str
+    estimated_cost_credits: int
+    estimated_time_seconds: int
+    eta_source: str = "catalog"
+    demo_mode: bool = False
+    queue_ahead: int = 0
+    concurrent_used: int = 0
+    concurrent_limit: int = 4
+    concurrent_remaining: int = 4
+    refund_on_failure: bool = True
+    refund_note: str = "失败自动退还本次扣除的积分"
+    lipsync_included: bool = False
+    upgrade_plan: Optional[str] = None
+    upgrade_hint: Optional[str] = None
+    honesty: str = "ETA 来自货架目录均时，不是实时 SLA；演示模式出片更快，不代表正式线路。"
 
 
 async def execute_generation(
@@ -145,8 +170,10 @@ async def execute_generation(
     if effective_media == "auto":
         effective_media = "image" if "video" not in estimated_model else "video"
 
-    estimated_time, estimated_cost = _estimate_time_and_cost(
-        effective_media, estimated_model, req.duration or 5
+    estimated_time, estimated_cost, lipsync_on = _estimate_time_and_cost(
+        effective_media, estimated_model, req.duration or 5,
+        count=req.count or 1,
+        lipsync_text=req.lipsync_text,
     )
 
     # Build routing info for response
@@ -180,6 +207,29 @@ async def execute_generation(
         estimated_model = "seedance-2.0"
         routing_info["omni_routed"] = True
         routing_info["omni_model"] = estimated_model
+        estimated_time, estimated_cost, lipsync_on = _estimate_time_and_cost(
+            effective_media, estimated_model, req.duration or 5,
+            count=req.count or 1,
+            lipsync_text=req.lipsync_text,
+        )
+
+    routing_info["lipsync_pipeline"] = bool(lipsync_on)
+    routing_info["omni"] = bool(omni)
+
+    # Plan-tier concurrency (对标 Yapper 4/6/10/40) — reject before deducting credits.
+    from sqlalchemy import select as _select
+    from app.models.user import User as _User
+    from app.services.concurrency import (
+        acquire_slot, release_slot, ConcurrencyLimitError, concurrency_http_exception,
+    )
+    _urow = (await db.execute(_select(_User).where(_User.id == user_id))).scalar_one_or_none()
+    _role = (_urow.role if _urow else "guest") or "guest"
+    try:
+        conc_snap = await acquire_slot(db, user_id=user_id, slot_id=task_id, role=_role)
+        routing_info["concurrent_used"] = conc_snap.used
+        routing_info["concurrent_limit"] = conc_snap.limit
+    except ConcurrencyLimitError as e:
+        raise concurrency_http_exception(e)
 
     params = {
         "resolution": req.resolution,
@@ -191,6 +241,7 @@ async def execute_generation(
         "routing_info": json.dumps(routing_info),
         "omni": omni,
         "generate_audio": bool(req.generate_audio),
+        "lipsync_text": (req.lipsync_text or "").strip() or None,
     }
     if req.negative_prompt and req.negative_prompt.strip():
         params["negative_prompt"] = req.negative_prompt.strip()
@@ -227,6 +278,7 @@ async def execute_generation(
         task_id=task_id, model=estimated_model, team_id=team_id,
     )
     if not credits_ok:
+        release_slot(user_id, task_id)
         task.status = "failed"
         task.error_message = "积分不足，请充值后重试"
         await db.flush()
@@ -250,6 +302,7 @@ async def execute_generation(
         "seed": seed,
         "omni": omni,
         "generate_audio": bool(req.generate_audio),
+        "lipsync_text": (req.lipsync_text or "").strip() or None,
     }
     if req.negative_prompt and req.negative_prompt.strip():
         celery_params["negative_prompt"] = req.negative_prompt.strip()
@@ -278,6 +331,7 @@ async def execute_generation(
             )
     except Exception as e:
         logger.error("Generation dispatch failed task=%s: %s", task_id, e)
+        release_slot(user_id, task_id)
         task.status = "failed"
         task.error_message = f"任务调度失败: {e}"
         await refund_task_credits(db, task_id, reason="dispatch_failed")
@@ -713,6 +767,73 @@ async def analyze_prompt(req: GenerateRequest):
     )
 
 
+@router.post("/quote", response_model=QuoteResponse, summary="提交前报价：积分 + 目录 ETA + 队列 + 并发")
+async def quote_generation(
+    req: GenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    """Yapper-parity pre-submit quote. Does not create a task or deduct credits.
+
+    ETA is catalog average latency (not a live SLA). Demo mode is disclosed so
+    the UI never presents a 3-second local render as production time.
+    """
+    from sqlalchemy import select as _select
+    from app.models.user import User as _User
+    from app.services.concurrency import snapshot as conc_snapshot, count_queue_ahead
+    from app.adapters.demo_provider import demo_mode_active
+
+    analysis = prompt_router.analyze(req.prompt, req.media_type, req.quality)
+    selection = prompt_router.select_model(analysis, req.model)
+    estimated_model = selection.model_id
+    effective_media = analysis.media_type.value
+    if effective_media == "auto":
+        effective_media = "image" if "video" not in (estimated_model or "") else "video"
+
+    ref_images = [u.strip() for u in (req.reference_images or []) if u and str(u).strip()][:9]
+    if not ref_images and req.image_url:
+        ref_images = [str(req.image_url).strip()]
+    ref_videos = [u.strip() for u in (req.reference_videos or []) if u and str(u).strip()][:3]
+    ref_audios = [u.strip() for u in (req.reference_audios or []) if u and str(u).strip()][:3]
+    omni = bool(req.omni) or bool(ref_videos or ref_audios or (len(ref_images) > 1 and effective_media == "video"))
+    if omni and (req.model or "auto") in ("auto", "", None) and effective_media == "video":
+        estimated_model = "seedance-2.0"
+
+    eta_s, cost, lipsync_on = _estimate_time_and_cost(
+        effective_media, estimated_model, req.duration or 5,
+        count=req.count or 1,
+        lipsync_text=req.lipsync_text,
+    )
+    urow = (await db.execute(_select(_User).where(_User.id == user_id))).scalar_one_or_none()
+    role = (urow.role if urow else "guest") or "guest"
+    snap = await conc_snapshot(db, user_id, role)
+    queue_ahead = await count_queue_ahead(db)
+    # Queue wait is additive honesty, not a fabricated SLA.
+    if queue_ahead:
+        eta_s = eta_s + min(120, queue_ahead * 8)
+    demo = bool(demo_mode_active())
+    return QuoteResponse(
+        recommended_model=estimated_model,
+        media_type=effective_media,
+        estimated_cost_credits=cost,
+        estimated_time_seconds=eta_s,
+        eta_source="catalog",
+        demo_mode=demo,
+        queue_ahead=queue_ahead,
+        concurrent_used=snap.used,
+        concurrent_limit=snap.limit,
+        concurrent_remaining=snap.remaining,
+        refund_on_failure=True,
+        lipsync_included=bool(lipsync_on),
+        upgrade_plan=snap.upgrade_plan,
+        upgrade_hint=snap.upgrade_hint if snap.remaining <= 1 else None,
+        honesty=(
+            "ETA 来自货架目录均时，不是实时 SLA。"
+            + (" 当前为演示模式，本地出片更快，不代表正式线路。" if demo else "")
+        ),
+    )
+
+
 @router.post(
     "/extract-prompt",
     summary="Prompt Extractor（从图片/视频反推提示词）",
@@ -856,21 +977,34 @@ def _check_content_safety(prompt: str) -> str | None:
     return None
 
 
-def _estimate_time_and_cost(media_type: str, model: str, duration: int) -> tuple[int, int]:
+def _estimate_time_and_cost(
+    media_type: str,
+    model: str,
+    duration: int,
+    count: int = 1,
+    lipsync_text: Optional[str] = None,
+) -> tuple[int, int, bool]:
+    """Catalog ETA + credits. Returns (seconds, credits, lipsync_included).
+
+    Prefer live MODELS catalog (includes kling-2.5-turbo / nano-banana-pro /
+    imagen-4). Legacy maps remain as fallback for old router ids.
+    """
     CREDIT_MAP = {
-        # Image models
         "gpt-image-2": 5,
         "seedream-v4": 3,
         "flux-pro": 4,
         "nano-banana": 2,
-        # Video models
+        "nano-banana-pro": 4,
+        "imagen-4": 4,
         "kling-v2.5-pro": 6,
         "kling-v2.1-standard": 4,
+        "kling-2.5-turbo": 7,
+        "kling-2.1-pro": 8,
+        "kling-2.1-master": 9,
         "seedance-2.0-fast": 3,
         "seedance-2.0": 4,
         "wan-2.6": 3,
         "veo-3": 8,
-        # Legacy mappings
         "openai/gpt-5.4-image": 5,
         "openai/dall-e-3": 5,
         "bytedance/seedart": 3,
@@ -879,19 +1013,21 @@ def _estimate_time_and_cost(media_type: str, model: str, duration: int) -> tuple
         "kling/video-v2": 4,
     }
     TIME_MAP = {
-        # Image models
         "gpt-image-2": 15,
         "seedream-v4": 10,
         "flux-pro": 12,
         "nano-banana": 8,
-        # Video models
+        "nano-banana-pro": 12,
+        "imagen-4": 11,
         "kling-v2.5-pro": 120,
         "kling-v2.1-standard": 90,
+        "kling-2.5-turbo": 90,
+        "kling-2.1-pro": 70,
+        "kling-2.1-master": 80,
         "seedance-2.0-fast": 30,
         "seedance-2.0": 60,
         "wan-2.6": 60,
         "veo-3": 180,
-        # Legacy mappings
         "openai/gpt-5.4-image": 15,
         "openai/dall-e-3": 15,
         "bytedance/seedart": 10,
@@ -900,10 +1036,35 @@ def _estimate_time_and_cost(media_type: str, model: str, duration: int) -> tuple
         "kling/video-v2": 60,
     }
 
-    credits = CREDIT_MAP.get(model, 5)
-    base_time = TIME_MAP.get(model, 30)
+    credits = CREDIT_MAP.get(model)
+    base_time = TIME_MAP.get(model)
+    is_video = (media_type or "") == "video" or "video" in (model or "") or "seedance" in (model or "") or "kling" in (model or "") or "veo" in (model or "") or "wan" in (model or "")
+    try:
+        from app.api.models_info import MODELS
+        info = next((m for m in MODELS if m.id == model), None)
+        if info is not None:
+            caps = info.capabilities
+            is_video = "video" in (caps.media_types or []) or media_type == "video"
+            if credits is None:
+                credits = caps.cost_per_5s_video_credits if is_video else caps.cost_per_image_credits
+            if base_time is None:
+                base_time = caps.avg_latency_s
+    except Exception:
+        pass
 
-    if media_type == "video":
-        multiplier = max(1, duration // 5)
-        return base_time * multiplier, credits * multiplier
-    return base_time, credits
+    credits = int(credits if credits is not None else (4 if is_video else 5))
+    base_time = int(base_time if base_time is not None else (60 if is_video else 15))
+    n = max(1, int(count or 1))
+
+    if is_video:
+        multiplier = max(1, (int(duration or 5) + 4) // 5)
+        eta, cost = base_time * multiplier * n, credits * multiplier * n
+    else:
+        eta, cost = base_time * n, credits * n
+
+    lipsync_on = bool(lipsync_text and str(lipsync_text).strip())
+    if lipsync_on:
+        from app.services.entitlements import LIPSYNC_DEMO_COST
+        cost += LIPSYNC_DEMO_COST
+        eta += 45
+    return eta, cost, lipsync_on

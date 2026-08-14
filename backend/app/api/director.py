@@ -29,6 +29,24 @@ from app.services.director_brain import ideate as brain_ideate, refine_with_llm
 router = APIRouter()
 
 
+async def _user_role(db: AsyncSession, user_id: int) -> str:
+    row = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    return (row.role if row else "guest") or "guest"
+
+
+async def _acquire_director_slot(db: AsyncSession, user_id: int, job_id: str) -> None:
+    """One director job counts as one user-level concurrent slot (plan 4/6/10/40)."""
+    from app.services.concurrency import (
+        acquire_slot, ConcurrencyLimitError, concurrency_http_exception,
+    )
+    try:
+        await acquire_slot(
+            db, user_id=user_id, slot_id=f"director:{job_id}", role=await _user_role(db, user_id),
+        )
+    except ConcurrencyLimitError as e:
+        raise concurrency_http_exception(e)
+
+
 def _dry_run_default() -> bool:
     """Preview-only when explicitly forced OR no provider keys are configured.
     When real models are available, default to real execution (client can still
@@ -225,8 +243,11 @@ async def run_storyboard(
     dry = _dry_run_default() if req.dry_run is None else req.dry_run
     await _charge_director_plan(db, user_id, plan, team_id=resolve_team_id(request), dry_run=dry)
 
+    from app.services.concurrency import concurrency_limit
+    shot_cap = concurrency_limit(await _user_role(db, user_id))
+
     if not req.async_mode:
-        executor = DirectorExecutor(dry_run=dry)
+        executor = DirectorExecutor(dry_run=dry, video_concurrency=shot_cap)
         assets, last = [], None
         async for ev in executor.run_stream(plan):
             last = ev
@@ -238,6 +259,8 @@ async def run_storyboard(
         }
 
     job_id = uuid.uuid4().hex
+    if not dry:
+        await _acquire_director_slot(db, user_id, job_id)
     from app.tasks.director_tasks import run_director, write_progress
     write_progress(job_id, {
         "job_id": job_id, "status": "queued", "done": False, "dry_run": dry,
@@ -547,6 +570,8 @@ async def run_plan_async(
     if session_uid:
         await _owned_session(db, session_uid, user_id)
     job_id = uuid.uuid4().hex
+    if not dry:
+        await _acquire_director_slot(db, user_id, job_id)
     from app.tasks.director_tasks import run_director, write_progress
     # Seed a 'queued' snapshot so the first poll always returns something.
     write_progress(job_id, {

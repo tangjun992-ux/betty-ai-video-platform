@@ -38,7 +38,7 @@ interface CommandItem {
 
 const ITEMS: CommandItem[] = [
   // ── Navigation ──
-  { group: "导航", icon: Home, label: "首页", shortcut: "G H", href: "/" },
+  { group: "导航", icon: Home, label: "首页", shortcut: "G H", href: "/dashboard" },
   { group: "导航", icon: Sparkles, label: "探索", shortcut: "G G", href: "/explore" },
   { group: "导航", icon: FolderOpen, label: "我的资产库", shortcut: "G L", href: "/library" },
   { group: "导航", icon: CreditCard, label: "定价", shortcut: "G P", href: "/pricing" },
