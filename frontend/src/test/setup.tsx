@@ -46,14 +46,27 @@ vi.mock("framer-motion", () => ({
   useTransform: () => 0,
 }));
 
-// Mock lucide-react — any icon name renders a span so new icons don't break tests
+// Mock lucide-react — named exports required by Vitest 4; data-testid for cosmic tests
 vi.mock("lucide-react", () => {
-  const handler: ProxyHandler<any> = {
-    get: (_target, prop: string) => {
-      if (prop === "__esModule") return true;
-      return (props: any) =>
-        React.createElement("span", { "data-testid": `icon-${String(prop).toLowerCase()}`, ...props });
-    },
-  };
-  return new Proxy({}, handler);
+  const iconNames = [
+    "Sparkles", "ImageIcon", "Image", "Video", "VideoIcon", "Send", "X", "Wand2", "Upload",
+    "ImagePlus", "Bot", "Zap", "Star", "ArrowRight", "ChevronRight",
+    "ChevronDown", "ChevronLeft", "Loader2", "Search", "Menu",
+    "Sun", "Moon", "User", "Settings", "LogIn", "LogOut", "Home",
+    "Film", "Music", "Mic", "Scissors", "Maximize2", "Expand", "Camera",
+    "Palette", "Layers", "RefreshCw", "Play", "GripHorizontal",
+    "Plus", "Lightbulb", "Link2", "Info", "SlidersHorizontal",
+    "Grid3X3", "Gauge", "Crown", "Settings2", "ExternalLink",
+    "Clock", "Download", "CheckCircle2", "XCircle", "AlertTriangle", "Timer", "Award",
+    "TrendingUp", "Users", "FolderOpen", "FolderKanban", "LayoutDashboard",
+    "Compass", "Library", "Rss", "MessageSquare", "AudioLines",
+    "CircleDollarSign", "PanelLeft", "Languages", "ArrowUp",
+  ];
+
+  const exports: Record<string, any> = {};
+  for (const name of iconNames) {
+    exports[name] = (props: any) =>
+      React.createElement("span", { "data-testid": `icon-${name.toLowerCase()}`, ...props });
+  }
+  return exports;
 });
