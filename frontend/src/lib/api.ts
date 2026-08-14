@@ -382,6 +382,9 @@ export interface PhotoPack {
   variation_count: number;
   variations: { label: string }[];
   model: string;
+  preferred_model?: string;
+  cost_per?: number;
+  honesty?: string;
 }
 
 export async function listPhotoPacks(): Promise<PhotoPack[]> {
@@ -398,6 +401,24 @@ export interface PackBatch {
   dispatched: number;
   estimated_cost_credits: number;
   items: { task_id: string; label: string; status: string; error?: string }[];
+}
+
+export async function quotePack(req: {
+  pack_id: string; count?: number; model?: string;
+}): Promise<{
+  pack_id: string; count: number; cost_per: number; estimated_cost_credits: number;
+  resolved_model: string; preferred_model: string; affordable?: boolean;
+  available_credits?: number; honesty: string;
+}> {
+  const params = new URLSearchParams({ pack_id: req.pack_id });
+  if (req.count) params.set("count", String(req.count));
+  if (req.model) params.set("model", req.model);
+  const res = await fetch(`${API_BASE}/generate/pack/quote?${params}`, { headers: apiAuthHeaders() });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `套系报价失败: ${res.status}`);
+  }
+  return res.json();
 }
 
 export async function generatePack(req: {
@@ -614,10 +635,15 @@ export async function getReceipt(orderNo: string): Promise<any> {
   if (!res.ok) throw new Error(`加载收据失败: ${res.status}`);
   return res.json();
 }
-export async function checkout(kind: "plan" | "pack", id: string, cycle: "monthly" | "yearly" = "monthly"): Promise<any> {
+export async function checkout(
+  kind: "plan" | "pack" | "team_seats",
+  id: string,
+  cycle: "monthly" | "yearly" = "monthly",
+  extra?: { credits?: number; team_id?: string; quantity?: number },
+): Promise<any> {
   const res = await fetch(`${API_BASE}/billing/checkout`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind, id, cycle }),
+    body: JSON.stringify({ kind, id, cycle, ...(extra || {}) }),
   });
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));

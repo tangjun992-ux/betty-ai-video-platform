@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { Upload, Video, Image, Play, ArrowRight, RefreshCw, CheckCircle, Lightbulb } from "lucide-react";
+import { Upload, Video, Image, Play, ArrowRight, RefreshCw, CheckCircle, Lightbulb, Mic } from "lucide-react";
 import { useCreationStore } from "@/lib/stores";
 import { API_BASE, type TaskResult } from "@/lib/api";
 import { CapabilityNotice } from "@/components/CapabilityNotice";
@@ -66,6 +66,8 @@ export default function MotionControlPage() {
   const [result, setResult] = useState<TaskResult | null>(null);
   const [tier, setTier] = useState<"demo" | "studio">("demo");
   const [demoMode, setDemoMode] = useState(false);
+  const [voiceText, setVoiceText] = useState("");
+  const [voiceOn, setVoiceOn] = useState(false);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
@@ -170,6 +172,7 @@ export default function MotionControlPage() {
           prompt: prompt || undefined,
           style: selectedStyle,
           tier,
+          voice_text: voiceOn && voiceText.trim() ? voiceText.trim() : undefined,
         }),
       });
       if (!res.ok) {
@@ -417,6 +420,27 @@ export default function MotionControlPage() {
               className="w-full rounded-xl bg-cosmic-subtle border border-cosmic-border px-4 py-3 text-sm text-text-accent-cyan placeholder:text-text-secondary/50 focus:outline-none focus:border-accent-cyan/40 resize-none"
             />
           </motion.div>
+
+          <div className="rounded-xl border border-cosmic-border p-3" data-testid="motion-voice-honesty">
+            <label className="flex items-center gap-2 text-sm text-text-primary">
+              <input type="checkbox" checked={voiceOn} onChange={(e) => setVoiceOn(e.target.checked)} />
+              <Mic className="w-4 h-4" />
+              附加 TTS 旁白
+            </label>
+            <p className="text-[11px] text-text-tertiary mt-1">
+              生成后叠一层配音。这是 TTS 旁白，不是实时变声 / RVC / Voice Changer。
+            </p>
+            {voiceOn && (
+              <textarea
+                data-testid="motion-voice-text"
+                value={voiceText}
+                onChange={(e) => setVoiceText(e.target.value)}
+                placeholder="旁白文案（将走 Edge/ElevenLabs TTS）"
+                rows={2}
+                className="mt-2 w-full rounded-lg bg-cosmic-subtle border border-cosmic-border px-3 py-2 text-sm resize-none"
+              />
+            )}
+          </div>
 
           {submitting && (
             <motion.div

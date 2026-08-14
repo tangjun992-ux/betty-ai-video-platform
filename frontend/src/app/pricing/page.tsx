@@ -36,15 +36,15 @@ const PLAN_FEATURES: Record<string, { zh: string[]; en: string[] }> = {
 // 第 4 档 Max：credits 滑块
 const MAX_TIERS = [
   { credits: 15000, monthly: 99.99, yearly: 79.99 },
-  { credits: 22500, monthly: 139.99, yearly: 111.99 },
+  { credits: 22500, monthly: 149.99, yearly: 119.99 },
   { credits: 37500, monthly: 219.99, yearly: 175.99 },
   { credits: 75000, monthly: 399.99, yearly: 319.99 },
   { credits: 150000, monthly: 749.99, yearly: 599.99 },
 ];
 
 const MAX_FEATURES = {
-  zh: ["全部已验证模型 + 实验室抢先体验", "最高并发 · 高分辨率", "无限团队座位", "API + Webhook", "专属客户经理 · SLA"],
-  en: ["All verified models + Lab early access", "Highest concurrency · high resolution", "Unlimited team seats", "API + Webhooks", "Dedicated CSM · SLA"],
+  zh: ["全部已验证模型 + 实验室抢先体验", "最高并发 · 高分辨率", "可加购团队席位（非无限）", "API + Webhook", "专属客户经理 · SLA"],
+  en: ["All verified models + Lab early access", "Highest concurrency · high resolution", "Team seats (add-on, not unlimited)", "API + Webhooks", "Dedicated CSM · SLA"],
 };
 
 const CREDIT_USAGE = [
@@ -83,7 +83,7 @@ const PRICING_UI = {
     mostPopular: "最受欢迎", bestValue: "超值之选", choose: (n: string) => `选择 ${n}`, chooseMax: "选择 Max",
     usageTitle: "Credits 消耗参考", th: ["模型", "类型", "规格", "Credits"], image: "图片", video: "视频",
     usageNote: "生成前始终显示精确 Credits 成本；实际消耗随模型与时长浮动",
-    faqTitle: "常见问题", addonTitle: "积分加购包（Max 专属）",
+    faqTitle: "常见问题", addonTitle: "一次性积分包",
     paidTitle: "订阅成功", paidDesc: "积分已到账",
   },
   en: {
@@ -93,7 +93,7 @@ const PRICING_UI = {
     mostPopular: "Most Popular", bestValue: "Best Value", choose: (n: string) => `Choose ${n}`, chooseMax: "Choose Max",
     usageTitle: "Credit usage reference", th: ["Model", "Type", "Spec", "Credits"], image: "Image", video: "Video",
     usageNote: "The exact credit cost is always shown before generating; actual usage varies by model and duration.",
-    faqTitle: "Frequently asked questions", addonTitle: "Credit top-up packs (Max)",
+    faqTitle: "Frequently asked questions", addonTitle: "One-time credit packs",
     paidTitle: "Subscribed", paidDesc: "Credits added",
   },
 };
@@ -108,11 +108,27 @@ export default function PricingPage() {
   const [yearly, setYearly] = useState(false);
   const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
   const [stripeEnabled, setStripeEnabled] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [maxIdx, setMaxIdx] = useState(1);
+  const [maxTiers, setMaxTiers] = useState(MAX_TIERS);
+  const [creditPacks, setCreditPacks] = useState<Array<{ id: string; name: string; credits: number; price_usd: number }>>([]);
+  const maxTier = maxTiers[Math.min(maxIdx, maxTiers.length - 1)] || MAX_TIERS[1];
 
   useEffect(() => {
     fetch(`${API_BASE}/billing/stripe-status`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d && typeof d.api_key_configured === "boolean") setStripeEnabled(d.api_key_configured); })
+      .catch(() => {});
+    fetch(`${API_BASE}/pricing/plans`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const max = (d?.plans || []).find((p: any) => p.id === "max");
+        if (Array.isArray(max?.max_tiers) && max.max_tiers.length) setMaxTiers(max.max_tiers);
+      })
+      .catch(() => {});
+    fetch(`${API_BASE}/billing/credit-packs`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (Array.isArray(d?.packs)) setCreditPacks(d.packs); })
       .catch(() => {});
   }, []);
 
@@ -123,7 +139,8 @@ export default function PricingPage() {
     if (locale === "en" || stripeEnabled) {
       setBusy(planId);
       try {
-        await checkout("plan", planId, yearly ? "yearly" : "monthly");
+        await checkout("plan", planId, yearly ? "yearly" : "monthly",
+          planId === "max" ? { credits: maxTier.credits } : undefined);
       } catch (e: any) {
         toast.error(locale === "en" ? "Checkout failed" : "结算失败", e?.message || "");
       } finally {
@@ -133,9 +150,20 @@ export default function PricingPage() {
     }
     setPayTarget({ kind: "plan", id: planId, cycle: yearly ? "yearly" : "monthly" });
   };
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
-  const [maxIdx, setMaxIdx] = useState(1);
-  const maxTier = MAX_TIERS[maxIdx];
+  const buyPack = async (packId: string) => {
+    if (locale === "en" || stripeEnabled) {
+      setBusy(packId);
+      try {
+        await checkout("pack", packId);
+      } catch (e: any) {
+        toast.error(locale === "en" ? "Checkout failed" : "结算失败", e?.message || "");
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
+    setPayTarget({ kind: "pack", id: packId });
+  };
   const fmt = (n: number) => `$${n.toFixed(2)}`;
 
   return (
@@ -221,11 +249,12 @@ export default function PricingPage() {
           {yearly && <p className="text-xs text-amber-600 mb-2">{L.billedYearly((maxTier.yearly * 12).toFixed(0))}</p>}
           <p className="text-sm text-text-secondary mb-3">{L.creditsMo(maxTier.credits.toLocaleString())}</p>
           {/* Slider */}
-          <input type="range" min={0} max={MAX_TIERS.length - 1} step={1} value={maxIdx}
+          <input type="range" min={0} max={maxTiers.length - 1} step={1} value={maxIdx}
+            data-testid="pricing-max-slider"
             onChange={(e) => setMaxIdx(+e.target.value)}
             className="w-full accent-amber-500 mb-1 cursor-pointer" />
           <div className="flex justify-between text-[10px] text-text-secondary mb-5">
-            {MAX_TIERS.map((t) => <span key={t.credits}>{t.credits >= 1000 ? `${t.credits / 1000}k` : t.credits}</span>)}
+            {maxTiers.map((t) => <span key={t.credits}>{t.credits >= 1000 ? `${t.credits / 1000}k` : t.credits}</span>)}
           </div>
           <ul className="space-y-2.5 mb-6 flex-1">
             {MAX_FEATURES[locale].map((f) => (
@@ -241,12 +270,23 @@ export default function PricingPage() {
           </button>
         </motion.div>
 
-        {/* 积分加购包（Max 专属） */}
+        {/* 一次性积分包（非 Max 专属；未注入 Stripe 无法收款） */}
         <div className="mt-8 text-center lg:col-span-4">
           <p className="text-sm text-text-secondary mb-3">{L.addonTitle}</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {["15k", "22k", "37k", "75k", "150k"].map(s => (
-              <span key={s} className="px-3 py-1.5 rounded-lg border border-cosmic-border text-sm text-text-secondary">{s} Credits</span>
+          <div className="flex flex-wrap justify-center gap-2" data-testid="pricing-credit-packs">
+            {(creditPacks.length ? creditPacks : [
+              { id: "pack_mini", name: "迷你包", credits: 500, price_usd: 4.99 },
+            ]).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                data-testid={`pricing-pack-${p.id}`}
+                onClick={() => buyPack(p.id)}
+                disabled={!!busy}
+                className="px-3 py-1.5 rounded-lg border border-cosmic-border text-sm text-text-secondary hover:text-text-primary hover:border-brand/40"
+              >
+                {p.credits >= 1000 ? `${p.credits / 1000}k` : p.credits} · ${p.price_usd}
+              </button>
             ))}
           </div>
         </div>

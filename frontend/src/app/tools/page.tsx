@@ -31,7 +31,7 @@ const ALL_TOOLS: Tool[] = [
   { icon: Video, label: "视频生成", desc: "文生/图生视频，多镜头叙事", href: "/create/video", color: "from-blue-400 to-blue-500", badge: "Hot", useCase: "短视频、广告", group: "video" },
   { icon: Mic, label: "唇形同步", desc: "Studio Lip-Syncing — 图+文/音频说话视频", href: "/create/lipsync", color: "from-purple-500 to-pink-500", badge: "Core", useCase: "虚拟主播、口播", group: "video" },
   { icon: User, label: "Talking Avatar", desc: "头像说话视频（图+音频优先）", href: "/create/avatar", color: "from-fuchsia-500 to-pink-600", useCase: "数字人、克隆", group: "video" },
-  { icon: Move, label: "运动控制", desc: "原生 Kling Motion Control（非 Act-One）", href: "/create/motion", color: "from-rose-500 to-red-600", badge: "Native", useCase: "舞蹈、动作复制", group: "video" },
+  { icon: Move, label: "运动控制", desc: "原生 Kling Motion + 可选 TTS 旁白（非变声）", href: "/create/motion", color: "from-rose-500 to-red-600", badge: "Native", useCase: "舞蹈、动作复制", group: "video" },
   { icon: Drama, label: "Performance Drive", desc: "Motion + 可选口播（≠ Act-One）", href: "/create/performance", color: "from-rose-600 to-orange-500", badge: "New", useCase: "表演驱动成片", group: "video" },
   { icon: Clapperboard, label: "时间轴编辑", desc: "片段编排、字幕与合成", href: "/create/timeline", color: "from-sky-500 to-blue-600", useCase: "后期成片", group: "video" },
   // Image
@@ -41,11 +41,11 @@ const ALL_TOOLS: Tool[] = [
   { icon: Maximize2, label: "AI 放大", desc: "2x/4x 超分", href: "/create/upscale", color: "from-blue-400 to-indigo-500", useCase: "打印、修复", group: "image" },
   { icon: Scissors, label: "背景移除", desc: "一键抠图透明 PNG", href: "/create/bg-remove", color: "from-emerald-500 to-teal-600", useCase: "电商素材", group: "image" },
   { icon: Layers, label: "扩图", desc: "智能外扩构图", href: "/create/extend", color: "from-amber-500 to-orange-600", useCase: "改构图", group: "image" },
-  { icon: Camera, label: "产品摄影", desc: "电商产品图专用工作流", href: "/create/product", color: "from-cyan-400 to-cyan-500", useCase: "电商", group: "image" },
-  { icon: User, label: "职业头像", desc: "Professional Headshots 提示词包", href: "/create/headshots", color: "from-indigo-400 to-violet-500", useCase: "名片/LinkedIn", group: "image" },
-  { icon: Grid3X3, label: "Photo Packs", desc: "成套提示词包一键开拍", href: "/create/photo-packs", color: "from-teal-400 to-cyan-500", badge: "New", useCase: "批量素材", group: "image" },
+  { icon: Camera, label: "产品摄影", desc: "电商产品图批量 SKU（白底/角度/场景）", href: "/create/product", color: "from-cyan-400 to-cyan-500", useCase: "电商", group: "image" },
+  { icon: User, label: "职业头像", desc: "Headshots 批量套系（商务/LinkedIn/证件）", href: "/create/headshots", color: "from-indigo-400 to-violet-500", useCase: "名片/LinkedIn", group: "image" },
+  { icon: Grid3X3, label: "Photo Packs", desc: "成套风格照片批量生成（独立任务）", href: "/create/photo-packs", color: "from-teal-400 to-cyan-500", badge: "New", useCase: "批量素材", group: "image" },
   // Audio / Utility
-  { icon: Music, label: "语音合成", desc: "Generate Audio — TTS 配音", href: "/create/audio", color: "from-orange-500 to-yellow-600", useCase: "配音、口播", group: "audio" },
+  { icon: Music, label: "语音合成", desc: "TTS 配音（非实时变声）", href: "/create/audio", color: "from-orange-500 to-yellow-600", useCase: "配音、口播", group: "audio" },
   { icon: FileSearch, label: "Prompt Extractor", desc: "从图片/视频反推提示词", href: "/create/extract", color: "from-teal-400 to-emerald-500", badge: "New", useCase: "复用爆款构图", group: "utility" },
 ];
 

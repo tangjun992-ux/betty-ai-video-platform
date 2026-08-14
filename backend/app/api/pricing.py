@@ -32,6 +32,20 @@ class PricingPlan(BaseModel):
     credit_tiers: Optional[list[int]] = None
 
 
+# Max slider source of truth (FE + checkout). Default Max = 22500 / $149.99.
+MAX_CREDIT_TIERS = [
+    {"credits": 15000, "monthly": 99.99, "yearly": 79.99},
+    {"credits": 22500, "monthly": 149.99, "yearly": 119.99},
+    {"credits": 37500, "monthly": 219.99, "yearly": 175.99},
+    {"credits": 75000, "monthly": 399.99, "yearly": 319.99},
+    {"credits": 150000, "monthly": 749.99, "yearly": 599.99},
+]
+
+
+def max_tier_for(credits: int) -> Optional[dict]:
+    return next((t for t in MAX_CREDIT_TIERS if int(t["credits"]) == int(credits)), None)
+
+
 def normalize_plan_id(plan_id: str) -> str:
     """Map legacy `pro` → `max` (Yapper naming)."""
     pid = (plan_id or "").strip().lower()
@@ -107,7 +121,7 @@ PLANS: list[PricingPlan] = [
         yearly_price=119.99,
         credits_per_month=22500,
         badge="Best Value",
-        credit_tiers=[15000, 22500, 37000, 75000, 150000],
+        credit_tiers=[t["credits"] for t in MAX_CREDIT_TIERS],
         features=[
             PlanFeature(name="Seedance 2.0 Omni 全模态视频", included=True),
             PlanFeature(name="已验证图片模型（含 Imagen / GPT Image）", included=True),
@@ -151,6 +165,8 @@ async def get_pricing_plans(cycle: str = "monthly"):
             row["credit_tiers"] = plan.credit_tiers
         if plan.id == "max":
             row["aliases"] = ["pro"]  # backward compat
+            row["max_tiers"] = MAX_CREDIT_TIERS
+            row["honesty"] = "滑块档位写入结算 credits；未注入 Stripe Key 时无法真实收款。"
         result.append(row)
     return {"plans": result, "cycle": cycle}
 

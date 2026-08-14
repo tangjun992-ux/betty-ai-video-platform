@@ -20,7 +20,7 @@ from app.db import get_db
 from app.models.billing import UserBalance, Transaction, TransactionType
 from app.models.payment_order import PaymentOrder
 from app.models.user import User
-from app.api.pricing import PLANS, get_plan, normalize_plan_id
+from app.api.pricing import PLANS, get_plan, normalize_plan_id, MAX_CREDIT_TIERS, max_tier_for
 from app.services.entitlements import plan_subscription_role, pick_higher_role, user_role
 from app.services.credits import grant_subscription_to_team_pool, apply_plan_credit_rollover, available_personal_credits
 from app.rate_limiter import rate_limit
@@ -92,6 +92,7 @@ class CheckoutRequest(BaseModel):
     cycle: str = Field("monthly", description="套餐计费周期 monthly|yearly")
     team_id: Optional[str] = Field(None, description="team_seats 购买时必填")
     quantity: int = Field(1, ge=1, le=50, description="席位购买数量倍数")
+    credits: Optional[int] = Field(None, description="Max 滑块档位（credits/月）")
 
 
 class PayCreateRequest(CheckoutRequest):
@@ -124,13 +125,23 @@ def _resolve_purchase(req: CheckoutRequest):
         plan = get_plan(req.id)
         if not plan:
             raise HTTPException(status_code=404, detail=f"套餐不存在: {req.id}")
-        price = plan.yearly_price if req.cycle == "yearly" else plan.monthly_price
         months = 12 if req.cycle == "yearly" else 1
+        extra: dict = {"plan_id": plan.id}
+        if plan.id == "max" and req.credits:
+            tier = max_tier_for(req.credits)
+            if not tier:
+                raise HTTPException(status_code=400, detail="Max 档位无效")
+            price = float(tier["yearly"] if req.cycle == "yearly" else tier["monthly"])
+            credits = int(tier["credits"]) * months
+            extra["max_tier_credits"] = int(tier["credits"])
+        else:
+            price = plan.yearly_price if req.cycle == "yearly" else plan.monthly_price
+            credits = plan.credits_per_month * months
         return (
-            plan.credits_per_month * months,
+            credits,
             round(price * months, 2),
             f"{plan.name}·{'年' if req.cycle=='yearly' else '月'}付",
-            {"plan_id": plan.id},
+            extra,
         )
     if req.kind == "pack":
         pack = next((p for p in CREDIT_PACKS if p["id"] == req.id), None)
@@ -152,6 +163,10 @@ def _stripe_line_item(req: CheckoutRequest, credits: int, price_usd: float, labe
         if not price_id and pid == "max":
             legacy = "STRIPE_PRICE_PRO_MONTHLY" if req.cycle == "monthly" else "STRIPE_PRICE_PRO_YEARLY"
             price_id = getattr(settings, legacy, "") or os.getenv(legacy, "")
+        # Slider amounts other than the default Max SKU cannot use a single Price ID.
+        default_max = next((t["credits"] for t in MAX_CREDIT_TIERS if t["credits"] == 22500), 22500)
+        if pid == "max" and req.credits and int(req.credits) != int(default_max):
+            price_id = ""
     elif req.kind == "team_seats":
         sku = TEAM_SEAT_SKUS.get(req.id) or {}
         env_key = sku.get("stripe_price_env", "")
@@ -174,7 +189,7 @@ def _stripe_line_item(req: CheckoutRequest, credits: int, price_usd: float, labe
 
 @router.get("/credit-packs", summary="一次性积分包")
 async def credit_packs():
-    return {"packs": CREDIT_PACKS, "team_seat_skus": TEAM_SEAT_SKUS}
+    return {"packs": CREDIT_PACKS, "team_seat_skus": TEAM_SEAT_SKUS, "max_tiers": MAX_CREDIT_TIERS}
 
 
 @router.get("/stripe-status", summary="Stripe 生产配置状态")

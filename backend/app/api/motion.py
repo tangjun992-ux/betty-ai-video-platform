@@ -55,6 +55,7 @@ class MotionResponse(BaseModel):
     estimated_time_seconds: int = 90
     estimated_cost_credits: int = 6
     poll_url: str = ""
+    honesty: str = "可选 TTS 旁白，非实时变声 / RVC / Voice Changer"
 
 
 # ─── Helpers ───────────────────────────────────────────
