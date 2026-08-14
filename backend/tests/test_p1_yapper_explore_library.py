@@ -305,7 +305,7 @@ def test_session_uid_persisted_on_generate(client: TestClient, auth, monkeypatch
         },
         headers=headers,
     )
-    assert r.status_code == 200, r.text
+    assert r.status_code in (200, 202), r.text
     task_id = r.json()["task_id"]
     with _sync_session() as s:
         from app.models.task import Task

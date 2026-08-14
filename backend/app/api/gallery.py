@@ -232,7 +232,7 @@ async def explore_gallery(
     style: str = Query(default="all"),
     media_type: str = Query(default="all"),
     sort: str = Query(default="popular"),
-    q: str = Query(default="", description="搜索 prompt / 模型 / 风格 / 作者"),
+    search: str = Query(default="", alias="q", description="搜索 prompt / 模型 / 风格 / 作者"),
     limit: int = Query(default=32, le=100),
     offset: int = Query(default=0),
     include_seed: bool = Query(default=False, description="开发环境可展示种子示例"),
@@ -242,24 +242,24 @@ async def explore_gallery(
     from app.config import settings
     show_seed = include_seed or not settings.is_production
     # Join User for real author fields (outer — guest/orphan tasks still show)
-    q = (
+    stmt = (
         select(Task, User)
         .outerjoin(User, Task.user_id == User.id)
         .where(Task.status == "completed")
     )
     if media_type != "all":
-        q = q.where(Task.media_type == media_type)
-    q = q.order_by(Task.completed_at.desc() if sort == "recent" else Task.created_at.desc())
-    q = q.limit(500)  # fetch more for filtering
+        stmt = stmt.where(Task.media_type == media_type)
+    stmt = stmt.order_by(Task.completed_at.desc() if sort == "recent" else Task.created_at.desc())
+    stmt = stmt.limit(500)  # fetch more for filtering
 
-    result = await db.execute(q)
+    result = await db.execute(stmt)
     rows = result.all()
 
     likes_map = await _stored_likes(db)
     views_map = await _stored_views(db)
     remixes_map = await _stored_remixes(db)
     hidden = await _hidden_keys(db)
-    needle = (q or "").strip().lower()
+    needle = (search or "").strip().lower()
 
     items = []
     filtered_count = 0
