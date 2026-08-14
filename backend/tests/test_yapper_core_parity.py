@@ -96,7 +96,8 @@ def test_prompt_extractor_heuristic(client: TestClient, auth_headers):
     assert body["prompt"]
     assert body["mode"] in ("vision", "heuristic")
     assert "honesty" in body
-    assert body["create_links"]["image"] == "/create/image"
+    assert body["create_links"]["image"].startswith("/create/image")
+    assert body.get("viral", {}).get("beats")
 
 
 def test_prompt_extractor_requires_media(client: TestClient, auth_headers):

@@ -8,9 +8,40 @@ import { API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
+type ViralBeat = { key: string; label: string; t: number; prompt: string; reason?: string };
+
+type Viral = {
+  platform?: string;
+  placement?: string;
+  placement_label?: string;
+  aspect?: string;
+  duration_sec?: number;
+  title?: string;
+  author?: string;
+  hook?: string;
+  beats?: ViralBeat[];
+  honesty?: string;
+  cta_hint?: string;
+};
+
+type ExtractResult = {
+  prompt: string;
+  mode: string;
+  style_tags?: string[];
+  subjects?: string[];
+  camera?: string;
+  mood?: string;
+  honesty?: string;
+  media_type_hint?: string;
+  social?: { platform?: string; title?: string; author?: string; source?: string };
+  viral?: Viral;
+  create_links?: { image?: string; video?: string; agent?: string };
+};
+
 /**
- * Prompt Extractor — Yapper parity utility.
- * Reverse-prompts from uploaded image/video via POST /generate/extract-prompt.
+ * Prompt Extractor + URL-to-Viral — Yapper parity utility.
+ * Reverse-prompts from upload/URL; social pages use official oEmbed where available.
+ * Viral beats are placement templates, not frame-by-frame reverse engineering.
  */
 export default function ExtractPage() {
   const toast = useToast();
@@ -18,17 +49,9 @@ export default function ExtractPage() {
   const [mediaUrl, setMediaUrl] = useState("");
   const [preview, setPreview] = useState("");
   const [previewKind, setPreviewKind] = useState<"image" | "video">("image");
+  const [targetPlatform, setTargetPlatform] = useState("auto");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<{
-    prompt: string;
-    mode: string;
-    style_tags?: string[];
-    subjects?: string[];
-    camera?: string;
-    mood?: string;
-    honesty?: string;
-    media_type_hint?: string;
-  } | null>(null);
+  const [result, setResult] = useState<ExtractResult | null>(null);
 
   const onUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -43,7 +66,7 @@ export default function ExtractPage() {
   const run = async () => {
     const url = mediaUrl.trim();
     if (!file && !url) {
-      toast.error("请上传媒体或粘贴链接", "支持文件/直链；YouTube 页可解析封面，TikTok/IG 尽力而为");
+      toast.error("请上传媒体或粘贴链接", "YouTube/TikTok 走官方 oEmbed；Instagram 请上传或直链");
       return;
     }
     setLoading(true);
@@ -56,6 +79,9 @@ export default function ExtractPage() {
         fd.append("media_url", url);
       }
       fd.append("media_kind", "auto");
+      if (targetPlatform && targetPlatform !== "auto") {
+        fd.append("target_platform", targetPlatform);
+      }
       const res = await fetch(`${API_BASE}/generate/extract-prompt`, {
         method: "POST",
         body: fd,
@@ -67,9 +93,15 @@ export default function ExtractPage() {
       }
       const data = await res.json();
       setResult(data);
+      const modeLabel =
+        data.mode === "vision" ? "Vision 提取完成"
+        : data.mode === "metadata" ? "元数据模板完成"
+        : "本地启发式提取完成";
       toast.success(
-        data.mode === "vision" ? "Vision 提取完成" : "本地启发式提取完成",
-        data.mode === "heuristic" ? "未走付费 vision，结果供起稿参考" : "可一键用于生成"
+        modeLabel,
+        data.mode === "heuristic" || data.mode === "metadata"
+          ? "未走付费 vision；分镜来自投放规格，不是原片逐帧反推"
+          : "可一键用于生成",
       );
     } catch (e: any) {
       toast.error("提取失败", e?.message || "请稍后重试");
@@ -85,13 +117,17 @@ export default function ExtractPage() {
   };
 
   const hint = result?.media_type_hint === "video" ? "video" : "image";
+  const videoHref = result?.create_links?.video || `/create/${hint}?prompt=${encodeURIComponent(result?.prompt || "")}`;
+  const agentHref = result?.create_links?.agent || `/agent?brief=${encodeURIComponent(result?.prompt || "")}`;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-10">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold gradient-text-static mb-2">Prompt Extractor</h1>
-        <p className="text-sm text-text-secondary max-w-xl">
-          从任意图片或视频反推可复用提示词——对标 Yapper Extractor。有 Key 时走 Vision，否则诚实本地启发式。
+        <h1 className="text-2xl md:text-3xl font-bold gradient-text-static mb-2">URL-to-Viral</h1>
+        <p className="text-sm text-text-secondary max-w-2xl">
+          从链接或文件反推提示词，并生成投放规格分镜（钩子 / 展开 / 收束）。
+          YouTube、TikTok 走官方 oEmbed（标题+封面）；Instagram 需上传或直链。
+          <span className="block mt-1 text-text-tertiary">不是原片下载，不是逐帧结构反推。</span>
         </p>
       </motion.div>
 
@@ -118,12 +154,13 @@ export default function ExtractPage() {
                 accept="image/*,video/*"
                 onChange={onUpload}
                 className="absolute inset-0 opacity-0 cursor-pointer"
+                data-testid="extract-file"
               />
             </div>
           </label>
 
           <label className="block">
-            <span className="text-sm font-medium mb-2 block">或粘贴直链 URL</span>
+            <span className="text-sm font-medium mb-2 block">或粘贴社媒 / 直链 URL</span>
             <input
               type="url"
               value={mediaUrl}
@@ -131,27 +168,45 @@ export default function ExtractPage() {
                 setMediaUrl(e.target.value);
                 if (e.target.value.trim()) setFile(null);
               }}
-              placeholder="https://…（直链，或 YouTube 页面链接）"
+              placeholder="YouTube / TikTok 页面，或图片直链"
               className="input-primary w-full"
+              data-testid="extract-url"
             />
-            <p className="text-[11px] text-text-tertiary mt-1.5">
-              YouTube 页面可解析封面后反推提示词；TikTok/IG 尽力而为（IP 封锁时诚实失败）。非完整视频搬运。
+            <p className="text-[11px] text-text-tertiary mt-1.5" data-testid="extract-url-honesty">
+              YouTube / TikTok：官方 oEmbed 封面+标题。Instagram / X：尽力而为，失败请上传文件。非完整视频搬运。
             </p>
+          </label>
+
+          <label className="block">
+            <span className="text-sm font-medium mb-2 block">投放规格（可选）</span>
+            <select
+              value={targetPlatform}
+              onChange={(e) => setTargetPlatform(e.target.value)}
+              className="input-primary w-full"
+              data-testid="extract-platform"
+            >
+              <option value="auto">自动（按链接识别，默认 TikTok 竖屏）</option>
+              <option value="tiktok">TikTok / 抖音 · 9:16</option>
+              <option value="youtube">YouTube Shorts · 9:16</option>
+              <option value="instagram">Instagram Reels · 9:16</option>
+              <option value="x">X / 竖屏短视频</option>
+            </select>
           </label>
 
           <button
             type="button"
             onClick={run}
             disabled={loading || (!file && !mediaUrl.trim())}
+            data-testid="extract-submit"
             className={cn(
               "w-full h-11 rounded-xl font-semibold inline-flex items-center justify-center gap-2 transition-colors",
               loading || (!file && !mediaUrl.trim())
                 ? "bg-white/10 text-text-secondary cursor-not-allowed"
-                : "bg-white text-black hover:bg-white/90"
+                : "bg-white text-black hover:bg-white/90",
             )}
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            {loading ? "提取中…" : "提取提示词"}
+            {loading ? "提取中…" : "提取结构"}
           </button>
         </div>
 
@@ -166,6 +221,7 @@ export default function ExtractPage() {
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs uppercase tracking-wide text-text-tertiary">
                   mode · {result.mode}
+                  {result.social?.platform ? ` · ${result.social.platform}` : ""}
                 </span>
                 <button
                   type="button"
@@ -175,6 +231,9 @@ export default function ExtractPage() {
                   <Copy className="w-3.5 h-3.5" /> 复制
                 </button>
               </div>
+              {result.social?.title && (
+                <p className="text-sm font-medium text-text-primary">{result.social.title}</p>
+              )}
               <p className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">{result.prompt}</p>
               {(result.style_tags?.length || 0) > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -185,20 +244,53 @@ export default function ExtractPage() {
                   ))}
                 </div>
               )}
+              {result.viral && (
+                <div
+                  className="rounded-xl border border-white/[0.08] bg-black/20 p-3 space-y-2"
+                  data-testid="extract-viral-panel"
+                >
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-text-tertiary">
+                    <span data-testid="extract-viral-placement">
+                      {result.viral.placement_label || result.viral.placement} · {result.viral.aspect} · {result.viral.duration_sec}s
+                    </span>
+                  </div>
+                  <ol className="space-y-2">
+                    {(result.viral.beats || []).map((b) => (
+                      <li key={b.key} className="text-xs leading-relaxed">
+                        <span className="text-text-tertiary mr-1">{b.label}</span>
+                        <span className="text-text-secondary">{b.prompt}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="text-[11px] text-text-tertiary leading-relaxed" data-testid="extract-viral-honesty">
+                    {result.viral.honesty}
+                  </p>
+                </div>
+              )}
               {result.honesty && (
-                <p className="text-[11px] text-text-tertiary leading-relaxed">{result.honesty}</p>
+                <p className="text-[11px] text-text-tertiary leading-relaxed" data-testid="extract-honesty">
+                  {result.honesty}
+                </p>
               )}
               <div className="flex flex-wrap gap-2 pt-2">
                 <Link
-                  href={`/create/${hint}?prompt=${encodeURIComponent(result.prompt)}`}
+                  href={videoHref}
+                  data-testid="extract-to-video"
                   className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-white text-black text-sm font-medium"
                 >
-                  {hint === "video" ? <Video className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
-                  用于生成
+                  <Video className="w-3.5 h-3.5" />
+                  一键成片
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
                 <Link
-                  href={`/agent?brief=${encodeURIComponent(result.prompt)}`}
+                  href={result.create_links?.image || `/create/image?prompt=${encodeURIComponent(result.prompt)}`}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-cosmic-border text-sm"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  用于出图
+                </Link>
+                <Link
+                  href={agentHref}
                   className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-cosmic-border text-sm"
                 >
                   交给 Agent

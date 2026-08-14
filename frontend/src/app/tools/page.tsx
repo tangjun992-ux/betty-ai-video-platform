@@ -46,14 +46,14 @@ const ALL_TOOLS: Tool[] = [
   { icon: Grid3X3, label: "Photo Packs", desc: "成套风格照片批量生成（独立任务）", href: "/create/photo-packs", color: "from-teal-400 to-cyan-500", badge: "New", useCase: "批量素材", group: "image" },
   // Audio / Utility
   { icon: Music, label: "语音合成", desc: "TTS 配音（非实时变声）", href: "/create/audio", color: "from-orange-500 to-yellow-600", useCase: "配音、口播", group: "audio" },
-  { icon: FileSearch, label: "Prompt Extractor", desc: "从图片/视频反推提示词", href: "/create/extract", color: "from-teal-400 to-emerald-500", badge: "New", useCase: "复用爆款构图", group: "utility" },
+  { icon: FileSearch, label: "URL-to-Viral", desc: "链接反推提示词 + 投放规格分镜（非原片搬运）", href: "/create/extract", color: "from-teal-400 to-emerald-500", badge: "New", useCase: "复用爆款结构", group: "utility" },
 ];
 
 const USE_CASES = [
   { icon: Camera, title: "电商卖家", desc: "产品图、抠图、扩图一站完成。", tools: ["产品摄影", "背景移除", "扩图"] },
   { icon: Video, title: "内容创作者", desc: "视频 + 唇形 + 头像 + 时间轴成片。", tools: ["视频生成", "唇形同步", "Talking Avatar"] },
   { icon: Sparkles, title: "广告团队", desc: "Agent 导演式多镜叙事 + 运动迁移。", tools: ["Yapper-style Agent", "运动控制", "时间轴编辑"] },
-  { icon: FileSearch, title: "灵感复用", desc: "Extractor 反推提示词再 Remix。", tools: ["Prompt Extractor", "图片生成", "视频生成"] },
+  { icon: FileSearch, title: "灵感复用", desc: "URL-to-Viral 反推提示词与分镜再 Remix。", tools: ["URL-to-Viral", "图片生成", "视频生成"] },
 ];
 
 type Tab = "all" | "agent" | "image" | "video" | "audio" | "utility";

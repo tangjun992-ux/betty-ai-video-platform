@@ -29,7 +29,7 @@ def test_capabilities_face_swap_and_performance(client):
     assert "face-swap" in (fs.get("api") or fs.get("path") or "")
     pe = feats["prompt_extractor"]["social_page_urls"]
     assert pe["youtube"] is True
-    assert pe["tiktok"] == "best_effort"
+    assert pe["tiktok"] == "oembed"
     pd = feats["performance_drive"]
     assert pd["mode"] == "motion_plus_optional_lipsync"
     assert "Act-One" in (pd.get("note") or "")

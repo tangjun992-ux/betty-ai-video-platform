@@ -43,6 +43,13 @@
 
 ---
 
+## P3 已落地
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **URL-to-Viral 结构** | TikTok **官方 oEmbed**（标题+封面）；`viral.beats` 钩子/展开/收束；`GET /generate/viral-spec`；一键成片带 `shot=` | `tests/test_p3_url_viral.py` |
+| **诚实边界** | 结构=投放规格+元数据，**不是**原片下载 / 逐帧反推；IG 仍 best-effort | capabilities `url_to_viral` + FE 诚实条 |
+
 ## 本轮测试总账
 
 ```
@@ -65,7 +72,7 @@ betty_internal_readiness              → ≈90
 
 1. Stripe/OIDC **密钥注入**（代码已就绪；本轮只加诚实条，不假装可收款）  
 2. 更多 KIE 模型 ID 校正后才能诚实扩 active（仍 9，不虚标）  
-3. URL-to-Viral 结构深化（TikTok/IG 合规）  
+3. URL-to-Viral：**oEmbed + 投放规格分镜已落地**；IG 仍需上传/直链；禁止宣称逐帧反推  
 4. Explore **真实社区规模**（搜索/remix/诚实密度已有；禁止 millions 话术）  
 5. Lipsync **周检 Beat**  
 6. Folders 仍是**标签目录**，不是嵌套文件系统 / 团队共享盘  
