@@ -107,28 +107,33 @@ export default function FaceSwapPage() {
       </div>
 
       {/* Viral prompt packs — style guidance only; still needs two user photos */}
-      <div className="mb-4">
-        <p className="text-xs text-text-secondary mb-2">风格模板（写入提示词，非 InsightFace 模板库）</p>
-        <div className="flex flex-wrap gap-2">
+      <div className="mb-4" data-testid="face-swap-templates">
+        <p className="text-xs text-text-secondary mb-2">玩法模板（写入提示词漏斗，非 InsightFace / Roop 像素换脸）</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
-            { id: "poster", label: "电影海报", text: "cinematic movie poster lighting, dramatic contrast, keep face identity from source, match target scene" },
-            { id: "linkedin", label: "职场证件", text: "professional headshot lighting, clean background blend, natural skin tone, keep source face identity" },
-            { id: "cyber", label: "赛博朋克", text: "cyberpunk neon rim light, futuristic atmosphere, keep source face identity on target body" },
-            { id: "comic", label: "漫画风", text: "stylized comic illustration blend, bold ink edges, keep recognizable source face on target" },
-            { id: "vintage", label: "复古胶片", text: "vintage film grain, warm color grade, soft vignette, preserve source facial features" },
+            { id: "poster", label: "电影海报", hint: "戏剧光影", text: "cinematic movie poster lighting, dramatic contrast, keep face identity from source, match target scene" },
+            { id: "linkedin", label: "职场证件", hint: "干净背景", text: "professional headshot lighting, clean background blend, natural skin tone, keep source face identity" },
+            { id: "cyber", label: "赛博朋克", hint: "霓虹轮廓", text: "cyberpunk neon rim light, futuristic atmosphere, keep source face identity on target body" },
+            { id: "comic", label: "漫画风", hint: "描边合成", text: "stylized comic illustration blend, bold ink edges, keep recognizable source face on target" },
+            { id: "vintage", label: "复古胶片", hint: "颗粒暖调", text: "vintage film grain, warm color grade, soft vignette, preserve source facial features" },
+            { id: "magazine", label: "杂志封面", hint: "时尚大片", text: "fashion magazine cover, studio key light, editorial retouch look, keep source face identity" },
+            { id: "shortcover", label: "短视频封面", hint: "高对比钩子", text: "viral short-video thumbnail, high contrast, punchy color, keep source face recognizable on target" },
+            { id: "holiday", label: "节日贺卡", hint: "氛围光", text: "festive greeting card lighting, warm bokeh, seasonal atmosphere, preserve source facial features" },
           ].map((t) => (
             <button
               key={t.id}
               type="button"
+              data-testid={`face-swap-template-${t.id}`}
               onClick={() => setPrompt(t.text)}
               className={cn(
-                "px-3 py-1.5 rounded-lg text-xs border transition-colors",
+                "text-left px-3 py-2.5 rounded-xl text-xs border transition-colors",
                 prompt === t.text
                   ? "border-brand bg-brand/10 text-brand"
                   : "border-cosmic-border text-text-secondary hover:border-brand/40",
               )}
             >
-              {t.label}
+              <span className="block font-semibold text-text-primary">{t.label}</span>
+              <span className="block text-[10px] text-text-secondary/80 mt-0.5">{t.hint}</span>
             </button>
           ))}
         </div>

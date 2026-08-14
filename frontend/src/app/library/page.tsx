@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, Download, Trash2, ImageIcon, Video, Grid3X3, List,
   Upload, Music, X, Link2, Sparkles, CheckCircle2, Clock, HardDrive, Cpu, FolderOpen, Star,
+  CheckSquare, Calendar, Folder,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { API_BASE } from "@/lib/api";
@@ -28,11 +29,14 @@ interface LibraryItem {
   created_at: string;
   favorited?: boolean;
   folder?: string | null;
+  task_id?: string | null;
+  tool?: string | null;
 }
 
 interface LibraryCounts {
   all: number; image: number; video: number; audio: number;
   upload: number; generated: number; favorite?: number;
+  today?: number; upscale?: number; motion?: number; lipsync?: number;
 }
 
 const MEDIA_ORIGIN = API_BASE.replace(/\/api\/v1$/, "");
@@ -140,6 +144,11 @@ export default function LibraryPage() {
   const [tab, setTab] = useState<(typeof TYPE_TABS)[number]["key"]>("all");
   const [source, setSource] = useState<(typeof SOURCE_TABS)[number]["key"]>("all");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [period, setPeriod] = useState<"all" | "today">("all");
+  const [tool, setTool] = useState<"all" | "upscale" | "motion" | "lipsync">("all");
+  const [folderFilter, setFolderFilter] = useState("");
+  const [folders, setFolders] = useState<string[]>([]);
+  const [multiSelect, setMultiSelect] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -159,17 +168,21 @@ export default function LibraryPage() {
     try {
       const params = new URLSearchParams({ media_type: tab, source, q: debouncedQ, limit: "96" });
       if (favoritesOnly) params.set("favorite", "true");
+      if (period === "today") params.set("period", "today");
+      if (tool !== "all") params.set("tool", tool);
+      if (folderFilter) params.set("folder", folderFilter);
       const res = await fetch(`${API_BASE}/library/?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setItems(data.items || []);
       setCounts(data.counts || null);
+      setFolders(Array.isArray(data.folders) ? data.folders : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally {
       setLoading(false);
     }
-  }, [tab, source, debouncedQ, favoritesOnly]);
+  }, [tab, source, debouncedQ, favoritesOnly, period, tool, folderFilter]);
 
   useEffect(() => { fetchLibrary(); }, [fetchLibrary]);
 
@@ -235,16 +248,22 @@ export default function LibraryPage() {
   const deleteItems = useCallback(async (ids: string[]) => {
     if (!ids.length) return;
     if (!window.confirm(`确定删除 ${ids.length} 项内容吗？此操作不可撤销。`)) return;
-    let ok = 0;
-    for (const id of ids) {
-      try {
-        const res = await fetch(`${API_BASE}/library/${encodeURIComponent(id)}`, { method: "DELETE" });
-        if (res.ok) ok += 1;
-      } catch { /* keep going */ }
+    try {
+      const res = await fetch(`${API_BASE}/library/batch-delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const ok = Number(data.ok || (data.deleted || []).length || 0);
+      if (ok > 0) toast.success(`已删除 ${ok} 项`);
+      if ((data.failed || []).length) toast.error(`${data.failed.length} 项删除失败`);
+    } catch {
+      toast.error("批量删除失败");
     }
-    if (ok > 0) toast.success(`已删除 ${ok} 项`);
-    if (ok < ids.length) toast.error(`${ids.length - ok} 项删除失败`);
     setSelected(new Set());
+    setMultiSelect(false);
     setDetail(null);
     fetchLibrary();
   }, [fetchLibrary, toast]);
@@ -280,9 +299,9 @@ export default function LibraryPage() {
   };
 
   const publishToExplore = async (item: LibraryItem) => {
-    const taskId = (item as any).task_id || (item.id?.includes("_") ? item.id.split("_")[0] : item.id);
+    const taskId = item.task_id || (item.id.startsWith("gen_") ? item.id.slice(4).replace(/_\d+$/, "") : "");
     if (!taskId) {
-      toast.error("无法发布", "缺少 task_id");
+      toast.error("无法发布", "缺少 task_id（仅生成作品可发布）");
       return;
     }
     try {
@@ -299,7 +318,47 @@ export default function LibraryPage() {
     return (counts as unknown as Record<string, number>)[key] ?? 0;
   };
 
-  const selectionMode = selected.size > 0;
+  const selectionMode = multiSelect || selected.size > 0;
+
+  const downloadSelected = () => {
+    Array.from(selected).forEach((id) => {
+      const it = items.find((x) => x.id === id);
+      if (!it?.url) return;
+      const a = document.createElement("a");
+      a.href = resolveUrl(it.url);
+      a.download = "";
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      a.click();
+    });
+  };
+
+  const publishSelected = async () => {
+    const ids = Array.from(selected).filter((id) => id.startsWith("gen_"));
+    if (!ids.length) {
+      toast.error("没有可发布的生成作品");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/library/batch-publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.ok) toast.success(`已发布 ${data.ok} 项到 Explore`);
+      if ((data.failed || []).length) toast.error(`${data.failed.length} 项发布失败`);
+    } catch {
+      toast.error("批量发布失败");
+    }
+  };
+
+  const TOOL_CHIPS = [
+    { key: "upscale" as const, label: "Upscales" },
+    { key: "motion" as const, label: "Motion Syncs" },
+    { key: "lipsync" as const, label: "Lip Syncs" },
+  ];
 
   return (
     <div
@@ -344,7 +403,22 @@ export default function LibraryPage() {
         <div className="flex items-center gap-2">
           {selectionMode ? (
             <>
-              <span className="text-sm text-text-secondary mr-1">{selected.size} 项已选</span>
+              <span className="text-sm text-text-secondary mr-1" data-testid="library-selected-count">{selected.size} 项已选</span>
+              <button
+                type="button"
+                onClick={downloadSelected}
+                className="px-3 py-2 rounded-lg border border-cosmic-border text-sm text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1.5"
+              >
+                <Download className="w-3.5 h-3.5" />
+                下载所选
+              </button>
+              <button
+                type="button"
+                onClick={publishSelected}
+                className="px-3 py-2 rounded-lg border border-cosmic-border text-sm text-text-secondary hover:text-text-primary transition-colors flex items-center gap-1.5"
+              >
+                发布所选
+              </button>
               <button
                 onClick={() => deleteItems(Array.from(selected))}
                 className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 text-sm hover:bg-red-500/20 transition-colors flex items-center gap-1.5"
@@ -353,21 +427,32 @@ export default function LibraryPage() {
                 删除所选
               </button>
               <button
-                onClick={() => setSelected(new Set())}
+                onClick={() => { setSelected(new Set()); setMultiSelect(false); }}
                 className="px-3 py-2 rounded-lg border border-cosmic-border text-sm text-text-secondary hover:text-text-primary transition-colors"
               >
                 取消
               </button>
             </>
           ) : (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              className="btn-primary disabled:opacity-60"
-            >
-              <Upload className="w-4 h-4" />
-              {uploading ? "上传中..." : t("library.cta")}
-            </button>
+            <>
+              <button
+                type="button"
+                data-testid="library-multi-select"
+                onClick={() => setMultiSelect(true)}
+                className="px-3 py-2 rounded-lg border border-cosmic-border text-sm text-text-secondary hover:text-text-primary transition-colors inline-flex items-center gap-1.5"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                Multi Select
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="btn-primary disabled:opacity-60"
+              >
+                <Upload className="w-4 h-4" />
+                {uploading ? "上传中..." : t("library.cta")}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -425,6 +510,20 @@ export default function LibraryPage() {
         </div>
         <button
           type="button"
+          data-testid="library-today"
+          onClick={() => setPeriod((v) => (v === "today" ? "all" : "today"))}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+            period === "today"
+              ? "border-accent-cyan/50 bg-accent-cyan/15 text-accent-cyan"
+              : "border-cosmic-border text-text-secondary hover:text-text-primary"
+          )}
+        >
+          <Calendar className="w-3.5 h-3.5" />
+          Today{typeof counts?.today === "number" ? ` ${counts.today}` : ""}
+        </button>
+        <button
+          type="button"
           onClick={() => setFavoritesOnly((v) => !v)}
           className={cn(
             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
@@ -436,6 +535,42 @@ export default function LibraryPage() {
           <Star className={cn("w-3.5 h-3.5", favoritesOnly && "fill-current")} />
           收藏{typeof counts?.favorite === "number" ? ` ${counts.favorite}` : ""}
         </button>
+        {TOOL_CHIPS.filter((c) => (counts?.[c.key] || 0) > 0).map((c) => (
+          <button
+            key={c.key}
+            type="button"
+            data-testid={`library-tool-${c.key}`}
+            onClick={() => setTool((v) => (v === c.key ? "all" : c.key))}
+            className={cn(
+              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+              tool === c.key
+                ? "border-accent-cyan/50 bg-accent-cyan/15 text-accent-cyan"
+                : "border-cosmic-border text-text-secondary hover:text-text-primary"
+            )}
+          >
+            {c.label} {counts?.[c.key]}
+          </button>
+        ))}
+        {folders.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <Folder className="w-3.5 h-3.5 text-text-secondary flex-shrink-0" />
+            {folders.map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFolderFilter((v) => (v === f ? "" : f))}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] border whitespace-nowrap",
+                  folderFilter === f
+                    ? "border-accent-cyan/50 text-accent-cyan bg-accent-cyan/10"
+                    : "border-cosmic-border text-text-secondary"
+                )}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-1 bg-cosmic-surface/30 rounded-lg p-1 ml-auto">
           <button
             aria-label="网格视图"
@@ -496,6 +631,9 @@ export default function LibraryPage() {
                   )}>
                     {item.source === "generated" ? "AI 生成" : "上传"}
                   </span>
+                  {item.tool && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-black/50 text-white/80">{item.tool}</span>
+                  )}
                 </div>
 
                 <button

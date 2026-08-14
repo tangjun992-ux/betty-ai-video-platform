@@ -24,6 +24,7 @@ interface GalleryItem {
   username: string;
   avatar: string;
   likes: number;
+  remixes?: number;
   views: number;
   is_seed?: boolean;
   is_demo?: boolean;
@@ -50,6 +51,7 @@ export default function GalleryPage() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [resFilter, setResFilter] = useState("all");
   const [durFilter, setDurFilter] = useState("all");
@@ -79,13 +81,23 @@ export default function GalleryPage() {
 
   const likeCount = useCallback((item: GalleryItem) => item.likes + (likeDelta[item.id] || 0), [likeDelta]);
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
   const fetchItems = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(
-        `${API_BASE}/gallery/?style=${style}&media_type=${mediaFilter}&sort=${sort}&limit=36`
-      );
+      const params = new URLSearchParams({
+        style,
+        media_type: mediaFilter,
+        sort,
+        limit: "36",
+      });
+      if (debouncedQ) params.set("q", debouncedQ);
+      const resp = await fetch(`${API_BASE}/gallery/?${params.toString()}`);
       if (!resp.ok) {
         throw new Error(
           resp.status === 404
@@ -106,7 +118,7 @@ export default function GalleryPage() {
     } finally {
       setLoading(false);
     }
-  }, [style, mediaFilter, sort]);
+  }, [style, mediaFilter, sort, debouncedQ]);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
 
@@ -118,7 +130,6 @@ export default function GalleryPage() {
 
   // ─── Render ───────────────────────────────────────────
 
-  const kw = query.trim().toLowerCase();
   const matchRes = (it: GalleryItem) =>
     resFilter === "all" ||
     (resFilter === "4k" && /4k|2160|3840/i.test(it.resolution || "")) ||
@@ -127,14 +138,7 @@ export default function GalleryPage() {
     durFilter === "all" ||
     (durFilter === "short" && (it.duration || 0) > 0 && (it.duration || 0) <= 5) ||
     (durFilter === "long" && (it.duration || 0) > 5);
-  const filtered = items.filter((it) => {
-    if (kw && !(
-      it.prompt.toLowerCase().includes(kw) ||
-      (it.model_used || "").toLowerCase().includes(kw) ||
-      (it.styles || []).some((s) => s.toLowerCase().includes(kw))
-    )) return false;
-    return matchRes(it) && matchDur(it);
-  });
+  const filtered = items.filter((it) => matchRes(it) && matchDur(it));
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-8">
@@ -170,6 +174,7 @@ export default function GalleryPage() {
         <div className="relative w-full max-w-md">
           <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" /></svg>
           <input
+            data-testid="explore-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜索案例：prompt、模型或风格..."
@@ -281,8 +286,8 @@ export default function GalleryPage() {
           <ErrorState message={error} onRetry={fetchItems} />
         ) : filtered.length === 0 ? (
           <Empty
-            title="还没有作品"
-            description="快去创作第一个吧！"
+            title={debouncedQ ? "没有匹配的案例" : "还没有作品"}
+            description={debouncedQ ? "换个关键词，或去创作并发布到 Explore" : "快去创作第一个吧！"}
             action={{ label: "开始创作", onClick: () => window.location.href = "/create/image" }}
           />
         ) : (
@@ -388,6 +393,9 @@ export default function GalleryPage() {
                             <span>{liked[item.id] ? "❤️" : "🤍"}</span> {likeCount(item)}
                           </button>
                           <span className="inline-flex items-center gap-1">👁 {item.views}</span>
+                          <span className="inline-flex items-center gap-1" title="做同款次数" data-testid="remix-count">
+                            ↻ {item.remixes || 0}
+                          </span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <a
@@ -408,6 +416,7 @@ export default function GalleryPage() {
                             href={remixFallbackHref}
                             onClick={goRemix}
                             className="inline-flex items-center gap-1 px-2.5 h-7 rounded-lg bg-white text-black text-[11px] font-semibold hover:bg-white/90 transition-colors"
+                            data-testid="remix-cta"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                             做同款
@@ -488,6 +497,7 @@ export default function GalleryPage() {
                     {liked[lightbox.id] ? "❤️" : "🤍"} {likeCount(lightbox)}
                   </button>
                   <span>👁 {lightbox.views}</span>
+                  <span title="做同款次数">↻ {lightbox.remixes || 0}</span>
                   <button
                     onClick={async () => {
                       try {
