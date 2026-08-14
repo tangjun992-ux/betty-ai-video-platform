@@ -122,6 +122,19 @@ export default function CreateVideoPage() {
     }
     const sess = params.get("session");
     if (sess) setSessionUid(sess);
+    const shotList = params.getAll("shot").map((s) => s.trim()).filter(Boolean);
+    if (shotList.length) {
+      setMultiShotMode(true);
+      setShots(shotList.map((text, i) => ({
+        id: uid(),
+        prompt: text,
+        label: i === 0 ? "钩子" : i === shotList.length - 1 ? "收束" : `镜头 ${i + 1}`,
+      })));
+    }
+    const dur = Number(params.get("duration") || 0);
+    if (dur >= 1 && dur <= 60) setDuration(dur);
+    const ar = params.get("aspect") || "";
+    if (["16:9", "9:16", "1:1", "4:3", "21:9"].includes(ar)) setAspectRatio(ar);
   }, [videoModels, setPrompt, setSelectedModel]);
 
   useEffect(() => {

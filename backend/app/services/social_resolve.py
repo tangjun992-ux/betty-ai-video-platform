@@ -1,8 +1,9 @@
-"""Resolve social *page* URLs to extractable media (thumbnail / direct file).
+"""Resolve social *page* URLs to extractable media (thumbnail / official metadata).
 
 Honesty rules:
-- YouTube: oEmbed thumbnail (reliable) or yt-dlp metadata thumbnail.
-- TikTok / Instagram / X: best-effort via yt-dlp; IP blocks → clear failure.
+- YouTube: official oEmbed thumbnail (reliable) or yt-dlp metadata thumbnail.
+- TikTok: official oEmbed (title + thumbnail) first — compliant, not a video download.
+- Instagram / X: best-effort via yt-dlp; IP blocks / login walls → clear failure.
 - Never invent media; callers must surface honesty fields to the UI.
 """
 from __future__ import annotations
@@ -50,10 +51,16 @@ def is_social_page_url(url: str) -> bool:
     return classify_social_platform(url) is not None
 
 
+_OEMBED_HEADERS = {
+    "User-Agent": "BettyStudio/1.0 (+https://github.com; URL-to-Viral oEmbed)",
+    "Accept": "application/json",
+}
+
+
 async def _youtube_oembed_thumbnail(url: str) -> Optional[dict[str, Any]]:
     api = "https://www.youtube.com/oembed"
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=_OEMBED_HEADERS) as client:
             r = await client.get(api, params={"url": url, "format": "json"})
             if r.status_code != 200:
                 return None
@@ -73,6 +80,40 @@ async def _youtube_oembed_thumbnail(url: str) -> Optional[dict[str, Any]]:
             }
     except Exception as e:
         logger.info("youtube oembed failed: %s", e)
+        return None
+
+
+async def _tiktok_oembed(url: str) -> Optional[dict[str, Any]]:
+    """Official TikTok oEmbed — title + thumbnail, never the original video stream."""
+    api = "https://www.tiktok.com/oembed"
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True, headers=_OEMBED_HEADERS) as client:
+            r = await client.get(api, params={"url": url})
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            thumb = (data.get("thumbnail_url") or "").strip()
+            title = (data.get("title") or "").strip()
+            author = (data.get("author_name") or "").strip()
+            if not thumb and not title:
+                return None
+            return {
+                "ok": True,
+                "platform": "tiktok",
+                "media_url": thumb,
+                "media_kind": "image" if thumb else None,
+                "title": title,
+                "author": author,
+                "thumbnail_width": data.get("thumbnail_width"),
+                "thumbnail_height": data.get("thumbnail_height"),
+                "source": "tiktok_oembed",
+                "honesty": (
+                    "TikTok 官方 oEmbed（标题+封面，非原片视频流）。"
+                    "用于投放规格分镜模板与封面反推，不是逐帧搬运。"
+                ),
+            }
+    except Exception as e:
+        logger.info("tiktok oembed failed: %s", e)
         return None
 
 
@@ -148,7 +189,24 @@ async def resolve_social_page_to_media(url: str) -> dict[str, Any]:
             "honesty": "YouTube 封面解析失败，请上传截图或粘贴图片直链。",
         }
 
-    if platform in ("tiktok", "instagram", "x", "facebook"):
+    if platform == "tiktok":
+        oembed = await _tiktok_oembed(url)
+        if oembed and oembed.get("ok") and (oembed.get("media_url") or oembed.get("title")):
+            return oembed
+        result = _yt_dlp_resolve(url, platform)
+        if result:
+            return result
+        return {
+            "ok": False,
+            "platform": "tiktok",
+            "honesty": (
+                "TikTok 官方 oEmbed 未返回标题/封面，yt-dlp 回落也失败"
+                "（常见原因：无效链接 / IP 封锁 / 需登录）。"
+                "请上传文件或粘贴可直链访问的图片/视频 URL。"
+            ),
+        }
+
+    if platform in ("instagram", "x", "facebook"):
         result = _yt_dlp_resolve(url, platform)
         if result:
             return result
@@ -156,7 +214,8 @@ async def resolve_social_page_to_media(url: str) -> dict[str, Any]:
             "ok": False,
             "platform": platform,
             "honesty": (
-                f"暂无法从 {platform} 页面稳定抓取媒体（常见原因：IP 封锁/需登录）。"
+                f"暂无法从 {platform} 页面稳定抓取媒体（无官方免登录 oEmbed；"
+                "常见原因：IP 封锁/需登录/需 App Token）。"
                 "请上传文件或粘贴可直链访问的图片/视频 URL。"
             ),
         }

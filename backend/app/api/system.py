@@ -88,16 +88,31 @@ async def capabilities():
             "prompt_extractor": {
                 "available": True,
                 "path": "/generate/extract-prompt",
-                "modes": ["vision", "heuristic"],
-                "note": "对标 Yapper Prompt Extractor；有 LLM Key 走 vision，否则诚实 heuristic。社媒页：YouTube oEmbed/yt-dlp 封面可解析；TikTok/IG 尽力而为（IP 封锁时诚实失败）。",
+                "modes": ["vision", "heuristic", "metadata"],
+                "note": (
+                    "对标 Yapper Prompt Extractor + URL-to-Viral。"
+                    "有 LLM Key 走 vision，否则诚实 heuristic。"
+                    "YouTube/TikTok 官方 oEmbed（标题+封面）；Instagram/X 尽力而为。"
+                    "结构模板来自投放规格，不是原片逐帧反推。"
+                ),
                 "social_page_urls": {
                     "youtube": True,
-                    "tiktok": "best_effort",
+                    "tiktok": "oembed",
                     "instagram": "best_effort",
                     "x": "best_effort",
                     "douyin": False,
                     "xiaohongshu": False,
                 },
+            },
+            "url_to_viral": {
+                "available": True,
+                "path": "/create/extract",
+                "api": ["/generate/extract-prompt", "/generate/viral-spec"],
+                "mode": "oembed_plus_placement_beats",
+                "note": (
+                    "官方 oEmbed 元数据 + 投放规格分镜（钩子/展开/收束）。"
+                    "不是原片下载，不是逐帧结构反推。IG 仍需上传或直链。"
+                ),
             },
             "talking_avatar": {
                 "available": True,

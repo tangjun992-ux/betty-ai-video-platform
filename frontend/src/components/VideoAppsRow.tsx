@@ -23,7 +23,7 @@ const APPS: AppCard[] = [
   { label: "动态控制", desc: "用参考视频 + 角色图精准引导运动", icon: Sparkles, gradient: "from-rose-500 to-orange-400", href: "/create/motion", tag: "Video" },
   { label: "数字人", desc: "图片 + 音频，一键生成说话数字人", icon: User, gradient: "from-emerald-600 to-teal-400", href: "/create/avatar", tag: "Video" },
   { label: "媒体放大", desc: "AI 超分辨率，2×/4× 画质提升", icon: Maximize2, gradient: "from-cyan-500 to-sky-400", href: "/create/upscale", tag: "Utility" },
-  { label: "提示词提取", desc: "从任意图片/视频反推可复用提示词", icon: ScanText, gradient: "from-amber-500 to-yellow-400", href: "/create/extract", tag: "Utility" },
+  { label: "URL-to-Viral", desc: "链接反推提示词 + 投放规格分镜（非原片搬运）", icon: ScanText, gradient: "from-amber-500 to-yellow-400", href: "/create/extract", tag: "Utility" },
   { label: "时间线编辑器", desc: "多片段剪辑、转场、字幕与配音合成", icon: Clapperboard, gradient: "from-slate-500 to-slate-400", href: "/create/timeline", tag: "Utility" },
 ];
 

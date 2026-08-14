@@ -412,6 +412,21 @@ async def list_photo_packs():
     }
 
 
+@router.get("/viral-spec", summary="URL-to-Viral 投放规格模板（无媒体）")
+async def viral_spec(platform: str = Query("tiktok", description="tiktok | youtube | instagram | x")):
+    from app.services.viral_structure import list_viral_platforms, platform_viral_spec
+
+    plat = (platform or "tiktok").strip().lower()
+    return {
+        "spec": platform_viral_spec(plat),
+        "platforms": list_viral_platforms(),
+        "honesty": (
+            "模板来自投放规格（画幅/时长/钩子-展开-收束），"
+            "不是原片逐帧反推。TikTok/YouTube 走官方 oEmbed。"
+        ),
+    }
+
+
 @router.get("/pack/quote", summary="Photo Pack 提交前报价（整批预检）")
 async def quote_photo_pack(
     pack_id: str = Query(..., description="Photo Pack id"),
@@ -892,8 +907,12 @@ async def quote_generation(
 
 @router.post(
     "/extract-prompt",
-    summary="Prompt Extractor（从图片/视频反推提示词）",
-    description="对标 Yapper Prompt Extractor：上传或提供媒体 URL，提取可复用生成提示词。",
+    summary="Prompt Extractor / URL-to-Viral（反推提示词 + 投放规格分镜）",
+    description=(
+        "对标 Yapper Prompt Extractor + URL-to-Viral："
+        "上传或提供媒体/社媒 URL，提取可复用提示词，并返回投放规格分镜模板。"
+        "TikTok/YouTube 走官方 oEmbed（标题+封面，非原片）。"
+    ),
     dependencies=[Depends(rate_limit("extract", rpm=20, rph=120))],
 )
 async def extract_prompt(
@@ -901,16 +920,22 @@ async def extract_prompt(
     media_file: Optional[UploadFile] = File(None),
     media_url: Optional[str] = Form(None),
     media_kind: Optional[str] = Form(None, description="image | video | auto"),
+    target_platform: Optional[str] = Form(
+        None, description="可选投放位：tiktok | youtube | instagram | x（文件上传时用于结构模板）"
+    ),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(resolve_user_id),
 ):
-    """Yapper-parity Prompt Extractor.
+    """Yapper-parity Prompt Extractor + URL-to-Viral structure.
 
     Vision LLM when keyed; otherwise honest local heuristic (never pretends vision succeeded).
+    Social pages: YouTube/TikTok official oEmbed; Instagram/X best-effort.
+    Viral beats = placement spec + title/cover metadata — not frame-by-frame reverse.
     Charges 1 credit only when vision mode succeeds.
     """
     from app.services.prompt_extract import extract_prompt_from_media, guess_media_kind
     from app.services.media_store import store_upload
+    from app.services.viral_structure import build_viral_structure, extract_from_social_metadata
 
     if not media_file and not (media_url and media_url.strip()):
         raise HTTPException(status_code=400, detail="请提供 media_file 或 media_url")
@@ -918,13 +943,15 @@ async def extract_prompt(
     filename = ""
     content_type = ""
     resolved_url = (media_url or "").strip()
-    # Social page URLs: resolve to thumbnail/media when possible (YouTube oEmbed / yt-dlp).
+    source_page_url = resolved_url
+    # Social page URLs: official oEmbed (YouTube/TikTok) or yt-dlp fallback.
     social_meta: dict = {}
+    metadata_only = False
     if resolved_url and not media_file:
         from app.services.social_resolve import is_social_page_url, resolve_social_page_to_media
         if is_social_page_url(resolved_url):
             social = await resolve_social_page_to_media(resolved_url)
-            if not social.get("ok") or not social.get("media_url"):
+            if not social.get("ok"):
                 raise HTTPException(
                     status_code=400,
                     detail=(
@@ -933,11 +960,15 @@ async def extract_prompt(
                     ),
                 )
             social_meta = social
-            resolved_url = social["media_url"]
-            if not media_kind or media_kind in ("", "auto"):
-                media_kind = social.get("media_kind") or "image"
-            filename = filename or f"{social.get('platform', 'social')}-thumb.jpg"
-            content_type = content_type or "image/jpeg"
+            if social.get("media_url"):
+                resolved_url = social["media_url"]
+                if not media_kind or media_kind in ("", "auto"):
+                    media_kind = social.get("media_kind") or "image"
+                filename = filename or f"{social.get('platform', 'social')}-thumb.jpg"
+                content_type = content_type or "image/jpeg"
+            else:
+                metadata_only = True
+                resolved_url = ""
     if media_file is not None:
         raw = await media_file.read()
         if not raw:
@@ -963,19 +994,26 @@ async def extract_prompt(
             dest.write_bytes(raw)
             resolved_url = f"/api/v1/media/uploads/{dest.name}"
 
-    kind = (media_kind or "").strip().lower()
-    if kind in ("", "auto"):
-        kind = guess_media_kind(resolved_url, content_type, filename)
-    if kind not in ("image", "video"):
-        raise HTTPException(status_code=400, detail="media_kind 须为 image | video | auto")
+    if metadata_only:
+        result = extract_from_social_metadata(
+            title=str(social_meta.get("title") or ""),
+            author=str(social_meta.get("author") or ""),
+            platform=str(social_meta.get("platform") or ""),
+        )
+    else:
+        kind = (media_kind or "").strip().lower()
+        if kind in ("", "auto"):
+            kind = guess_media_kind(resolved_url, content_type, filename)
+        if kind not in ("image", "video"):
+            raise HTTPException(status_code=400, detail="media_kind 须为 image | video | auto")
 
-    result = await extract_prompt_from_media(
-        resolved_url,
-        media_kind=kind,
-        filename=filename,
-        content_type=content_type,
-        prefer_vision=True,
-    )
+        result = await extract_prompt_from_media(
+            resolved_url,
+            media_kind=kind,
+            filename=filename,
+            content_type=content_type,
+            prefer_vision=True,
+        )
     if social_meta:
         result["social"] = {
             "platform": social_meta.get("platform"),
@@ -983,6 +1021,7 @@ async def extract_prompt(
             "title": social_meta.get("title"),
             "author": social_meta.get("author"),
             "resolved_media_url": social_meta.get("media_url"),
+            "duration": social_meta.get("duration"),
             "honesty": social_meta.get("honesty"),
         }
         # Preserve social honesty alongside vision/heuristic honesty
@@ -1012,7 +1051,31 @@ async def extract_prompt(
             await db.rollback()
 
     result["charged_credits"] = charged
-    result["create_links"] = {
+    platform_hint = (
+        (social_meta.get("platform") if social_meta else None)
+        or (target_platform or "").strip().lower()
+        or None
+    )
+    raw_dur = (social_meta or {}).get("duration")
+    try:
+        dur_val = int(float(raw_dur)) if raw_dur is not None else None
+    except (TypeError, ValueError):
+        dur_val = None
+    viral = build_viral_structure(
+        platform=platform_hint,
+        source_url=source_page_url,
+        title=str((social_meta or {}).get("title") or ""),
+        author=str((social_meta or {}).get("author") or ""),
+        prompt=str(result.get("prompt") or ""),
+        duration=dur_val,
+        style_tags=list(result.get("style_tags") or []),
+        camera=str(result.get("camera") or ""),
+        mood=str(result.get("mood") or ""),
+        thumbnail_url=str((social_meta or {}).get("media_url") or resolved_url or ""),
+        source=str((social_meta or {}).get("source") or ("upload" if media_file else "url")),
+    )
+    result["viral"] = viral
+    result["create_links"] = viral.get("create_query") or {
         "image": "/create/image",
         "video": "/create/video",
         "agent": "/agent",
