@@ -26,8 +26,11 @@
 | **Explore 种子** | gallery seed（密度仍弱于 Yapper） | list≈32 / total≈72 |
 | **Explore 搜索 / Remix 漏斗** | `GET /gallery/?q=`；`gallery_remixes`；popular=`likes*2+remixes` | `tests/test_p1_yapper_explore_library.py` |
 | **My Library Today / Multi Select** | `period=today` · tool 筛 · batch-delete/publish · 显式 Multi Select | 同上 + FE vitest |
-| **Create Video Session** | `GenerateRequest.session_uid` + `SessionChip` | 同上 |
-| **Face Swap 模板漏斗** | 8 张玩法卡片（诚实 i2i，非 InsightFace） | FE vitest |
+| **Folders 目录** | `POST/PATCH/DELETE /library/folders` + `batch-folder`；空文件夹可存在 | `tests/test_p15_gap_folders_honesty.py` |
+| **Explore 诚实密度** | stats 拆 `seed_items` / `community_items`；禁 millions | 同上 |
+| **Create Video Session** | `GenerateRequest.session_uid` + `SessionChip` | `test_p1_yapper_explore_library.py` |
+| **Face Swap 模板漏斗** | 8 张玩法卡片 + `/face-swap/templates` + 内容库选图 | FE vitest + templates contract |
+| **Stripe 诚实条** | `stripe-status.honesty` + Pricing 横幅 | 同上 |
 
 ## P2 已落地（薄）
 
@@ -59,10 +62,11 @@ betty_internal_readiness              → ≈90
 
 ## 仍待（下一刀）
 
-1. Stripe/OIDC **密钥注入**（代码已就绪）  
-2. 更多 KIE 模型 ID 校正后才能诚实扩 active  
+1. Stripe/OIDC **密钥注入**（代码已就绪；本轮只加诚实条，不假装可收款）  
+2. 更多 KIE 模型 ID 校正后才能诚实扩 active（仍 9，不虚标）  
 3. URL-to-Viral 结构深化（TikTok/IG 合规）  
-4. Explore 内容密度继续拉升（搜索/remix 计数已有，缺规模）  
+4. Explore **真实社区规模**（搜索/remix/诚实密度已有；禁止 millions 话术）  
 5. Lipsync **周检 Beat**  
+6. Folders 仍是**标签目录**，不是嵌套文件系统 / 团队共享盘  
 
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 18+ 全开而无周检。

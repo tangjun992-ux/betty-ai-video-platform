@@ -189,9 +189,10 @@ depth_bonus:     12     # FaceSwap/Lipsync/Omni/YT/Performance 闭环加分
 | 差距 | 状态 | 下一刀 |
 |------|------|--------|
 | Lip-Sync 成片感 / 周检 | partial | Beat + studio/demo 分层话术 |
-| Explore 飞轮 | **partial** | 服务端 `q` 搜索 + remix 计数/`popular=likes*2+remixes`；密度仍远低于「millions」 |
-| My Library | **partial** | Today / Multi Select / tool 筛 / 批量删除发布；Folders 为标签而非完整文件系统 |
-| Face Swap 模板库 | **partial** | 8 个玩法模板卡片漏斗；仍为 i2i_edit，**勿宣称 InsightFace** |
+| Explore 飞轮 | **partial** | 搜索/remix 计数已有；stats 拆 seed vs community，**禁止 millions 话术** |
+| My Library | **partial** | Today / Multi Select / **Folders CRUD + 批量移入**（标签目录，非嵌套文件系统） |
+| Face Swap 模板库 | **partial** | 8 模板 API + 从内容库选图；仍为 i2i_edit，**勿宣称 InsightFace** |
+| Stripe / OIDC 注入 | open | 代码面诚实条；**本环境无 Key，不能虚标可收款** |
 | URL-to-Viral | partial | TikTok/IG 合规增强或产品诚实禁用 |
 | Performance 体验 | partial | 样片人物素材；勿 Act-One 话术 |
 

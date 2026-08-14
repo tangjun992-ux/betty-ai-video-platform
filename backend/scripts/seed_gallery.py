@@ -183,10 +183,21 @@ def main():
                 ),
                 {"k": item_key, "n": int(views)},
             )
+            session.execute(text(
+                "CREATE TABLE IF NOT EXISTS gallery_remixes (item_key TEXT PRIMARY KEY, remixes INTEGER NOT NULL DEFAULT 0)"
+            ))
+            remixes = max(0, int(likes) // 8)
+            session.execute(
+                text(
+                    "INSERT INTO gallery_remixes (item_key, remixes) VALUES (:k, :n) "
+                    "ON CONFLICT(item_key) DO UPDATE SET remixes = excluded.remixes"
+                ),
+                {"k": item_key, "n": remixes},
+            )
             created += 1
             print(f"  + [{created}/{len(SPECS)}] {media:5s} {style:12s} {prompt[:36]}")
         session.commit()
-        print(f"\nSeeded {created} gallery items (with likes/views).")
+        print(f"\nSeeded {created} gallery items (with likes/views/remixes).")
 
 
 if __name__ == "__main__":

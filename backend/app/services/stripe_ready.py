@@ -43,6 +43,11 @@ class StripeStatus:
     blockers: list[str]
 
     def public_dict(self) -> dict:
+        honesty = (
+            "可真实收款"
+            if self.subscription_ready
+            else "本环境未注入 Stripe Key / Price，订阅按钮无法真实收款。readiness.ok ≠ 生产可订阅。"
+        )
         return {
             "api_key_configured": self.api_key_configured,
             "webhook_secret_configured": self.webhook_secret_configured,
@@ -51,6 +56,7 @@ class StripeStatus:
             "subscription_ready": self.subscription_ready,
             "production_ok": self.production_ok,
             "blockers": self.blockers,
+            "honesty": honesty,
         }
 
 
