@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, text
+from sqlalchemy import select, func, text
 from sqlalchemy.orm.attributes import flag_modified
 from typing import Optional
 from app.db import get_db
@@ -356,8 +356,18 @@ async def explore_gallery(
 
     total = len(items)
     paged = items[offset:offset + limit]
-
-    return {"items": paged, "total": total, "limit": limit, "offset": offset, "styles": STYLE_OPTIONS}
+    seed_total = sum(1 for it in items if it.get("is_seed"))
+    community_total = total - seed_total
+    return {
+        "items": paged,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "styles": STYLE_OPTIONS,
+        "seed_total": seed_total,
+        "community_total": community_total,
+        "honesty": "含平台示例，非百万级社区资产。completed ≠ 公开。",
+    }
 
 
 async def _owned_completed_task(
@@ -599,19 +609,6 @@ async def gallery_stats(db: AsyncSession = Depends(get_db)):
     result = await db.execute(q)
     total_completed = result.scalar() or 0
 
-    # Count by media type
-    q_img = select(func.count()).select_from(Task).where(
-        and_(Task.status == "completed", Task.media_type == "image")
-    )
-    r_img = await db.execute(q_img)
-    total_images = r_img.scalar() or 0
-
-    q_vid = select(func.count()).select_from(Task).where(
-        and_(Task.status == "completed", Task.media_type == "video")
-    )
-    r_vid = await db.execute(q_vid)
-    total_videos = r_vid.scalar() or 0
-
     # Total credits consumed
     q_credits = select(func.sum(Transaction.amount)).where(
         Transaction.type == TransactionType.CONSUMPTION.value
@@ -619,10 +616,36 @@ async def gallery_stats(db: AsyncSession = Depends(get_db)):
     r_credits = await db.execute(q_credits)
     total_credits = abs(r_credits.scalar() or 0)
 
+    # Honest Explore density: seed vs explicitly published community (not all completed).
+    seed_items = 0
+    community_items = 0
+    public_images = 0
+    public_videos = 0
+    scan = await db.execute(
+        select(Task).where(Task.status == "completed").order_by(Task.created_at.desc()).limit(500)
+    )
+    for t in scan.scalars().all():
+        params = _safe_dict(t.parameters)
+        is_seed = _is_seed_item(params)
+        if not is_seed and not _is_share_public(params):
+            continue
+        if is_seed:
+            seed_items += 1
+        else:
+            community_items += 1
+        if (t.media_type or "") == "video":
+            public_videos += 1
+        else:
+            public_images += 1
+
     return {
-        "total_items": total_completed,
-        "total_images": total_images,
-        "total_videos": total_videos,
+        "total_items": seed_items + community_items,
+        "total_images": public_images,
+        "total_videos": public_videos,
         "total_credits_consumed": total_credits,
+        "completed_tasks": total_completed,
+        "seed_items": seed_items,
+        "community_items": community_items,
+        "honesty": "含平台示例，非百万级社区资产。completed ≠ 公开。",
         "style_options": STYLE_OPTIONS,
     }

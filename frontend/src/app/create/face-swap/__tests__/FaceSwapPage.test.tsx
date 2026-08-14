@@ -15,7 +15,7 @@ describe("Face Swap template funnel", () => {
     expect(screen.getByTestId("face-swap-template-poster")).toBeInTheDocument();
     expect(screen.getByTestId("face-swap-template-shortcover")).toBeInTheDocument();
     expect(screen.getByTestId("face-swap-template-holiday")).toBeInTheDocument();
-    expect(screen.getAllByText(/非 InsightFace/).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("face-swap-from-library-face")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("face-swap-template-cyber"));
     expect((screen.getByPlaceholderText(/可选：补充融合要求/) as HTMLTextAreaElement).value).toMatch(/cyberpunk/i);
   });

@@ -7,7 +7,11 @@ describe("Explore gallery P1", () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       const u = String(url);
       if (u.includes("/gallery/stats")) {
-        return { ok: true, json: async () => ({ total_images: 2, total_videos: 1, total_credits_consumed: 10 }) };
+        return { ok: true, json: async () => ({
+          total_images: 2, total_videos: 1, total_credits_consumed: 10,
+          seed_items: 2, community_items: 0,
+          honesty: "含平台示例，非百万级社区资产。completed ≠ 公开。",
+        }) };
       }
       return {
         ok: true,
@@ -44,7 +48,7 @@ describe("Explore gallery P1", () => {
     render(<GalleryPage />);
     expect(screen.getByTestId("explore-search")).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByText("探索")).toBeInTheDocument();
+      expect(screen.getByTestId("explore-honesty")).toBeInTheDocument();
     });
     fireEvent.change(screen.getByTestId("explore-search"), { target: { value: "neon" } });
     await waitFor(() => {

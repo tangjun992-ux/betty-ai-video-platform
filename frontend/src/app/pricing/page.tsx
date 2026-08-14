@@ -144,6 +144,14 @@ export default function PricingPage() {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
         <h1 className="text-3xl md:text-4xl font-display font-bold mb-3 text-text-accent-cyan">{t("pricing.title")}</h1>
         <p className="text-text-secondary max-w-lg mx-auto mb-8">{t("pricing.subtitle")}</p>
+        {!stripeEnabled && (
+          <p
+            data-testid="pricing-stripe-honesty"
+            className="max-w-xl mx-auto mb-6 text-xs text-amber-800 dark:text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-xl px-3 py-2"
+          >
+            本环境未注入 Stripe Key，订阅无法真实收款。readiness.ok ≠ 生产可订阅；货架仍以已验证 active 数为准，不虚标 18+/26+。
+          </p>
+        )}
         <div role="radiogroup" aria-label={L.cycleLabel} className="inline-flex items-center gap-3 p-1 rounded-full bg-cosmic-subtle border border-cosmic-border">
           <button role="radio" aria-checked={!yearly} onClick={() => setYearly(false)}
             className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${!yearly ? "bg-brand text-white shadow-button-glow" : "text-text-secondary hover:text-brand"}`}>{L.monthly}</button>

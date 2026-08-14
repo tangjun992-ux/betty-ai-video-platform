@@ -150,6 +150,13 @@ export default function GalleryPage() {
       >
         <h1 className="text-3xl font-bold mb-2 gradient-text-static">探索</h1>
         <p className="text-text-secondary">发现社区优质创作，一键做同款</p>
+        {stats?.honesty && (
+          <p className="text-[11px] text-text-tertiary mt-2" data-testid="explore-honesty">
+            {stats.honesty}
+            {typeof stats.seed_items === "number" ? ` · 示例 ${stats.seed_items}` : ""}
+            {typeof stats.community_items === "number" ? ` · 社区公开 ${stats.community_items}` : ""}
+          </p>
+        )}
         {stats && (
           <div className="flex justify-center gap-6 mt-4 text-sm text-text-secondary">
             <span className="inline-flex items-center gap-1.5">

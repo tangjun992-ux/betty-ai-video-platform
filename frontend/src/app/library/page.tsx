@@ -147,7 +147,8 @@ export default function LibraryPage() {
   const [period, setPeriod] = useState<"all" | "today">("all");
   const [tool, setTool] = useState<"all" | "upscale" | "motion" | "lipsync">("all");
   const [folderFilter, setFolderFilter] = useState("");
-  const [folders, setFolders] = useState<string[]>([]);
+  const [folders, setFolders] = useState<{ name: string; count: number }[]>([]);
+  const [newFolder, setNewFolder] = useState("");
   const [multiSelect, setMultiSelect] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -176,7 +177,7 @@ export default function LibraryPage() {
       const data = await res.json();
       setItems(data.items || []);
       setCounts(data.counts || null);
-      setFolders(Array.isArray(data.folders) ? data.folders : []);
+      setFolders(Array.isArray(data.folder_catalog) ? data.folder_catalog : (data.folders || []).map((n: string) => ({ name: n, count: 0 })));
     } catch (e) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally {
@@ -354,6 +355,79 @@ export default function LibraryPage() {
     }
   };
 
+  const moveSelectedToFolder = async (folder: string) => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    try {
+      const res = await fetch(`${API_BASE}/library/batch-folder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, folder }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.ok) toast.success(`已移入 ${folder || "未分组"}`);
+      setSelected(new Set());
+      setMultiSelect(false);
+      fetchLibrary();
+    } catch {
+      toast.error("移入文件夹失败");
+    }
+  };
+
+  const createFolder = async () => {
+    const name = newFolder.trim();
+    if (!name) return;
+    try {
+      const res = await fetch(`${API_BASE}/library/folders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setNewFolder("");
+      setFolderFilter(name);
+      toast.success(`已创建文件夹 ${name}`);
+      fetchLibrary();
+    } catch {
+      toast.error("创建文件夹失败");
+    }
+  };
+
+  const renameFolder = async () => {
+    const next = newFolder.trim();
+    if (!folderFilter || !next || next === folderFilter) return;
+    try {
+      const res = await fetch(`${API_BASE}/library/folders`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: folderFilter, rename: next }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setNewFolder("");
+      setFolderFilter(next);
+      toast.success(`已重命名为 ${next}`);
+      fetchLibrary();
+    } catch {
+      toast.error("重命名失败");
+    }
+  };
+
+  const deleteFolder = async () => {
+    if (!folderFilter) return;
+    try {
+      const res = await fetch(`${API_BASE}/library/folders?name=${encodeURIComponent(folderFilter)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast.success(`已删除文件夹 ${folderFilter}（条目未删）`);
+      setFolderFilter("");
+      fetchLibrary();
+    } catch {
+      toast.error("删除文件夹失败");
+    }
+  };
+
   const TOOL_CHIPS = [
     { key: "upscale" as const, label: "Upscales" },
     { key: "motion" as const, label: "Motion Syncs" },
@@ -419,6 +493,23 @@ export default function LibraryPage() {
               >
                 发布所选
               </button>
+              {folders.length > 0 && (
+                <select
+                  data-testid="library-move-folder"
+                  defaultValue=""
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v) moveSelectedToFolder(v);
+                    e.currentTarget.value = "";
+                  }}
+                  className="h-9 px-2 rounded-lg border border-cosmic-border bg-cosmic-surface text-sm"
+                >
+                  <option value="">移入文件夹…</option>
+                  {folders.map((f) => (
+                    <option key={f.name} value={f.name}>{f.name}</option>
+                  ))}
+                </select>
+              )}
               <button
                 onClick={() => deleteItems(Array.from(selected))}
                 className="px-3 py-2 rounded-lg bg-red-500/10 text-red-400 text-sm hover:bg-red-500/20 transition-colors flex items-center gap-1.5"
@@ -551,26 +642,61 @@ export default function LibraryPage() {
             {c.label} {counts?.[c.key]}
           </button>
         ))}
-        {folders.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <Folder className="w-3.5 h-3.5 text-text-secondary flex-shrink-0" />
-            {folders.map((f) => (
+        <div className="flex items-center gap-1.5 overflow-x-auto" data-testid="library-folders">
+          <Folder className="w-3.5 h-3.5 text-text-secondary flex-shrink-0" />
+          {folders.map((f) => (
+            <button
+              key={f.name}
+              type="button"
+              data-testid={`library-folder-${f.name}`}
+              onClick={() => setFolderFilter((v) => (v === f.name ? "" : f.name))}
+              className={cn(
+                "px-2.5 py-1 rounded-md text-[11px] border whitespace-nowrap",
+                folderFilter === f.name
+                  ? "border-accent-cyan/50 text-accent-cyan bg-accent-cyan/10"
+                  : "border-cosmic-border text-text-secondary"
+              )}
+            >
+              {f.name} {f.count}
+            </button>
+          ))}
+          <input
+            data-testid="library-new-folder"
+            value={newFolder}
+            onChange={(e) => setNewFolder(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") createFolder(); }}
+            placeholder="新建文件夹"
+            className="h-7 w-28 px-2 rounded-md text-[11px] bg-cosmic-surface border border-cosmic-border"
+          />
+          <button
+            type="button"
+            data-testid="library-create-folder"
+            onClick={createFolder}
+            className="px-2 py-1 rounded-md text-[11px] border border-cosmic-border text-text-secondary hover:text-text-primary"
+          >
+            新建
+          </button>
+          {folderFilter && (
+            <>
               <button
-                key={f}
                 type="button"
-                onClick={() => setFolderFilter((v) => (v === f ? "" : f))}
-                className={cn(
-                  "px-2.5 py-1 rounded-md text-[11px] border whitespace-nowrap",
-                  folderFilter === f
-                    ? "border-accent-cyan/50 text-accent-cyan bg-accent-cyan/10"
-                    : "border-cosmic-border text-text-secondary"
-                )}
+                data-testid="library-rename-folder"
+                onClick={renameFolder}
+                className="px-2 py-1 rounded-md text-[11px] border border-cosmic-border text-text-secondary hover:text-text-primary"
               >
-                {f}
+                重命名
               </button>
-            ))}
-          </div>
-        )}
+              <button
+                type="button"
+                data-testid="library-delete-folder"
+                onClick={deleteFolder}
+                className="px-2 py-1 rounded-md text-[11px] border border-red-400/40 text-red-400 hover:bg-red-500/10"
+              >
+                删除文件夹
+              </button>
+            </>
+          )}
+        </div>
         <div className="flex items-center gap-1 bg-cosmic-surface/30 rounded-lg p-1 ml-auto">
           <button
             aria-label="网格视图"

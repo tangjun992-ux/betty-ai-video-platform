@@ -32,6 +32,7 @@ AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".ogg"}
 MAX_IMAGE_SIZE = 10 * 1024 * 1024    # 10MB
 MAX_MEDIA_SIZE = 100 * 1024 * 1024   # 100MB (video/audio)
 MAX_FAVORITES = 500
+MAX_FOLDERS = 50
 
 
 def _user_meta(user: User) -> dict:
@@ -62,6 +63,58 @@ async def _save_favorites(db: AsyncSession, user: User, favorites: list[str]) ->
     meta["library"] = lib
     user.metadata_json = json.dumps(meta, ensure_ascii=False)
     await db.flush()
+
+
+def _folders_list(user: User) -> list[str]:
+    meta = _user_meta(user)
+    raw = (meta.get("library") or {}).get("folders") or []
+    names: list[str] = []
+    seen: set[str] = set()
+    for x in raw:
+        name = ""
+        if isinstance(x, str):
+            name = x.strip()[:80]
+        elif isinstance(x, dict):
+            name = str(x.get("name") or "").strip()[:80]
+        if name and name not in seen:
+            seen.add(name)
+            names.append(name)
+    return names
+
+
+async def _save_folders(db: AsyncSession, user: User, folders: list[str]) -> None:
+    meta = _user_meta(user)
+    lib = dict(meta.get("library") or {})
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for name in folders:
+        n = (name or "").strip()[:80]
+        if n and n not in seen:
+            seen.add(n)
+            cleaned.append(n)
+        if len(cleaned) >= MAX_FOLDERS:
+            break
+    lib["folders"] = cleaned
+    meta["library"] = lib
+    user.metadata_json = json.dumps(meta, ensure_ascii=False)
+    await db.flush()
+
+
+def _folder_catalog(user: User, items: list) -> list[dict]:
+    """Registry (incl. empty folders) union labels found on items."""
+    folder_counts: dict[str, int] = {}
+    for it in items:
+        fn = (it.get("folder") or "").strip()
+        if fn:
+            folder_counts[fn] = folder_counts.get(fn, 0) + 1
+    catalog: list[dict] = []
+    seen: set[str] = set()
+    for name in list(_folders_list(user)) + sorted(folder_counts.keys()):
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        catalog.append({"name": name, "count": int(folder_counts.get(name, 0))})
+    return catalog
 
 
 def _ext_media_type(ext: str) -> Optional[str]:
@@ -251,6 +304,7 @@ async def list_library(
         ]
 
     folder_q = folder.strip()
+    folder_catalog = _folder_catalog(user, items)
     if folder_q:
         items = [it for it in items if (it.get("folder") or "") == folder_q]
 
@@ -289,13 +343,13 @@ async def list_library(
 
     items.sort(key=lambda x: x["created_at"], reverse=(sort != "oldest"))
     total = len(items)
-    folders = sorted({it.get("folder") for it in items if it.get("folder")})
     return {
         "items": items[offset:offset + limit],
         "total": total,
         "counts": counts,
         "favorites": sorted(favs),
-        "folders": folders,
+        "folders": [f["name"] for f in folder_catalog],
+        "folder_catalog": folder_catalog,
         "limit": limit,
         "offset": offset,
     }
@@ -341,15 +395,21 @@ async def remove_favorite(
     return {"favorited": False, "id": item_id, "total": len(favs)}
 
 
-@router.patch("/{item_id}/folder", summary="设置文件夹标签")
-async def set_item_folder(
-    item_id: str,
-    folder: str = Query(default="", max_length=80),
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(resolve_user_id),
-):
-    """Assign a lightweight folder label (uploads + generated)."""
-    name = (folder or "").strip()[:80] or None
+class FolderCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+
+
+class FolderRename(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    rename: str = Field(..., min_length=1, max_length=80)
+
+
+class BatchFolder(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=100)
+    folder: str = Field(default="", max_length=80)
+
+
+async def _apply_folder(db: AsyncSession, item_id: str, user_id: int, name: Optional[str]) -> dict:
     if item_id.startswith("up_"):
         asset_id = item_id[3:]
         res = await db.execute(select(Asset).where(Asset.asset_id == asset_id, Asset.user_id == user_id))
@@ -357,7 +417,6 @@ async def set_item_folder(
         if not asset:
             raise HTTPException(status_code=404, detail="条目不存在")
         asset.folder = name
-        await db.commit()
         return _asset_item(asset, favorited=item_id in set(_favorites_list(await _load_user(db, user_id))))
     if item_id.startswith("gen_"):
         try:
@@ -373,12 +432,150 @@ async def set_item_folder(
         params["library_folder"] = name
         task.parameters = params
         flag_modified(task, "parameters")
-        await db.commit()
         items = _generated_items(task, favorites=set(_favorites_list(await _load_user(db, user_id))))
         if idx < 0 or idx >= len(items):
             raise HTTPException(status_code=404, detail="条目不存在")
         return items[idx]
     raise HTTPException(status_code=400, detail="无效的条目 ID")
+
+
+async def _relabel_folder(db: AsyncSession, user_id: int, old: str, new: Optional[str]) -> int:
+    changed = 0
+    res = await db.execute(select(Asset).where(Asset.user_id == user_id, Asset.folder == old))
+    for asset in res.scalars().all():
+        asset.folder = new
+        changed += 1
+    res = await db.execute(select(Task).where(Task.user_id == user_id, Task.status == "completed"))
+    for task in res.scalars().all():
+        params = _safe_dict(task.parameters)
+        if params.get("library_folder") == old:
+            params["library_folder"] = new
+            task.parameters = params
+            flag_modified(task, "parameters")
+            changed += 1
+    return changed
+
+
+@router.get("/folders", summary="文件夹目录（含空文件夹）")
+async def list_folders(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    user = await _load_user(db, user_id)
+    catalog = _folder_catalog(user, [])
+    return {"folders": catalog, "total": len(catalog)}
+
+
+@router.post("/folders", summary="新建文件夹")
+async def create_folder(
+    body: FolderCreate,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    name = body.name.strip()[:80]
+    if not name:
+        raise HTTPException(status_code=400, detail="文件夹名不能为空")
+    user = await _load_user(db, user_id)
+    folders = _folders_list(user)
+    if name in folders:
+        return {"name": name, "created": False, "folders": folders}
+    if len(folders) >= MAX_FOLDERS:
+        raise HTTPException(status_code=400, detail=f"文件夹上限 {MAX_FOLDERS}")
+    folders.append(name)
+    await _save_folders(db, user, folders)
+    await db.commit()
+    return {"name": name, "created": True, "folders": folders}
+
+
+@router.patch("/folders", summary="重命名文件夹")
+async def rename_folder(
+    body: FolderRename,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    old = body.name.strip()[:80]
+    new = body.rename.strip()[:80]
+    if not old or not new:
+        raise HTTPException(status_code=400, detail="文件夹名不能为空")
+    if old == new:
+        return {"name": new, "renamed": False}
+    user = await _load_user(db, user_id)
+    folders = _folders_list(user)
+    if new in folders and new != old:
+        raise HTTPException(status_code=409, detail="目标文件夹已存在")
+    folders = [new if x == old else x for x in folders]
+    if new not in folders:
+        folders.append(new)
+    await _save_folders(db, user, folders)
+    moved = await _relabel_folder(db, user_id, old, new)
+    await db.commit()
+    return {"name": new, "from": old, "renamed": True, "moved": moved, "folders": folders}
+
+
+@router.delete("/folders", summary="删除文件夹（条目移出，不删文件）")
+async def delete_folder(
+    name: str = Query(..., min_length=1, max_length=80),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    folder = name.strip()[:80]
+    user = await _load_user(db, user_id)
+    folders = [x for x in _folders_list(user) if x != folder]
+    await _save_folders(db, user, folders)
+    moved = await _relabel_folder(db, user_id, folder, None)
+    await db.commit()
+    return {"deleted": folder, "cleared": moved, "folders": folders}
+
+
+@router.post("/batch-folder", summary="批量移入文件夹")
+async def batch_set_folder(
+    body: BatchFolder,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    name = (body.folder or "").strip()[:80] or None
+    if name:
+        user = await _load_user(db, user_id)
+        folders = _folders_list(user)
+        if name not in folders:
+            if len(folders) >= MAX_FOLDERS:
+                raise HTTPException(status_code=400, detail=f"文件夹上限 {MAX_FOLDERS}")
+            folders.append(name)
+            await _save_folders(db, user, folders)
+    moved: list[str] = []
+    failed: list[dict] = []
+    seen: set[str] = set()
+    for item_id in body.ids[:100]:
+        if not item_id or item_id in seen:
+            continue
+        seen.add(item_id)
+        try:
+            await _apply_folder(db, item_id, user_id, name)
+            moved.append(item_id)
+        except HTTPException as e:
+            failed.append({"id": item_id, "detail": e.detail})
+    await db.commit()
+    return {"moved": moved, "failed": failed, "folder": name, "ok": len(moved)}
+
+
+@router.patch("/{item_id}/folder", summary="设置文件夹标签")
+async def set_item_folder(
+    item_id: str,
+    folder: str = Query(default="", max_length=80),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    """Assign a lightweight folder label (uploads + generated)."""
+    name = (folder or "").strip()[:80] or None
+    if name:
+        user = await _load_user(db, user_id)
+        folders = _folders_list(user)
+        if name not in folders:
+            folders.append(name)
+            await _save_folders(db, user, folders)
+    item = await _apply_folder(db, item_id, user_id, name)
+    await db.commit()
+    return item
 
 
 @router.post("/upload", summary="上传到内容库")
