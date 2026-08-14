@@ -13,6 +13,7 @@ import { Loading, Empty, ErrorState } from "@/components/StatusStates";
 import { ResultGrid } from "@/components/ResultGrid";
 import { VideoComposer } from "@/components/VideoComposer";
 import { VideoAppsRow } from "@/components/VideoAppsRow";
+import { SessionChip } from "@/components/SessionChip";
 
 /* ════════════════════════════════════════════════════════ Data ═══ */
 
@@ -73,6 +74,7 @@ export default function CreateVideoPage() {
   const [postLipsync, setPostLipsync] = useState(false);
   const [lipsyncText, setLipsyncText] = useState("");
   const [quote, setQuote] = useState<GenerationQuote | null>(null);
+  const [sessionUid, setSessionUid] = useState<string | null>(null);
 
   // Default aspect for video is landscape
   useEffect(() => {
@@ -118,6 +120,8 @@ export default function CreateVideoPage() {
       setReferences((prev) => prev.some((r) => r.preview === img)
         ? prev : [...prev, { id: uid(), type: "image", file: null, preview: img, name: "remix-ref" }]);
     }
+    const sess = params.get("session");
+    if (sess) setSessionUid(sess);
   }, [videoModels, setPrompt, setSelectedModel]);
 
   useEffect(() => {
@@ -224,6 +228,7 @@ export default function CreateVideoPage() {
         omni: omni || undefined,
         generate_audio: wantAudio || undefined,
         lipsync_text: postLipsync ? (lipsyncText.trim() || prompt) : undefined,
+        session_uid: sessionUid || undefined,
       };
       const res = await submitGeneration(body);
       setTaskId(res.task_id);
@@ -241,7 +246,7 @@ export default function CreateVideoPage() {
       setSubmitting(false);
       setTaskId(null);
     }
-  }, [prompt, multiShotMode, shots, references, submitting, selectedModel, quality, aspectRatio, duration, count, generateAudio, postLipsync, lipsyncText, addRecentPrompt, addResult, toast, router]);
+  }, [prompt, multiShotMode, shots, references, submitting, selectedModel, quality, aspectRatio, duration, count, generateAudio, postLipsync, lipsyncText, sessionUid, addRecentPrompt, addResult, toast, router]);
 
   const videoResults = results.filter((r) => r.type === "video");
   const selVid = videoModels.find((m) => m.id === selectedModel);
@@ -305,6 +310,10 @@ export default function CreateVideoPage() {
             estimatedCredits={estimatedCredits}
             quote={quote}
           />
+
+          <div className="mt-3">
+            <SessionChip intent="video_create" value={sessionUid} onChange={setSessionUid} />
+          </div>
 
           {/* Multi-shot editor */}
           <AnimatePresence>

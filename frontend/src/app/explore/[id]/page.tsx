@@ -24,6 +24,7 @@ interface ShareItem {
   display_name: string;
   avatar?: string;
   likes: number;
+  remixes?: number;
   views: number;
   create_path: string;
 }
@@ -181,11 +182,12 @@ export default function ExploreSharePage() {
             <span className="inline-flex items-center gap-1.5">
               <Heart className="w-4 h-4" /> {item.likes}
             </span>
+            <span>{item.remixes || 0} 次做同款</span>
             <span>{item.views} 次浏览</span>
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <button type="button" onClick={remix} className="btn-primary">
+            <button type="button" onClick={remix} className="btn-primary" data-testid="explore-remix">
               Remix 同款
             </button>
             <button

@@ -51,8 +51,15 @@ _MOD_DDL = (
     "(item_key TEXT PRIMARY KEY, reports INTEGER NOT NULL DEFAULT 0, "
     "hidden INTEGER NOT NULL DEFAULT 0, reason TEXT)"
 )
+_REMIX_DDL = (
+    "CREATE TABLE IF NOT EXISTS gallery_remixes "
+    "(item_key TEXT PRIMARY KEY, remixes INTEGER NOT NULL DEFAULT 0)"
+)
 # Auto-hide a gallery item once community reports reach this threshold.
 _REPORT_HIDE_THRESHOLD = 3
+# Popular rank: likes weigh more than remixes (Yapper Explore "做同款" funnel).
+_POPULAR_LIKE_WEIGHT = 2
+_POPULAR_REMIX_WEIGHT = 1
 
 
 async def _ensure_likes_table(db: AsyncSession) -> None:
@@ -91,6 +98,40 @@ async def _hidden_keys(db: AsyncSession) -> set:
         return {r[0] for r in rows.all()}
     except Exception:
         return set()
+
+
+async def _ensure_remixes_table(db: AsyncSession) -> None:
+    await db.execute(text(_REMIX_DDL))
+
+
+async def _stored_remixes(db: AsyncSession) -> dict:
+    """Map of item_key → remix (做同款) count."""
+    try:
+        await _ensure_remixes_table(db)
+        rows = await db.execute(text("SELECT item_key, remixes FROM gallery_remixes"))
+        return {k: int(v) for k, v in rows.all()}
+    except Exception:
+        return {}
+
+
+def _popular_score(likes: int, remixes: int) -> int:
+    return int(likes) * _POPULAR_LIKE_WEIGHT + int(remixes) * _POPULAR_REMIX_WEIGHT
+
+
+def _matches_query(item: dict, needle: str) -> bool:
+    if not needle:
+        return True
+    hay = " ".join(
+        [
+            str(item.get("prompt") or ""),
+            str(item.get("model_used") or ""),
+            str(item.get("style") or ""),
+            " ".join(str(s) for s in (item.get("styles") or [])),
+            str(item.get("username") or ""),
+            str(item.get("display_name") or ""),
+        ]
+    ).lower()
+    return needle in hay
 
 
 def _safe_dict(value) -> dict:
@@ -191,6 +232,7 @@ async def explore_gallery(
     style: str = Query(default="all"),
     media_type: str = Query(default="all"),
     sort: str = Query(default="popular"),
+    search: str = Query(default="", alias="q", description="搜索 prompt / 模型 / 风格 / 作者"),
     limit: int = Query(default=32, le=100),
     offset: int = Query(default=0),
     include_seed: bool = Query(default=False, description="开发环境可展示种子示例"),
@@ -200,22 +242,24 @@ async def explore_gallery(
     from app.config import settings
     show_seed = include_seed or not settings.is_production
     # Join User for real author fields (outer — guest/orphan tasks still show)
-    q = (
+    stmt = (
         select(Task, User)
         .outerjoin(User, Task.user_id == User.id)
         .where(Task.status == "completed")
     )
     if media_type != "all":
-        q = q.where(Task.media_type == media_type)
-    q = q.order_by(Task.completed_at.desc() if sort == "recent" else Task.created_at.desc())
-    q = q.limit(500)  # fetch more for filtering
+        stmt = stmt.where(Task.media_type == media_type)
+    stmt = stmt.order_by(Task.completed_at.desc() if sort == "recent" else Task.created_at.desc())
+    stmt = stmt.limit(500)  # fetch more for filtering
 
-    result = await db.execute(q)
+    result = await db.execute(stmt)
     rows = result.all()
 
     likes_map = await _stored_likes(db)
     views_map = await _stored_views(db)
+    remixes_map = await _stored_remixes(db)
     hidden = await _hidden_keys(db)
+    needle = (search or "").strip().lower()
 
     items = []
     filtered_count = 0
@@ -271,7 +315,8 @@ async def explore_gallery(
                 if item_key in hidden:
                     continue
                 likes = likes_map.get(item_key, 0)
-                items.append({
+                remixes = remixes_map.get(item_key, 0)
+                row_item = {
                     "id": item_key,
                     "task_id": t.task_id,
                     "prompt": t.prompt,
@@ -289,17 +334,23 @@ async def explore_gallery(
                     "display_name": author["display_name"],
                     "avatar": author["avatar"],
                     "likes": likes,
+                    "remixes": remixes,
                     "views": views_map.get(item_key, 0),
                     "is_seed": is_seed_item,
                     "is_demo": is_seed_item or bool(r.get("demo")),
-                })
+                }
+                if needle and not _matches_query(row_item, needle):
+                    continue
+                items.append(row_item)
             except Exception:
                 # One malformed legacy row must never break the whole gallery
                 continue
 
-    # Sort
+    # Sort — popular = likes*2 + remixes (Explore 飞轮，对标 Yapper Remix)
     if sort == "popular":
-        items.sort(key=lambda x: x["likes"], reverse=True)
+        items.sort(key=lambda x: _popular_score(x.get("likes") or 0, x.get("remixes") or 0), reverse=True)
+    elif sort == "credits":
+        items.sort(key=lambda x: int(x.get("credits_cost") or 0), reverse=True)
     else:
         items.sort(key=lambda x: x["created_at"], reverse=True)
 
@@ -417,6 +468,7 @@ async def share_item(task_id: str, db: AsyncSession = Depends(get_db)):
         pass
     likes_map = await _stored_likes(db)
     views_map = await _stored_views(db)
+    remixes_map = await _stored_remixes(db)
     author = _author_fields(user)
     media_type = r0.get("type") or task.media_type or "image"
     model = r0.get("model") or task.selected_model or "unknown"
@@ -437,6 +489,7 @@ async def share_item(task_id: str, db: AsyncSession = Depends(get_db)):
         "display_name": author["display_name"],
         "avatar": author["avatar"],
         "likes": likes_map.get(item_key, 0),
+        "remixes": remixes_map.get(item_key, 0),
         "views": views_map.get(item_key, 0),
         "create_path": f"/create/{'video' if media_type == 'video' else 'image'}",
     }
@@ -485,6 +538,24 @@ async def remix_item(item_key: str, db: AsyncSession = Depends(get_db)):
     m = check_media_url(media_url, caption=prompt)
     if not m.allowed:
         raise moderation_reject(m)
+    remixes = 0
+    try:
+        await _ensure_remixes_table(db)
+        await db.execute(
+            text(
+                "INSERT INTO gallery_remixes (item_key, remixes) VALUES (:k, 1) "
+                "ON CONFLICT(item_key) DO UPDATE SET remixes = remixes + 1"
+            ),
+            {"k": item_key},
+        )
+        await db.commit()
+        rcount = await db.execute(
+            text("SELECT remixes FROM gallery_remixes WHERE item_key = :k"),
+            {"k": item_key},
+        )
+        remixes = int(rcount.scalar() or 1)
+    except Exception:
+        remixes = 1
     return {
         "remix": True,
         "source_item_key": item_key,
@@ -492,6 +563,7 @@ async def remix_item(item_key: str, db: AsyncSession = Depends(get_db)):
         "media_type": media_type,
         "media_url": media_url,
         "model": row.selected_model or row.requested_model,
+        "remixes": remixes,
         "create_path": f"/create/{'video' if media_type == 'video' else 'image'}",
     }
 

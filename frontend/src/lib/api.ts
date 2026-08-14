@@ -211,6 +211,8 @@ export interface GenerateRequest {
   generate_audio?: boolean;
   /** Same-task talking-head pipeline (no extra lipsync page hop) */
   lipsync_text?: string;
+  /** Bind this generate to a studio/director session (Yapper Create Session) */
+  session_uid?: string;
   seed?: number;
   /** Negative prompt — elements to avoid (honored by supporting models) */
   negative_prompt?: string;
@@ -304,6 +306,7 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
       omni: req.omni ?? null,
       generate_audio: req.generate_audio ?? false,
       ...(req.lipsync_text ? { lipsync_text: req.lipsync_text } : {}),
+      ...(req.session_uid ? { session_uid: req.session_uid } : {}),
       ...(req.seed != null ? { seed: req.seed } : {}),
       ...(req.negative_prompt ? { negative_prompt: req.negative_prompt } : {}),
     }),
@@ -425,24 +428,37 @@ export interface CreativeSession {
 }
 
 export async function listCreativeSessions(): Promise<CreativeSession[]> {
+  return listStudioSessions("image_create");
+}
+
+export async function listStudioSessions(intent?: string): Promise<CreativeSession[]> {
   const res = await fetch(`${API_BASE}/director/sessions`, { headers: apiAuthHeaders() });
   if (!res.ok) throw new Error(`加载会话失败: ${res.status}`);
   const json = await res.json();
   const arr: CreativeSession[] = Array.isArray(json) ? json : json.sessions ?? [];
-  return arr.filter((s) => (s.intent ?? "image_create") === "image_create");
+  if (!intent) return arr;
+  return arr.filter((s) => (s.intent ?? intent) === intent);
+}
+
+export async function createStudioSession(
+  title: string,
+  intent: string,
+  assets?: CreativeSession["assets"],
+): Promise<CreativeSession> {
+  const res = await fetch(`${API_BASE}/director/sessions`, {
+    method: "POST",
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ title, intent, status: "active", assets: assets ?? null }),
+  });
+  if (!res.ok) throw new Error(`创建会话失败: ${res.status}`);
+  return res.json();
 }
 
 export async function createCreativeSession(
   title: string,
   assets?: CreativeSession["assets"],
 ): Promise<CreativeSession> {
-  const res = await fetch(`${API_BASE}/director/sessions`, {
-    method: "POST",
-    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ title, intent: "image_create", status: "active", assets: assets ?? null }),
-  });
-  if (!res.ok) throw new Error(`创建会话失败: ${res.status}`);
-  return res.json();
+  return createStudioSession(title, "image_create", assets);
 }
 
 export async function getCreativeSession(uid: string): Promise<CreativeSession> {
@@ -713,10 +729,18 @@ export async function deleteProject(id: string): Promise<void> {
 }
 
 /** List content-library items (uploads + generated) */
-export async function listLibrary(params: { media_type?: string; source?: string; limit?: number } = {}): Promise<{ items: any[]; total: number; counts: any }> {
+export async function listLibrary(params: {
+  media_type?: string; source?: string; limit?: number;
+  q?: string; favorite?: boolean; period?: string; tool?: string; folder?: string;
+} = {}): Promise<{ items: any[]; total: number; counts: any; folders?: string[] }> {
   const q = new URLSearchParams();
   if (params.media_type) q.set("media_type", params.media_type);
   if (params.source) q.set("source", params.source);
+  if (params.q) q.set("q", params.q);
+  if (params.favorite) q.set("favorite", "true");
+  if (params.period) q.set("period", params.period);
+  if (params.tool) q.set("tool", params.tool);
+  if (params.folder) q.set("folder", params.folder);
   q.set("limit", String(params.limit ?? 60));
   const res = await fetch(`${API_BASE}/library/?${q.toString()}`, { headers: apiAuthHeaders() });
   if (!res.ok) throw new Error(`加载素材库失败: ${res.status}`);

@@ -7,10 +7,12 @@ Item id scheme:
 """
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
@@ -96,6 +98,49 @@ def _safe_list(value) -> list:
     return []
 
 
+def _infer_tool(task: Task, result: dict) -> Optional[str]:
+    """Map a generated item to a Yapper-style tool bucket when evidence exists."""
+    params = _safe_dict(task.parameters)
+    op = str(params.get("operation") or "").lower()
+    model = str(result.get("model") or task.selected_model or task.requested_model or "").lower()
+    prompt = str(task.prompt or "").lower()
+    hay = f"{op} {model} {prompt}"
+    if op == "upscale" or "upscale" in hay:
+        return "upscale"
+    if "motion-control" in hay or "motion_control" in hay or "/motion" in hay or op == "motion":
+        return "motion"
+    if (
+        params.get("lipsync_text")
+        or op in ("lipsync", "lip-sync", "avatar")
+        or "ai-avatar" in hay
+        or "lipsync" in hay
+        or "lip-sync" in hay
+        or "lip_sync" in hay
+    ):
+        return "lipsync"
+    return None
+
+
+def _parse_iso(value: str) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        ts = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return ts
+    except Exception:
+        return None
+
+
+def _is_today(created_at: str, *, now: Optional[datetime] = None) -> bool:
+    ts = _parse_iso(created_at)
+    if ts is None:
+        return False
+    clock = now or datetime.now(timezone.utc)
+    return ts.astimezone(timezone.utc).date() == clock.astimezone(timezone.utc).date()
+
+
 def _asset_item(a: Asset, *, favorited: bool = False) -> dict:
     return {
         "id": f"up_{a.asset_id}",
@@ -111,6 +156,8 @@ def _asset_item(a: Asset, *, favorited: bool = False) -> dict:
         "created_at": a.created_at.isoformat() if a.created_at else "",
         "favorited": favorited,
         "folder": getattr(a, "folder", None) or None,
+        "tool": None,
+        "task_id": None,
     }
 
 
@@ -129,6 +176,7 @@ def _generated_items(t: Task, *, favorites: set[str] | None = None) -> list:
         item_id = f"gen_{t.task_id}_{idx}"
         out.append({
             "id": item_id,
+            "task_id": t.task_id,
             "source": "generated",
             "media_type": r.get("type", t.media_type),
             "url": url,
@@ -141,6 +189,8 @@ def _generated_items(t: Task, *, favorites: set[str] | None = None) -> list:
             "created_at": ts.isoformat() if ts else "",
             "favorited": item_id in favs,
             "folder": params.get("library_folder") or r.get("folder"),
+            "tool": _infer_tool(t, r),
+            "session_uid": params.get("session_uid"),
         })
     return out
 
@@ -153,6 +203,8 @@ async def list_library(
     sort: str = Query(default="recent"),         # recent | oldest
     favorite: bool = Query(default=False, description="仅收藏"),
     folder: str = Query(default="", description="按文件夹筛选（上传资产）"),
+    period: str = Query(default="all", description="all | today（对标 Yapper Assets Today）"),
+    tool: str = Query(default="all", description="all | upscale | motion | lipsync"),
     limit: int = Query(default=48, le=200),
     offset: int = Query(default=0),
     db: AsyncSession = Depends(get_db),
@@ -205,6 +257,19 @@ async def list_library(
     if favorite:
         items = [it for it in items if it.get("favorited")]
 
+    today_n = sum(1 for it in items if _is_today(it.get("created_at") or ""))
+    tool_counts = {
+        "upscale": sum(1 for it in items if it.get("tool") == "upscale"),
+        "motion": sum(1 for it in items if it.get("tool") == "motion"),
+        "lipsync": sum(1 for it in items if it.get("tool") == "lipsync"),
+    }
+    period_key = (period or "all").strip().lower()
+    if period_key == "today":
+        items = [it for it in items if _is_today(it.get("created_at") or "")]
+    tool_key = (tool or "all").strip().lower()
+    if tool_key and tool_key != "all":
+        items = [it for it in items if (it.get("tool") or "") == tool_key]
+
     # Tab counts reflect the current source+search scope, computed BEFORE the
     # media_type filter so switching tabs never zeroes the other tab badges
     counts = {
@@ -215,6 +280,8 @@ async def list_library(
         "upload": sum(1 for it in items if it["source"] == "upload"),
         "generated": sum(1 for it in items if it["source"] == "generated"),
         "favorite": sum(1 for it in items if it.get("favorited")),
+        "today": today_n,
+        **tool_counts,
     }
 
     if media_type != "all":
@@ -274,25 +341,44 @@ async def remove_favorite(
     return {"favorited": False, "id": item_id, "total": len(favs)}
 
 
-@router.patch("/{item_id}/folder", summary="设置上传资产文件夹")
+@router.patch("/{item_id}/folder", summary="设置文件夹标签")
 async def set_item_folder(
     item_id: str,
     folder: str = Query(default="", max_length=80),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(resolve_user_id),
 ):
-    """Assign a lightweight folder label on uploaded assets (P1)."""
-    if not item_id.startswith("up_"):
-        raise HTTPException(status_code=400, detail="仅支持上传资产设置文件夹；生成结果请用项目归类")
-    asset_id = item_id[3:]
-    res = await db.execute(select(Asset).where(Asset.asset_id == asset_id, Asset.user_id == user_id))
-    asset = res.scalar_one_or_none()
-    if not asset:
-        raise HTTPException(status_code=404, detail="条目不存在")
-    name = (folder or "").strip()[:80]
-    asset.folder = name or None
-    await db.commit()
-    return _asset_item(asset, favorited=item_id in set(_favorites_list(await _load_user(db, user_id))))
+    """Assign a lightweight folder label (uploads + generated)."""
+    name = (folder or "").strip()[:80] or None
+    if item_id.startswith("up_"):
+        asset_id = item_id[3:]
+        res = await db.execute(select(Asset).where(Asset.asset_id == asset_id, Asset.user_id == user_id))
+        asset = res.scalar_one_or_none()
+        if not asset:
+            raise HTTPException(status_code=404, detail="条目不存在")
+        asset.folder = name
+        await db.commit()
+        return _asset_item(asset, favorited=item_id in set(_favorites_list(await _load_user(db, user_id))))
+    if item_id.startswith("gen_"):
+        try:
+            task_id, idx_str = item_id[4:].rsplit("_", 1)
+            idx = int(idx_str)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="无效的条目 ID")
+        res = await db.execute(select(Task).where(Task.task_id == task_id, Task.user_id == user_id))
+        task = res.scalar_one_or_none()
+        if not task:
+            raise HTTPException(status_code=404, detail="条目不存在")
+        params = _safe_dict(task.parameters)
+        params["library_folder"] = name
+        task.parameters = params
+        flag_modified(task, "parameters")
+        await db.commit()
+        items = _generated_items(task, favorites=set(_favorites_list(await _load_user(db, user_id))))
+        if idx < 0 or idx >= len(items):
+            raise HTTPException(status_code=404, detail="条目不存在")
+        return items[idx]
+    raise HTTPException(status_code=400, detail="无效的条目 ID")
 
 
 @router.post("/upload", summary="上传到内容库")
@@ -322,13 +408,11 @@ async def upload_to_library(
     return _asset_item(asset)
 
 
-@router.delete("/{item_id}", summary="删除内容库条目")
-async def delete_library_item(
-    item_id: str,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(resolve_user_id),
-):
-    # Drop favorite reference if present
+class BatchIds(BaseModel):
+    ids: list[str] = Field(default_factory=list, max_length=100)
+
+
+async def _delete_one(db: AsyncSession, item_id: str, user_id: int) -> str:
     try:
         user = await _load_user(db, user_id)
         favs = [x for x in _favorites_list(user) if x != item_id]
@@ -343,7 +427,6 @@ async def delete_library_item(
         asset = res.scalar_one_or_none()
         if not asset:
             raise HTTPException(status_code=404, detail="条目不存在")
-        # Remove local file (best-effort)
         try:
             prefix = "/api/v1/media/"
             if asset.url.startswith(prefix):
@@ -353,8 +436,7 @@ async def delete_library_item(
         except Exception:
             pass
         await db.delete(asset)
-        await db.commit()
-        return {"deleted": item_id}
+        return item_id
 
     if item_id.startswith("gen_"):
         try:
@@ -372,7 +454,93 @@ async def delete_library_item(
         results.pop(idx)
         task.results = results
         flag_modified(task, "results")
-        await db.commit()
-        return {"deleted": item_id}
+        return item_id
 
     raise HTTPException(status_code=400, detail="无效的条目 ID")
+
+
+@router.post("/batch-delete", summary="批量删除内容库条目")
+async def batch_delete_library(
+    body: BatchIds,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    deleted: list[str] = []
+    failed: list[dict] = []
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item_id in body.ids[:100]:
+        if not item_id or item_id in seen:
+            continue
+        seen.add(item_id)
+        ordered.append(item_id)
+
+    def _gen_idx(item_id: str) -> int:
+        try:
+            return int(item_id.rsplit("_", 1)[-1])
+        except Exception:
+            return 0
+
+    gens = [i for i in ordered if i.startswith("gen_")]
+    others = [i for i in ordered if not i.startswith("gen_")]
+    gens.sort(key=_gen_idx, reverse=True)
+    for item_id in gens + others:
+        try:
+            deleted.append(await _delete_one(db, item_id, user_id))
+        except HTTPException as e:
+            failed.append({"id": item_id, "detail": e.detail})
+    await db.commit()
+    return {"deleted": deleted, "failed": failed, "ok": len(deleted)}
+
+
+@router.post("/batch-publish", summary="批量发布生成作品到 Explore")
+async def batch_publish_library(
+    body: BatchIds,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    from app.api.gallery import _is_safe
+    from app.services.moderation import is_safe as _mod_safe
+
+    published: list[str] = []
+    failed: list[dict] = []
+    seen: set[str] = set()
+    for item_id in body.ids[:100]:
+        if not item_id or item_id in seen:
+            continue
+        seen.add(item_id)
+        if not item_id.startswith("gen_"):
+            failed.append({"id": item_id, "detail": "仅生成作品可发布到 Explore"})
+            continue
+        try:
+            task_id, _idx = item_id[4:].rsplit("_", 1)
+        except ValueError:
+            failed.append({"id": item_id, "detail": "无效的条目 ID"})
+            continue
+        res = await db.execute(select(Task).where(Task.task_id == task_id, Task.user_id == user_id))
+        task = res.scalar_one_or_none()
+        if not task or task.status != "completed":
+            failed.append({"id": item_id, "detail": "作品不存在或未完成"})
+            continue
+        if not (_is_safe(task.prompt or "") and _mod_safe(task.prompt or "")):
+            failed.append({"id": item_id, "detail": "内容未通过安全审核"})
+            continue
+        params = _safe_dict(task.parameters)
+        params["share_public"] = True
+        params["share_published_at"] = datetime.now(timezone.utc).isoformat()
+        task.parameters = params
+        flag_modified(task, "parameters")
+        published.append(task_id)
+    await db.commit()
+    return {"published": published, "failed": failed, "ok": len(published)}
+
+
+@router.delete("/{item_id}", summary="删除内容库条目")
+async def delete_library_item(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    deleted = await _delete_one(db, item_id, user_id)
+    await db.commit()
+    return {"deleted": deleted}

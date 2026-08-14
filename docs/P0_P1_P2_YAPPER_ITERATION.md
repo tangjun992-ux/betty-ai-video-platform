@@ -24,6 +24,10 @@
 | **Performance Drive** | Motion + 可选 Lipsync；`/create/performance` | caps `motion_plus_optional_lipsync` |
 | **Lipsync live** | `LIPSYNC_FIXTURE_LIVE` harness | `fixtures/lipsync/last_run.json` ok |
 | **Explore 种子** | gallery seed（密度仍弱于 Yapper） | list≈32 / total≈72 |
+| **Explore 搜索 / Remix 漏斗** | `GET /gallery/?q=`；`gallery_remixes`；popular=`likes*2+remixes` | `tests/test_p1_yapper_explore_library.py` |
+| **My Library Today / Multi Select** | `period=today` · tool 筛 · batch-delete/publish · 显式 Multi Select | 同上 + FE vitest |
+| **Create Video Session** | `GenerateRequest.session_uid` + `SessionChip` | 同上 |
+| **Face Swap 模板漏斗** | 8 张玩法卡片（诚实 i2i，非 InsightFace） | FE vitest |
 
 ## P2 已落地（薄）
 
@@ -58,7 +62,7 @@ betty_internal_readiness              → ≈90
 1. Stripe/OIDC **密钥注入**（代码已就绪）  
 2. 更多 KIE 模型 ID 校正后才能诚实扩 active  
 3. URL-to-Viral 结构深化（TikTok/IG 合规）  
-4. Explore 内容密度继续拉升  
+4. Explore 内容密度继续拉升（搜索/remix 计数已有，缺规模）  
 5. Lipsync **周检 Beat**  
 
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 18+ 全开而无周检。

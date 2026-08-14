@@ -65,6 +65,11 @@ class GenerateRequest(BaseModel):
         max_length=2000,
         description="口播文案：视频完成后在同一任务内走唇形同步（一次提交，不再跳转唇形页）",
     )
+    session_uid: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="可选：绑定导演/创作会话（对标 Yapper Create Video Session）",
+    )
     seed: Optional[int] = Field(default=None, ge=0, le=2147483647, description="随机种子（复现同一结果；留空则随机）")
     negative_prompt: Optional[str] = Field(
         default=None,
@@ -253,6 +258,19 @@ async def execute_generation(
         params["reference_videos"] = ref_videos
     if ref_audios:
         params["reference_audios"] = ref_audios
+    sid = (req.session_uid or "").strip()
+    if sid:
+        try:
+            from app.models.director_session import DirectorSession
+            srow = (
+                await db.execute(
+                    _select(DirectorSession).where(DirectorSession.session_uid == sid)
+                )
+            ).scalar_one_or_none()
+            if srow is not None and int(srow.user_id or 0) == int(user_id):
+                params["session_uid"] = sid
+        except Exception:
+            pass
 
     # Create Task record
     task = Task(
