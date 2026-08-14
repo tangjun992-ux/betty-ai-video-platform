@@ -42,6 +42,12 @@ export default function AudioPage() {
   const [demoLabel, setDemoLabel] = useState("");
 
   useEffect(() => {
+    const incoming = new URLSearchParams(window.location.search).get("text")
+      || new URLSearchParams(window.location.search).get("prompt");
+    if (incoming) setText(incoming);
+  }, []);
+
+  useEffect(() => {
     fetch(`${API_BASE}/system/capabilities`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {

@@ -1126,8 +1126,9 @@ def _script_to_subtitle_track(script: str, duration_per_cue: float = 2.4) -> lis
 
 # ─────────────────────────────── 执行器 ───────────────────────────────
 class DirectorExecutor:
-    def __init__(self, dry_run: bool = True):
+    def __init__(self, dry_run: bool = True, video_concurrency: int | None = None):
         self.dry_run = dry_run
+        self.video_concurrency = video_concurrency
 
     async def _run_step(self, step: DirectorStep) -> dict:
         step.status = "running"
@@ -1739,9 +1740,13 @@ class DirectorExecutor:
         # while staying below provider saturation; demo stays highly parallel.
         import os as _os
         try:
-            real_conc = max(1, min(8, int(_os.getenv("DIRECTOR_VIDEO_CONCURRENCY", "2"))))
+            env_conc = max(1, min(8, int(_os.getenv("DIRECTOR_VIDEO_CONCURRENCY", "2"))))
         except ValueError:
-            real_conc = 2
+            env_conc = 2
+        if self.video_concurrency:
+            real_conc = max(1, min(env_conc, int(self.video_concurrency)))
+        else:
+            real_conc = env_conc
         vid_sem = asyncio.Semaphore(8 if self.dry_run else real_conc)
 
         # 预处理：跳过步骤直接标记完成 (满足依赖)

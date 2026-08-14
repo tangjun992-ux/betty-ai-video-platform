@@ -20,8 +20,8 @@ import { useLocale } from "@/i18n/LocaleProvider";
 import {
   submitGeneration, getTaskStatus, uploadImage, trackOnboarding, cancelTask,
   listCreativeSessions, createCreativeSession, getCreativeSession,
-  updateCreativeSession, deleteCreativeSession, editImageTool,
-  type GenerateResponse, type TaskResult, type CreativeSession, API_BASE,
+  updateCreativeSession, deleteCreativeSession, editImageTool, quoteGeneration,
+  type GenerateResponse, type TaskResult, type CreativeSession, type GenerationQuote, API_BASE,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -103,6 +103,7 @@ export default function CreateImagePage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [queuePos, setQueuePos] = useState<number | null>(null);
   const cancelledRef = useRef(false);
+  const [quote, setQuote] = useState<GenerationQuote | null>(null);
 
   // Sessions
   const [sessions, setSessions] = useState<CreativeSession[]>([]);
@@ -112,6 +113,20 @@ export default function CreateImagePage() {
     try { setSessions(await listCreativeSessions()); } catch { /* guest/offline ok */ }
   }, []);
   useEffect(() => { refreshSessions(); }, [refreshSessions]);
+
+  useEffect(() => {
+    const q = prompt.trim();
+    if (!q) { setQuote(null); return; }
+    const t = setTimeout(() => {
+      quoteGeneration({
+        prompt: q,
+        media_type: "image",
+        model: selectedModel === "auto" ? "auto" : selectedModel,
+        count,
+      }).then(setQuote).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [prompt, selectedModel, count]);
 
   useEffect(() => {
     fetch(`${API_BASE}/models/?status=active`)
@@ -774,6 +789,7 @@ export default function CreateImagePage() {
             onCreativityChange={(c: CreativityLevel) => setCreativity(c)}
             estimatedCredits={estimatedCredits}
             perImageCredits={perImageCredits}
+            quote={quote}
           />
 
           {/* Batch Prompt Input (subtle toggle) */}

@@ -180,7 +180,7 @@ def generate_video_task(
         rd = result.to_dict() if hasattr(result, "to_dict") else result
         error = rd.get("error")
         if error:
-            return _handle_retryable(self, db_task_id, model, error, prompt, image_url, duration, resolution)
+            return _handle_retryable(self, db_task_id, model, error, prompt, image_url, duration, resolution, params)
 
         from app.services.demo_tag import demo_mode_active, tag_result
         output = [tag_result({
@@ -194,6 +194,7 @@ def generate_video_task(
         cost = rd.get("cost", 0)
 
         output = persist_results(output)
+        output = _maybe_chain_lipsync(db_task_id, params, output)
         _update_task(
             db_task_id, status="completed", progress=100, current_stage="completed",
             completed_at=datetime.now(timezone.utc),
@@ -206,14 +207,14 @@ def generate_video_task(
     except RuntimeError as e:
         from app.fallback_handler import is_retryable_error
         model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
-        return _handle_retryable(self, db_task_id, model, str(e), prompt, image_url, duration, resolution)
+        return _handle_retryable(self, db_task_id, model, str(e), prompt, image_url, duration, resolution, params)
     except Exception as e:
         from app.fallback_handler import is_retryable_error
         model_health.record_failure(model, str(e), retryable=is_retryable_error(str(e)))
         return _mark_failed(db_task_id, str(e))
 
 
-def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duration, resolution):
+def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duration, resolution, params=None):
     from app.fallback_handler import get_fallback, is_retryable_error
 
     if not is_retryable_error(error):
@@ -256,6 +257,7 @@ def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duratio
         }]
         cost = rd.get("cost", 0)
         output = persist_results(output)
+        output = _maybe_chain_lipsync(db_task_id, params, output)
         _update_task(
             db_task_id, status="completed", progress=100, current_stage="completed_fallback",
             completed_at=datetime.now(timezone.utc),
@@ -267,6 +269,70 @@ def _handle_retryable(self, db_task_id, model, error, prompt, image_url, duratio
         from app.fallback_handler import is_retryable_error
         model_health.record_failure(fallback_id, str(fe), retryable=is_retryable_error(str(fe)))
         return _mark_failed(db_task_id, f"Fallback also failed: {fe}. Original: {error}")
+
+
+def _maybe_chain_lipsync(db_task_id: str, params: dict | None, output: list) -> list:
+    """Same-task Omni pipeline: after video succeeds, run talking-head lipsync.
+
+    Does not fail the parent video if lipsync errors — original clip stays.
+    Requires lipsync_text + a reference still (image_url / reference_images[0]).
+    """
+    params = params or {}
+    text = (params.get("lipsync_text") or "").strip()
+    if not text:
+        return output
+    image_url = (params.get("image_url") or "").strip()
+    if not image_url:
+        refs = params.get("reference_images") or []
+        image_url = (refs[0] if refs else "") or ""
+    if not image_url:
+        if output:
+            output[0]["lipsync_skipped"] = "no_reference_image"
+        logger.info("omni lipsync skipped task=%s: no reference image", db_task_id)
+        return output
+
+    _update_task(db_task_id, progress=90, current_stage="omni_lipsync")
+    _broadcast_progress(db_task_id, 90, "omni_lipsync", "同一任务：口播唇形同步中…")
+    try:
+        from app.adapters.demo_provider import demo_mode_active, render_demo_video, _local_media_path
+        from app.gateway import gateway, gateway_enabled
+
+        if demo_mode_active() or not gateway_enabled():
+            v_url, thumb = render_demo_video(
+                text, "720x1280", 5, "portrait",
+                _local_media_path(image_url) and image_url or None,
+            )
+            lips = persist_results([{
+                "type": "video", "url": v_url, "thumbnail": thumb,
+                "model": "demo-lipsync", "duration": 5,
+                "mode": "omni_pipeline",
+                "honesty": "offline_preview_not_lipsync",
+                "lipsync_text": text[:200],
+            }])
+        else:
+            gw = _run_async(gateway.generate_lipsync(
+                image_url=image_url,
+              audio_url="",
+                model="kling-ai-avatar",
+                prompt=text,
+                resolution="720p",
+                trace_id=db_task_id,
+            ))
+            res = gw.result
+            lips = persist_results([{
+                "type": "video", "url": res.media_url,
+                "thumbnail": getattr(res, "thumbnail_url", "") or "",
+                "model": res.model, "duration": 5,
+                "mode": "omni_pipeline",
+                "lipsync_text": text[:200],
+                "gateway_provider": gw.provider_used,
+            }])
+        return list(lips) + list(output)
+    except Exception as e:
+        logger.warning("omni lipsync chain failed task=%s: %s", db_task_id, e)
+        if output:
+            output[0]["lipsync_error"] = str(e)[:200]
+        return output
 
 
 def _translate_error(error_msg: str) -> str:

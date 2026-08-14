@@ -114,7 +114,7 @@ export function TopBar() {
 
         {/* Logo + brand — only on small screens; the sidebar owns the brand on
             desktop, so we avoid a duplicate "betty" lockup next to it. */}
-        <Link href="/" className="flex items-center gap-2 shrink-0 md:hidden">
+        <Link href="/dashboard" className="flex items-center gap-2 shrink-0 md:hidden">
           <BrandMark className="w-7 h-7" />
           <span className="font-semibold text-base tracking-[-0.02em] text-text-primary">
             betty
@@ -148,12 +148,26 @@ export function TopBar() {
           <Search className="w-5 h-5" />
         </button>
 
-        {/* Sessions — 对标 yapper 顶栏入口 */}
+        {/* Tools / Sessions — 对标 yapper 顶栏 */}
+        <Link
+          href="/tools"
+          className="hidden lg:inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium text-text-secondary hover:text-brand hover:bg-brand/5 transition-all"
+          data-testid="top-tools"
+        >
+          <Sparkles className="w-3.5 h-3.5" /> {t("top.tools")}
+        </Link>
         <Link
           href="/sessions"
           className="hidden lg:inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium text-text-secondary hover:text-brand hover:bg-brand/5 transition-all"
         >
           <MessageSquare className="w-3.5 h-3.5" /> {t("nav.sessions")}
+        </Link>
+        <Link
+          href="/pricing"
+          className="hidden sm:inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold text-brand hover:bg-brand/5 transition-all border border-brand/15"
+          data-testid="top-upgrade"
+        >
+          {t("top.upgrade")}
         </Link>
 
         {/* Create Now */}

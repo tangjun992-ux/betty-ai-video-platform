@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useState, type DragEvent } from "react";
-import { ImagePlus, X, ArrowUp, Upload, Wand2, Info, CircleDollarSign } from "lucide-react";
+import { ImagePlus, X, ArrowUp, Upload, Wand2 } from "lucide-react";
 import { ImageParamBar, type ParamModel } from "@/components/ImageParamBar";
+import { QuoteBar } from "@/components/QuoteBar";
+import type { GenerationQuote } from "@/lib/api";
 import type { CreativityLevel } from "@/components/CreativitySlider";
 import type { Quality } from "@/lib/stores";
 import { enhancePrompt } from "@/lib/api";
@@ -54,6 +56,7 @@ interface Props {
 
   estimatedCredits: number | null;
   perImageCredits?: number | null;
+  quote?: GenerationQuote | null;
 }
 
 export function ImageComposer(p: Props) {
@@ -227,12 +230,8 @@ export function ImageComposer(p: Props) {
           onCreativityChange={p.onCreativityChange}
         />
 
-        {/* Credits (◎ N ⓘ) — right aligned */}
-        <div className="ml-auto inline-flex items-center gap-1 text-xs text-text-secondary/80 pr-1" title="预估消耗积分" data-testid="credit-estimate">
-          <CircleDollarSign className="w-3.5 h-3.5 text-accent-cyan/90" />
-          <span className="font-medium text-text-primary/90">{p.estimatedCredits != null ? p.estimatedCredits : "—"}</span>
-          <Info className="w-3 h-3 opacity-45" />
-        </div>
+        {/* Credits + ETA + queue */}
+        <QuoteBar quote={p.quote ?? null} fallbackCredits={p.estimatedCredits} />
       </div>
     </div>
   );

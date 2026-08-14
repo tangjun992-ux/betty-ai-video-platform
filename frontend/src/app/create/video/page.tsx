@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Sparkles, Play, Plus, X, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCreationStore } from "@/lib/stores";
-import { submitGeneration, getTaskStatus, uploadMedia, runStoryboard, enhancePrompt, type TaskResult, API_BASE } from "@/lib/api";
+import { submitGeneration, getTaskStatus, uploadMedia, runStoryboard, enhancePrompt, quoteGeneration, type TaskResult, type GenerationQuote, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
@@ -71,6 +71,8 @@ export default function CreateVideoPage() {
   const [videoModels, setVideoModels] = useState(VIDEO_MODELS_FALLBACK);
   const [generateAudio, setGenerateAudio] = useState(false);
   const [postLipsync, setPostLipsync] = useState(false);
+  const [lipsyncText, setLipsyncText] = useState("");
+  const [quote, setQuote] = useState<GenerationQuote | null>(null);
 
   // Default aspect for video is landscape
   useEffect(() => {
@@ -123,6 +125,22 @@ export default function CreateVideoPage() {
     const t = setInterval(() => setElapsed((p) => p + 1), 1000);
     return () => clearInterval(t);
   }, [submitting]);
+
+  useEffect(() => {
+    const q = prompt.trim();
+    if (!q) { setQuote(null); return; }
+    const t = setTimeout(() => {
+      quoteGeneration({
+        prompt: q,
+        media_type: "video",
+        model: selectedModel === "auto" ? "auto" : selectedModel,
+        duration,
+        count,
+        lipsync_text: postLipsync ? (lipsyncText.trim() || q) : undefined,
+      }).then(setQuote).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [prompt, selectedModel, duration, count, postLipsync, lipsyncText]);
 
   const handleAddReference = useCallback((file: File, type: "image" | "video" | "audio") => {
     const preview = URL.createObjectURL(file);
@@ -205,6 +223,7 @@ export default function CreateVideoPage() {
         reference_audios: referenceAudios.length ? referenceAudios : undefined,
         omni: omni || undefined,
         generate_audio: wantAudio || undefined,
+        lipsync_text: postLipsync ? (lipsyncText.trim() || prompt) : undefined,
       };
       const res = await submitGeneration(body);
       setTaskId(res.task_id);
@@ -212,11 +231,7 @@ export default function CreateVideoPage() {
       if (result.status === "failed") throw new Error(result.error_message || "视频生成失败");
       if (result.results?.length) {
         for (const r of result.results) addResult({ url: r.url, type: "video", prompt, model: res.estimated_model || selectedModel });
-        toast.success("视频生成完成", `已生成 ${result.results.length} 个视频`);
-        if (postLipsync && imageUrl) {
-          toast.info("继续唇形同步", "已带入参考图；口型走 Kling avatar");
-          router.push(`/create/lipsync?${new URLSearchParams({ image_url: imageUrl }).toString()}`);
-        }
+        toast.success("视频生成完成", postLipsync ? "Omni 一体流已完成（含口播唇形）" : `已生成 ${result.results.length} 个视频`);
       }
     } catch (err: any) {
       const msg = err.message || "视频生成失败，请重试";
@@ -226,7 +241,7 @@ export default function CreateVideoPage() {
       setSubmitting(false);
       setTaskId(null);
     }
-  }, [prompt, multiShotMode, shots, references, submitting, selectedModel, quality, aspectRatio, duration, count, generateAudio, postLipsync, addRecentPrompt, addResult, toast, router]);
+  }, [prompt, multiShotMode, shots, references, submitting, selectedModel, quality, aspectRatio, duration, count, generateAudio, postLipsync, lipsyncText, addRecentPrompt, addResult, toast, router]);
 
   const videoResults = results.filter((r) => r.type === "video");
   const selVid = videoModels.find((m) => m.id === selectedModel);
@@ -283,9 +298,12 @@ export default function CreateVideoPage() {
             onGenerateAudioChange={setGenerateAudio}
             postLipsync={postLipsync}
             onPostLipsyncChange={setPostLipsync}
+            lipsyncText={lipsyncText}
+            onLipsyncTextChange={setLipsyncText}
             multiShot={multiShotMode}
             onMultiShotChange={(v) => { setMultiShotMode(v); if (v && shots.length === 0) handleShotAdd(); }}
             estimatedCredits={estimatedCredits}
+            quote={quote}
           />
 
           {/* Multi-shot editor */}

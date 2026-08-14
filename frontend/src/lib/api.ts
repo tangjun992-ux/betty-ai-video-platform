@@ -209,6 +209,8 @@ export interface GenerateRequest {
   /** Force Seedance Omni multimodal mode */
   omni?: boolean;
   generate_audio?: boolean;
+  /** Same-task talking-head pipeline (no extra lipsync page hop) */
+  lipsync_text?: string;
   seed?: number;
   /** Negative prompt — elements to avoid (honored by supporting models) */
   negative_prompt?: string;
@@ -223,6 +225,36 @@ export interface GenerateResponse {
   poll_url: string;
   enhanced_prompt?: string;
   routing_info?: Record<string, unknown>;
+}
+
+export interface GenerationQuote {
+  recommended_model: string;
+  media_type: string;
+  estimated_cost_credits: number;
+  estimated_time_seconds: number;
+  eta_source: string;
+  demo_mode: boolean;
+  queue_ahead: number;
+  concurrent_used: number;
+  concurrent_limit: number;
+  concurrent_remaining: number;
+  refund_on_failure: boolean;
+  refund_note?: string;
+  lipsync_included: boolean;
+  upgrade_plan?: string | null;
+  upgrade_hint?: string | null;
+  honesty?: string;
+}
+
+export function formatApiDetail(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (detail && typeof detail === "object") {
+    const d = detail as { message?: string; detail?: string; error?: string };
+    if (typeof d.message === "string" && d.message.trim()) return d.message;
+    if (typeof d.detail === "string" && d.detail.trim()) return d.detail;
+    if (typeof d.error === "string" && d.error.trim()) return d.error;
+  }
+  return fallback;
 }
 
 export interface TaskProgress {
@@ -271,13 +303,43 @@ export async function submitGeneration(req: GenerateRequest): Promise<GenerateRe
       reference_audios: req.reference_audios?.length ? req.reference_audios.slice(0, 3) : null,
       omni: req.omni ?? null,
       generate_audio: req.generate_audio ?? false,
+      ...(req.lipsync_text ? { lipsync_text: req.lipsync_text } : {}),
       ...(req.seed != null ? { seed: req.seed } : {}),
       ...(req.negative_prompt ? { negative_prompt: req.negative_prompt } : {}),
     }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `生成请求失败: ${res.status}`);
+    throw new Error(formatApiDetail(err.detail, `生成请求失败: ${res.status}`));
+  }
+  return res.json();
+}
+
+/** Pre-submit quote: credits + catalog ETA + queue + concurrency (does not deduct). */
+export async function quoteGeneration(req: Partial<GenerateRequest> & { prompt: string }): Promise<GenerationQuote> {
+  const res = await fetchWithTimeout(`${API_BASE}/generate/quote`, {
+    method: "POST",
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      prompt: req.prompt,
+      media_type: req.media_type || "auto",
+      model: req.model || "auto",
+      quality: req.quality || "balanced",
+      resolution: req.resolution || "1080x1080",
+      duration: req.duration || 5,
+      count: req.count || 1,
+      image_url: req.image_url || (req.reference_images?.[0] ?? null),
+      reference_images: req.reference_images?.length ? req.reference_images.slice(0, 9) : null,
+      reference_videos: req.reference_videos?.length ? req.reference_videos.slice(0, 3) : null,
+      reference_audios: req.reference_audios?.length ? req.reference_audios.slice(0, 3) : null,
+      omni: req.omni ?? null,
+      generate_audio: req.generate_audio ?? false,
+      ...(req.lipsync_text ? { lipsync_text: req.lipsync_text } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(formatApiDetail(err.detail, `报价失败: ${res.status}`));
   }
   return res.json();
 }

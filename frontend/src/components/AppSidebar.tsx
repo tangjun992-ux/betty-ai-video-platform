@@ -44,20 +44,20 @@ import {
 } from "lucide-react";
 
 // ─── NAV ITEMS ──────────────────────────────────────────
+// Yapper primary: Home / Explore / My Library · Generation: Agent / Image / Video
 const mainNav = [
-  { href: "/", icon: Home, labelKey: "nav.home", exact: true },
+  { href: "/dashboard", icon: Home, labelKey: "nav.home", exact: true },
   { href: "/explore", icon: Compass, labelKey: "nav.explore" },
-  { href: "/feed", icon: Rss, labelKey: "nav.feed" },
   { href: "/library", icon: Library, labelKey: "nav.library" },
-  { href: "/projects", icon: FolderKanban, labelKey: "nav.projects" },
-  { href: "/sessions", icon: MessageSquare, labelKey: "nav.sessions" },
-  { href: "/teams", icon: Users, labelKey: "nav.teams" },
 ];
 
-const toolNav = [
+const generationNav = [
   { href: "/agent", icon: Bot, labelKey: "nav.agent" },
   { href: "/create/image", icon: ImageIcon, labelKey: "nav.image" },
   { href: "/create/video", icon: Video, labelKey: "nav.video" },
+];
+
+const toolNav = [
   { href: "/create/image-editor", icon: Wand2, labelKey: "nav.imageEdit" },
   { href: "/create/motion", icon: Music, labelKey: "nav.motion" },
   { href: "/create/lipsync", icon: Mic, labelKey: "nav.lipsync" },
@@ -66,6 +66,10 @@ const toolNav = [
   { href: "/create/bg-remove", icon: Scissors, labelKey: "nav.removeBg" },
   { href: "/create/extend", icon: Expand, labelKey: "nav.extend" },
   { href: "/create/audio", icon: AudioLines, labelKey: "nav.audio" },
+  { href: "/feed", icon: Rss, labelKey: "nav.feed" },
+  { href: "/projects", icon: FolderKanban, labelKey: "nav.projects" },
+  { href: "/sessions", icon: MessageSquare, labelKey: "nav.sessions" },
+  { href: "/teams", icon: Users, labelKey: "nav.teams" },
 ];
 
 // ─── HELPER: Nav Item ───────────────────────────────────
@@ -133,7 +137,7 @@ function NavItem({
 export function AppSidebar() {
   const { t } = useLocale();
   const { sidebarCollapsed, toggleSidebarCollapsed } = useUIStore();
-  const [toolsOpen, setToolsOpen] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   return (
     <motion.aside
@@ -168,7 +172,7 @@ export function AppSidebar() {
         <div className="flex items-center justify-center h-12 border-b border-cosmic-border shrink-0">
           <Tooltip delayDuration={200}>
             <TooltipTrigger asChild>
-              <Link href="/" className="p-1 rounded-lg">
+              <Link href="/dashboard" className="p-1 rounded-lg">
                 <BrandMark className="w-7 h-7" />
               </Link>
             </TooltipTrigger>
@@ -198,6 +202,23 @@ export function AppSidebar() {
           />
         ))}
 
+        <div className="my-2 mx-3 border-t border-cosmic-border" />
+
+        {!sidebarCollapsed && (
+          <p className="px-4 py-1 text-[11px] font-semibold uppercase tracking-wider text-text-tertiary/70 select-none">
+            {t("nav.generation")}
+          </p>
+        )}
+        {generationNav.map((item) => (
+          <NavItem
+            key={item.href}
+            href={item.href}
+            icon={item.icon}
+            label={t(item.labelKey as any)}
+            collapsed={sidebarCollapsed}
+          />
+        ))}
+
         {/* Divider */}
         <div className="my-2 mx-3 border-t border-cosmic-border" />
 
@@ -211,7 +232,7 @@ export function AppSidebar() {
                 "hover:text-text-secondary transition-colors select-none group"
               )}
             >
-              <span>创作工具</span>
+              <span>{t("nav.tools")}</span>
               <ChevronDown
                 className={cn(
                   "w-3.5 h-3.5 transition-transform duration-200",
@@ -263,7 +284,7 @@ export function AppSidebar() {
             href="/pricing"
             className="flex items-center gap-2 px-3 py-2 rounded-xl bg-brand/[0.06] border border-brand/10 text-brand text-sm font-medium hover:bg-brand/[0.10] transition-all"
           >
-            <Sparkles className="w-4 h-4" /> 升级 Pro
+            <Sparkles className="w-4 h-4" /> {t("top.upgrade")}
           </Link>
         </div>
       )}
