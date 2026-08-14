@@ -72,9 +72,50 @@ PHOTO_PACKS: dict[str, dict[str, Any]] = {
 }
 
 
+def resolve_pack_model(pack: dict[str, Any], override: str | None = None) -> str:
+    """Prefer the pack SKU only when it is verified-active; else cheapest active image model."""
+    from app.api.models_info import default_verified_model, is_verified
+
+    for candidate in (override, pack.get("model"), "nano-banana", "gpt-image-2"):
+        cid = (candidate or "").strip()
+        if cid and is_verified(cid):
+            return cid
+    return default_verified_model("image") or "nano-banana"
+
+
+def pack_cost_per(model: str) -> int:
+    from app.api.models_info import MODELS
+
+    info = next((m for m in MODELS if m.id == model), None)
+    if info and info.capabilities.cost_per_image_credits:
+        return int(info.capabilities.cost_per_image_credits)
+    return 2
+
+
+def quote_pack(pack: dict[str, Any], *, pack_id: str, count: int | None, model: str | None = None) -> dict[str, Any]:
+    variations = pack["variations"]
+    n = len(variations) if not count else max(1, min(int(count), len(variations)))
+    resolved = resolve_pack_model(pack, model)
+    per = pack_cost_per(resolved)
+    preferred = pack.get("model") or resolved
+    return {
+        "pack_id": pack_id,
+        "pack_label": pack["label"],
+        "count": n,
+        "cost_per": per,
+        "estimated_cost_credits": per * n,
+        "preferred_model": preferred,
+        "resolved_model": resolved,
+        "model_fallback": resolved != preferred,
+        "honesty": "N 个独立图像任务（非单请求多图）。模型仅用已验证 active；不足则 402，不会中途扣一半。",
+    }
+
+
 def list_packs() -> list[dict[str, Any]]:
-    return [
-        {
+    out: list[dict[str, Any]] = []
+    for pid, p in PHOTO_PACKS.items():
+        q = quote_pack(p, pack_id=pid, count=len(p["variations"]))
+        out.append({
             "id": pid,
             "label": p["label"],
             "category": p["category"],
@@ -83,10 +124,12 @@ def list_packs() -> list[dict[str, Any]]:
             "aspect": p.get("aspect", "1:1"),
             "variation_count": len(p["variations"]),
             "variations": [{"label": v["label"]} for v in p["variations"]],
-            "model": p["model"],
-        }
-        for pid, p in PHOTO_PACKS.items()
-    ]
+            "model": q["resolved_model"],
+            "preferred_model": q["preferred_model"],
+            "cost_per": q["cost_per"],
+            "honesty": q["honesty"],
+        })
+    return out
 
 
 def get_pack(pack_id: str) -> dict[str, Any] | None:

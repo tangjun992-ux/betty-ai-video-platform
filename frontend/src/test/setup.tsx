@@ -64,6 +64,7 @@ vi.mock("lucide-react", () => {
     "TrendingUp", "Users", "FolderOpen", "FolderKanban", "LayoutDashboard",
     "Compass", "Library", "Rss", "MessageSquare", "AudioLines",
     "CircleDollarSign", "PanelLeft", "Languages", "ArrowUp",
+    "Globe", "Volume2", "Mic2",
   ];
 
   const exports: Record<string, any> = {};

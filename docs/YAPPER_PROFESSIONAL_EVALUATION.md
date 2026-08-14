@@ -200,9 +200,9 @@ depth_bonus:     12     # FaceSwap/Lipsync/Omni/YT/Performance 闭环加分
 
 | 差距 | 状态 | 下一刀 |
 |------|------|--------|
-| Product/Headshots/Packs 批量 | partial | 批量 SKU 管线 |
-| Voice Changer | partial | 真 VC 或保持 TTS 诚实文案 |
-| Max 滑块 / 团队席 | partial | 商业档体验 |
+| Product/Headshots/Packs 批量 | **partial** | 批量 SKU + quote 预检已落地；仍非单请求多图 / 身份锁 IP-Adapter |
+| Voice Changer | **partial** | Motion TTS 旁白已产品化；**保持非实时变声诚实文案** |
+| Max 滑块 / 团队席 | **partial** | 滑块写入结算；席位 SKU 可买；**无 Stripe Key 不能收款** |
 
 ---
 

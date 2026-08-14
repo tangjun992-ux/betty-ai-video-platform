@@ -178,6 +178,9 @@ export default function TeamsPage() {
         <div>
           <h1 className="text-2xl font-display font-bold">团队协作</h1>
           <p className="text-sm text-text-secondary">创建团队、邀请成员，共享项目可见性</p>
+          <p className="text-[11px] text-amber-700 dark:text-amber-200 mt-1" data-testid="teams-stripe-honesty">
+            加购席位走 Stripe checkout（kind=team_seats）。本环境未注入 Key 时无法真实收款；席位不是无限。
+          </p>
         </div>
       </div>
 
@@ -270,6 +273,7 @@ export default function TeamsPage() {
                   onClick={() => buySeats(t.team_id)}
                   disabled={buyingSeats}
                   className="btn-ghost h-8 text-xs"
+                  data-testid="buy-team-seats"
                 >
                   {buyingSeats ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "购买额外席位"}
                 </button>

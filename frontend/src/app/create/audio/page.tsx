@@ -93,6 +93,9 @@ export default function AudioPage() {
             <p className="text-text-secondary text-sm">{subtitle}</p>
           </div>
         </div>
+        <p className="mt-3 text-[11px] text-text-tertiary" data-testid="audio-tts-honesty">
+          TTS 文字转语音，不是实时变声引擎 / RVC / Voice Changer。动作片旁白请到运动控制页勾选「附加 TTS 旁白」。
+        </p>
         {isDemo && (
           <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
             <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />

@@ -32,13 +32,14 @@
 | **Face Swap 模板漏斗** | 8 张玩法卡片 + `/face-swap/templates` + 内容库选图 | FE vitest + templates contract |
 | **Stripe 诚实条** | `stripe-status.honesty` + Pricing 横幅 | 同上 |
 
-## P2 已落地（薄）
+## P2 已落地
 
 | 项 | 实现 | 验证 |
 |----|------|------|
-| **Product / Headshots / Photo Packs** | 专用路由 → prompt-pack | FE 文件存在 |
-| **Motion + Voice** | `voice_text` TTS 旁白（非变声引擎） | API 字段 |
-| **Tools hub** | Face Swap / Performance 入口；Motion native 文案 | 代码审查 |
+| **Product / Headshots / Photo Packs** | 批量 SKU：`GET /generate/packs` + quote 整批预检 + `POST /generate/pack`；仅已验证模型 | `tests/test_p2_packs_voice_max.py` |
+| **Motion + Voice** | Motion 页可选 TTS 旁白；caps `voice_changer.mode=tts_narration`；**非 RVC/实时变声** | 同上 + FE vitest |
+| **Max 滑块 / 团队席** | `checkout.credits` 对齐 `max_tiers`；积分包可点；席位诚实条 | 同上 |
+| **Tools hub** | Face Swap / Performance / Packs / TTS 诚实文案 | 代码审查 |
 
 ---
 
@@ -68,5 +69,6 @@ betty_internal_readiness              → ≈90
 4. Explore **真实社区规模**（搜索/remix/诚实密度已有；禁止 millions 话术）  
 5. Lipsync **周检 Beat**  
 6. Folders 仍是**标签目录**，不是嵌套文件系统 / 团队共享盘  
+7. 真 Voice Changer / IP-Adapter 身份锁 / Max 滑块真实收款（需 Stripe Key）  
 
-勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 18+ 全开而无周检。
+勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检。

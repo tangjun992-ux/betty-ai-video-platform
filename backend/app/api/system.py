@@ -113,6 +113,31 @@ async def capabilities():
                 "sku": ["kling-3.0/motion-control", "kling/ai-avatar-pro"],
                 "note": "Betty Performance Drive：原生 Motion + 可选 Lipsync 口播分轨。不是 Runway Act-One 表演编码器。",
             },
+            "photo_packs": {
+                "available": True,
+                "path": ["/create/product", "/create/headshots", "/create/photo-packs"],
+                "api": ["/generate/packs", "/generate/pack", "/generate/pack/quote"],
+                "mode": "batch_sku",
+                "note": "Product/Headshots/Packs 为 N 个独立图像任务；仅已验证 active 模型；整批预检积分。",
+            },
+            "voice_changer": {
+                "available": True,
+                "mode": "tts_narration",
+                "path": ["/create/motion", "/create/audio"],
+                "note": "Motion 可选 TTS 旁白 + Generate Audio。不是实时变声 / RVC / ElevenLabs Voice Changer。",
+            },
+            "max_slider": {
+                "available": True,
+                "path": "/pricing",
+                "api": "/pricing/plans",
+                "note": "Max credits 滑块写入 checkout.credits；未注入 Stripe Key 无法收款。",
+            },
+            "team_seats": {
+                "available": True,
+                "path": "/teams",
+                "api": "/billing/credit-packs",
+                "note": "席位 SKU seat_monthly / seat_pack_3；购买走 checkout kind=team_seats。",
+            },
             "director_minimal": {
                 "available": True,
                 "note": "PlanRequest.minimal / 快速成片：enhance→1图→1视，跳过配音字幕合成。",

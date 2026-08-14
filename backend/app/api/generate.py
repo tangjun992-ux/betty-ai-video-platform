@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
@@ -406,7 +406,32 @@ class PackRequest(BaseModel):
 @router.get("/packs", summary="Photo Pack 列表（批量 SKU）")
 async def list_photo_packs():
     from app.photo_packs import list_packs
-    return {"packs": list_packs()}
+    return {
+        "packs": list_packs(),
+        "honesty": "批量 SKU = N 个独立图像任务。仅已验证 active 模型；非百万资产包。",
+    }
+
+
+@router.get("/pack/quote", summary="Photo Pack 提交前报价（整批预检）")
+async def quote_photo_pack(
+    pack_id: str = Query(..., description="Photo Pack id"),
+    count: Optional[int] = Query(default=None, ge=1, le=8),
+    model: Optional[str] = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    from app.photo_packs import get_pack, quote_pack
+    from app.services.credits import available_personal_credits, _ensure_user_balance
+
+    pack = get_pack(pack_id)
+    if not pack:
+        raise HTTPException(status_code=404, detail=f"未知 Photo Pack: {pack_id}")
+    q = quote_pack(pack, pack_id=pack_id, count=count, model=model)
+    bal = await _ensure_user_balance(db, user_id)
+    available = await available_personal_credits(bal)
+    q["available_credits"] = available
+    q["affordable"] = available >= int(q["estimated_cost_credits"])
+    return q
 
 
 @router.post(
@@ -426,22 +451,32 @@ async def generate_pack(
     Each variation is dispatched as an independent image task; the client polls
     each task_id (via GET /tasks/{id}) and fills a gallery as they complete.
     """
-    from app.photo_packs import get_pack, build_variation_prompt
+    from app.photo_packs import get_pack, build_variation_prompt, quote_pack
+    from app.services.credits import available_personal_credits, _ensure_user_balance
 
     pack = get_pack(req.pack_id)
     if not pack:
         raise HTTPException(status_code=404, detail=f"未知 Photo Pack: {req.pack_id}")
 
+    q = quote_pack(pack, pack_id=req.pack_id, count=req.count, model=req.model)
+    bal = await _ensure_user_balance(db, user_id)
+    available = await available_personal_credits(bal)
+    if available < int(q["estimated_cost_credits"]):
+        raise HTTPException(
+            status_code=402,
+            detail=f"积分不足，套系需要 {q['estimated_cost_credits']} 积分（当前 {available}）",
+        )
+
     variations = pack["variations"]
     if req.count:
         variations = variations[: req.count]
     has_ref = bool(req.image_url and str(req.image_url).strip())
-    model = req.model or pack["model"]
+    model = q["resolved_model"]
     aspect = pack.get("aspect", "1:1")
     resolution = {"1:1": "1024x1024", "4:3": "1280x960", "3:4": "960x1280",
                   "16:9": "1600x900", "9:16": "900x1600"}.get(aspect, "1024x1024")
     team_id = resolve_team_id(request)
-    per_cost = _estimate_time_and_cost("image", model, 5)[1]
+    per_cost = int(q["cost_per"])
 
     # Moderate the combined subject once.
     from app.services.moderation import check_prompt, moderation_reject
@@ -458,6 +493,7 @@ async def generate_pack(
         params = {
             "resolution": resolution, "count": 1, "seed": None,
             "pack_id": req.pack_id, "pack_batch": batch_id, "pack_variation": v["label"],
+            "resolved_model": model,
         }
         if has_ref:
             params["image_url"] = req.image_url
@@ -500,6 +536,8 @@ async def generate_pack(
         "batch_id": batch_id, "pack_id": req.pack_id, "pack_label": pack["label"],
         "count": len(items), "dispatched": dispatched,
         "estimated_cost_credits": per_cost * dispatched,
+        "resolved_model": model,
+        "honesty": q["honesty"],
         "items": items,
     }
 

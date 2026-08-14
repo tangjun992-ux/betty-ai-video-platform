@@ -56,12 +56,12 @@ YAPPER_MATRIX = [
     {"id": "tools_hub", "yapper": "All Tools hub", "fe": "frontend/src/app/tools/page.tsx", "apis": ["/api/v1/system/capabilities"]},
     {"id": "library", "yapper": "My Library / Assets", "fe": "frontend/src/app/library/page.tsx", "apis": ["/api/v1/library/"]},
     # Yapper differentiators often missing or thin on Betty
-    {"id": "product_shots", "yapper": "Stunning Product Shots (dedicated)", "fe": "frontend/src/app/create/product/page.tsx", "apis": [], "gap_hint": "dedicated entry exists; thin prompt-pack redirect to image"},
-    {"id": "headshots", "yapper": "Professional Headshots (dedicated)", "fe": "frontend/src/app/create/headshots/page.tsx", "apis": [], "gap_hint": "dedicated entry exists; thin prompt-pack redirect to image"},
-    {"id": "photo_packs", "yapper": "AI Photo Packs", "fe": "frontend/src/app/create/photo-packs/page.tsx", "apis": [], "gap_hint": "hub page exists; not a batch SKU pipeline"},
+    {"id": "product_shots", "yapper": "Stunning Product Shots (dedicated)", "fe": "frontend/src/app/create/product/page.tsx", "apis": ["/api/v1/generate/packs"], "gap_hint": "batch SKU：POST /generate/pack + quote 整批预检；N 个独立图像任务"},
+    {"id": "headshots", "yapper": "Professional Headshots (dedicated)", "fe": "frontend/src/app/create/headshots/page.tsx", "apis": ["/api/v1/generate/packs"], "gap_hint": "batch SKU headshots pack；非证件照合规引擎"},
+    {"id": "photo_packs", "yapper": "AI Photo Packs", "fe": "frontend/src/app/create/photo-packs/page.tsx", "apis": ["/api/v1/generate/pack/quote"], "gap_hint": "真实批量管线 + 报价；非单请求多图"},
     {"id": "face_swap", "yapper": "AI Face Swapping / viral templates", "fe": "frontend/src/app/create/face-swap/page.tsx", "apis": ["/api/v1/face-swap"], "gap_hint": "i2i_edit live (nano-banana-edit); not InsightFace; viral template library thin"},
     {"id": "url_viral", "yapper": "URL-to-Viral (TikTok/IG reel → prompt)", "fe": "frontend/src/app/create/extract/page.tsx", "apis": ["/api/v1/generate/extract-prompt"], "gap_hint": "YouTube cover resolve ok; TikTok/IG best-effort; not full reel→structure"},
-    {"id": "motion_voice", "yapper": "Motion + Voice Changer", "fe": "frontend/src/app/create/motion/page.tsx", "apis": ["/api/v1/motion"], "gap_hint": "voice_text TTS旁白 + Performance Drive；非实时变声引擎"},
+    {"id": "motion_voice", "yapper": "Motion + Voice Changer", "fe": "frontend/src/app/create/motion/page.tsx", "apis": ["/api/v1/motion"], "gap_hint": "Motion 可选 TTS 旁白；明确非实时变声/RVC"},
     {"id": "performance_drive", "yapper": "Advanced Motion / performance-like drive", "fe": "frontend/src/app/create/performance/page.tsx", "apis": ["/api/v1/performance"], "gap_hint": "Motion+optional Lipsync；≠ Runway Act-One"},
     {"id": "seedance_omni", "yapper": "Seedance 2.0 Omni multi-modal / multi-shot", "fe": "frontend/src/app/create/video/page.tsx", "apis": ["/api/v1/generate/"]},
 ]
@@ -526,7 +526,7 @@ def score_gaps(checks: list[dict], live: list[dict], meta: dict) -> dict:
         {
             "area": "专用 Image Apps 深度",
             "yapper": "Product / Headshots / Photo Packs 批量工作流",
-            "betty": "独立路由存在；多为 prompt-pack 导向，非批量 SKU 管线",
+            "betty": "Product/Headshots/Packs 为批量 SKU（N 独立任务 + 整批报价预检）",
             "priority": "P2",
             "impact": "中",
             "status": "partial",
@@ -534,7 +534,7 @@ def score_gaps(checks: list[dict], live: list[dict], meta: dict) -> dict:
         {
             "area": "Motion + Voice Changer",
             "yapper": "动作迁移可叠加变声",
-            "betty": "voice_text TTS 旁白 + Performance；非实时变声引擎",
+            "betty": "Motion 页可选 TTS 旁白 + Generate Audio；明确非实时变声/RVC",
             "priority": "P2",
             "impact": "中",
             "status": "partial",
@@ -542,7 +542,7 @@ def score_gaps(checks: list[dict], live: list[dict], meta: dict) -> dict:
         {
             "area": "定价滑块 / 团队席位",
             "yapper": "Max credits 滑块 + Team members",
-            "betty": "四档 id 含 max 已对齐；缺 credits 滑块与团队席位产品化",
+            "betty": "Max credits 滑块写入 checkout.credits；团队席 SKU 可买（无 Key 无法收款）",
             "priority": "P2",
             "impact": "低中",
             "status": "partial",

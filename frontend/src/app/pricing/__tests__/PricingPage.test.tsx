@@ -31,5 +31,7 @@ describe("Pricing Stripe honesty", () => {
     await waitFor(() => {
       expect(screen.getByTestId("pricing-stripe-honesty")).toBeInTheDocument();
     });
+    expect(screen.getByTestId("pricing-max-slider")).toBeInTheDocument();
+    expect(screen.getByTestId("pricing-credit-packs")).toBeInTheDocument();
   });
 });

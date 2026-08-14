@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ImagePlus, X, Download, Maximize2, Sparkles, Loader2, CheckCircle2, Globe } from "lucide-react";
-import { listPhotoPacks, generatePack, getTaskStatus, uploadImage, publishShare, type PhotoPack, type TaskResult } from "@/lib/api";
+import { listPhotoPacks, generatePack, quotePack, getTaskStatus, uploadImage, publishShare, type PhotoPack, type TaskResult } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +35,7 @@ export function BatchPackStudio({
   const [busy, setBusy] = useState(false);
   const [cells, setCells] = useState<ResultCell[]>([]);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [quote, setQuote] = useState<{ estimated_cost_credits: number; resolved_model: string; affordable?: boolean; honesty?: string } | null>(null);
 
   useEffect(() => {
     listPhotoPacks().then((ps) => {
@@ -47,6 +48,13 @@ export function BatchPackStudio({
   const pack = packs.find((p) => p.id === packId);
   const maxCount = pack?.variation_count ?? 4;
   const effCount = Math.min(count, maxCount);
+
+  useEffect(() => {
+    if (!packId) return;
+    quotePack({ pack_id: packId, count: effCount })
+      .then((q) => setQuote(q))
+      .catch(() => setQuote(null));
+  }, [packId, effCount]);
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -124,6 +132,11 @@ export function BatchPackStudio({
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-text-primary">{title}</h1>
         <p className="text-sm text-text-secondary/80 mt-1">{subtitle}</p>
+        <p className="text-[11px] text-text-tertiary mt-2" data-testid="pack-honesty">
+          {quote?.honesty || pack?.honesty || "批量套系 = 多个独立图像任务，仅已验证模型。"}
+          {quote?.resolved_model ? ` · 模型 ${quote.resolved_model}` : ""}
+          {typeof quote?.estimated_cost_credits === "number" ? ` · 预估 ${quote.estimated_cost_credits} 积分` : ""}
+        </p>
       </div>
 
       {/* Config card */}
@@ -187,6 +200,7 @@ export function BatchPackStudio({
               busy || !pack ? "bg-cosmic-subtle text-text-tertiary/50 cursor-not-allowed" : "bg-gradient-to-r from-accent-cyan to-accent-violet text-white hover:brightness-110 active:scale-95")}>
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             {busy ? "批量生成中…" : `生成 ${effCount} 张套系`}
+            {!busy && quote?.estimated_cost_credits ? ` · ${quote.estimated_cost_credits} 积分` : ""}
           </button>
         </div>
       </div>
