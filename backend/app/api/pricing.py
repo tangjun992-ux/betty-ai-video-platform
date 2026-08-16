@@ -10,6 +10,7 @@ from app.db import get_db
 from app.auth import resolve_user_id
 from app.models.user import User
 from app.models.billing import UserBalance
+from app.services.concurrency import PLAN_CONCURRENCY
 
 router = APIRouter()
 
@@ -52,6 +53,30 @@ def normalize_plan_id(plan_id: str) -> str:
     if pid == "pro":
         return "max"
     return pid
+
+
+# Yapper 定价对照表同源：并发来自 concurrency.PLAN_CONCURRENCY；
+# 席位是套餐合同（starter/personal=0，creator=2，max=7），加购走 checkout kind=team_seats。
+# 未注入 Stripe Key 时这些数字仍可展示，但不能收款。
+PLAN_INCLUDED_SEATS: dict[str, int] = {
+    "starter": 0,
+    "personal": 0,
+    "creator": 2,
+    "max": 7,
+}
+
+LIMITS_HONESTY = (
+    "并发与 PLAN_CONCURRENCY 同源（starter 4 / personal 6 / creator 10 / max 40）；"
+    "席位是套餐合同，加购走 team_seats。未注入 Stripe Key 仍不能收款。"
+)
+
+
+def plan_limit_fields(plan_id: str) -> dict:
+    pid = normalize_plan_id(plan_id)
+    return {
+        "concurrent_generations": int(PLAN_CONCURRENCY.get(pid, PLAN_CONCURRENCY.get("starter", 4))),
+        "included_team_seats": int(PLAN_INCLUDED_SEATS.get(pid, 0)),
+    }
 
 
 PLANS: list[PricingPlan] = [
@@ -163,12 +188,17 @@ async def get_pricing_plans(cycle: str = "monthly"):
         }
         if plan.credit_tiers:
             row["credit_tiers"] = plan.credit_tiers
+        row.update(plan_limit_fields(plan.id))
         if plan.id == "max":
             row["aliases"] = ["pro"]  # backward compat
             row["max_tiers"] = MAX_CREDIT_TIERS
             row["honesty"] = "滑块档位写入结算 credits；未注入 Stripe Key 时无法真实收款。"
         result.append(row)
-    return {"plans": result, "cycle": cycle}
+    return {
+        "plans": result,
+        "cycle": cycle,
+        "limits_honesty": LIMITS_HONESTY,
+    }
 
 
 @router.get("/user", summary="获取当前用户余额信息")

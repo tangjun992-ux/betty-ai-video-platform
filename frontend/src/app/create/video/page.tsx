@@ -17,6 +17,38 @@ import { SessionChip } from "@/components/SessionChip";
 
 /* ════════════════════════════════════════════════════════ Data ═══ */
 
+/** Yapper-style Video Ideas: fill the composer, do not bounce the user to /agent. */
+const VIDEO_IDEAS = [
+  {
+    id: "ugc",
+    labelZh: "竖屏口播",
+    labelEn: "UGC talking-head",
+    prompt: "竖屏 9:16 口播：年轻创作者面对镜头，自然光，前 1 秒抛出痛点，随后演示解法，字幕干净，结尾 CTA。",
+    aspect: "9:16",
+  },
+  {
+    id: "product",
+    labelZh: "产品特写",
+    labelEn: "Product hero",
+    prompt: "16:9 产品广告：台面特写，柔光扫过材质，慢推镜头展示细节，品牌色干净背景，先出画面再考虑旁白。",
+    aspect: "16:9",
+  },
+  {
+    id: "cinematic",
+    labelZh: "电影运镜",
+    labelEn: "Cinematic",
+    prompt: "电影感城市黄昏：宽画幅，低机位跟拍，浅景深，暖色丁达尔光，运镜平稳不抖动。",
+    aspect: "21:9",
+  },
+  {
+    id: "hook",
+    labelZh: "3秒钩子",
+    labelEn: "3s hook",
+    prompt: "9:16 短视频钩子：0–1s 反常识画面，1–3s 字幕抛问题，节奏快切，保留后期口播空间。",
+    aspect: "9:16",
+  },
+] as const;
+
 const VIDEO_MODELS_FALLBACK = [
   { id: "auto", name: "Auto", desc: "智能选择最佳模型", icon: "🤖", credits: undefined as number | undefined },
   { id: "seedance-2.0", name: "Seedance 2.0", desc: "已验证 · Omni 多模态", icon: "🎬", badge: "Omni", credits: 4 },
@@ -273,18 +305,41 @@ export default function CreateVideoPage() {
           {/* Title + pills */}
           <div className="text-center mb-5">
             <h1 className="text-2xl font-bold tracking-tight text-text-primary">{en ? "Prompt · Edit · Compose pro video" : "Prompt · 编辑 · 混剪专业视频"}</h1>
-            <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+            <div className="mt-3 flex items-center justify-center gap-2 flex-wrap" data-testid="video-ideas-row">
+              {VIDEO_IDEAS.map((idea) => (
+                <button
+                  key={idea.id}
+                  type="button"
+                  data-testid={`video-idea-${idea.id}`}
+                  onClick={() => {
+                    setPrompt(idea.prompt);
+                    setAspectRatio(idea.aspect);
+                  }}
+                  className="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-cosmic-surface/50 border border-cosmic-border/60 text-text-secondary hover:text-text-primary hover:border-accent-cyan/40 transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-accent-cyan/80" />
+                  {en ? idea.labelEn : idea.labelZh}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 flex items-center justify-center gap-2 flex-wrap">
               {[
-                { label: en ? "Video ideas" : "视频灵感", href: "/agent" },
                 { label: en ? "Lip Sync" : "唇形同步", href: "/create/lipsync" },
                 { label: en ? "Motion" : "动态控制", href: "/create/motion" },
               ].map((pill) => (
-                <button key={pill.label} onClick={() => router.push(pill.href)} className="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-cosmic-surface/50 border border-cosmic-border/60 text-text-secondary hover:text-text-primary hover:border-accent-cyan/40 transition-colors">
-                  <Sparkles className="w-3.5 h-3.5 text-accent-cyan/80" />
+                <button key={pill.label} type="button" onClick={() => router.push(pill.href)} className="group inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-cosmic-surface/40 border border-cosmic-border/50 text-text-secondary hover:text-text-primary hover:border-accent-cyan/40 transition-colors">
                   {pill.label}
                   <span className="px-1 py-0.5 rounded text-[8px] font-semibold bg-accent-cyan/[0.12] text-accent-cyan">App</span>
                 </button>
               ))}
+              <button
+                type="button"
+                data-testid="video-ideas-open-agent"
+                onClick={() => router.push(prompt.trim() ? `/agent?brief=${encodeURIComponent(prompt.trim())}` : "/agent")}
+                className="text-[11px] text-text-tertiary hover:text-accent-cyan underline-offset-2 hover:underline"
+              >
+                {en ? "Refine in Agent" : "在 Agent 细化"}
+              </button>
             </div>
           </div>
 
