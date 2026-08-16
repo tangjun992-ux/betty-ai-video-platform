@@ -76,6 +76,7 @@ export function VideoComposer(p: Props) {
       {/* Top: textarea + top-right controls */}
       <div className="flex items-start gap-2 px-4 pt-4 pb-1.5">
         <textarea
+          data-testid="video-prompt"
           value={p.prompt}
           onChange={(e) => p.onPromptChange(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (canGenerate) p.onGenerate(); } }}

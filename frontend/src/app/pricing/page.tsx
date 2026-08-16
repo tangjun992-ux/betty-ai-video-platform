@@ -47,6 +47,14 @@ const MAX_FEATURES = {
   en: ["All verified models + Lab early access", "Highest concurrency · high resolution", "Team seats (add-on, not unlimited)", "API + Webhooks", "Dedicated CSM · SLA"],
 };
 
+/** Fallback if /pricing/plans is slow; API concurrent/seats are the source of truth. */
+const DEFAULT_LIMITS: Record<string, { concurrent_generations: number; included_team_seats: number }> = {
+  starter: { concurrent_generations: 4, included_team_seats: 0 },
+  personal: { concurrent_generations: 6, included_team_seats: 0 },
+  creator: { concurrent_generations: 10, included_team_seats: 2 },
+  max: { concurrent_generations: 40, included_team_seats: 7 },
+};
+
 const CREDIT_USAGE = [
   { model: "Nano Banana 2", type: "image", qualityZh: "标准", qualityEn: "Standard", credits: 2 },
   { model: "GPT Image 2 / Nano Banana Pro", type: "image", qualityZh: "高清", qualityEn: "HD", credits: 5 },
@@ -85,6 +93,15 @@ const PRICING_UI = {
     usageNote: "生成前始终显示精确 Credits 成本；实际消耗随模型与时长浮动",
     faqTitle: "常见问题", addonTitle: "一次性积分包",
     paidTitle: "订阅成功", paidDesc: "积分已到账",
+    limitsTitle: "套餐限额对照",
+    limitsTh: ["项目", "Starter", "Personal", "Creator", "Max"],
+    limitsCredits: "每月积分",
+    limitsConcurrent: "同时生成",
+    limitsSeats: "自带席位",
+    limitsNone: "—",
+    limitsNote: "并发与后端 PLAN_CONCURRENCY 同源；席位是套餐合同，加购走 team_seats。未注入 Stripe Key 仍不能收款。",
+    concurrentLine: (n: number) => `同时 ${n} 路生成`,
+    seatsLine: (n: number) => (n > 0 ? `自带 ${n} 个席位` : "不含团队席位"),
   },
   en: {
     monthly: "Monthly", yearly: "Yearly", save: "Save 20%", cycleLabel: "Billing cycle",
@@ -95,6 +112,15 @@ const PRICING_UI = {
     usageNote: "The exact credit cost is always shown before generating; actual usage varies by model and duration.",
     faqTitle: "Frequently asked questions", addonTitle: "One-time credit packs",
     paidTitle: "Subscribed", paidDesc: "Credits added",
+    limitsTitle: "Plan limits",
+    limitsTh: ["Item", "Starter", "Personal", "Creator", "Max"],
+    limitsCredits: "Credits / mo",
+    limitsConcurrent: "Concurrent gens",
+    limitsSeats: "Included seats",
+    limitsNone: "—",
+    limitsNote: "Concurrency matches PLAN_CONCURRENCY; seats are a plan contract. Add-on seats use team_seats checkout. No Stripe key means no real charge.",
+    concurrentLine: (n: number) => `${n} concurrent generations`,
+    seatsLine: (n: number) => (n > 0 ? `${n} included seats` : "No team seats"),
   },
 };
 
@@ -112,7 +138,10 @@ export default function PricingPage() {
   const [maxIdx, setMaxIdx] = useState(1);
   const [maxTiers, setMaxTiers] = useState(MAX_TIERS);
   const [creditPacks, setCreditPacks] = useState<Array<{ id: string; name: string; credits: number; price_usd: number }>>([]);
+  const [apiLimits, setApiLimits] = useState<Record<string, { concurrent_generations: number; included_team_seats: number; credits_per_month?: number }>>({});
+  const [limitsHonesty, setLimitsHonesty] = useState<string>("");
   const maxTier = maxTiers[Math.min(maxIdx, maxTiers.length - 1)] || MAX_TIERS[1];
+  const limitsFor = (id: string) => apiLimits[id] || DEFAULT_LIMITS[id] || DEFAULT_LIMITS.starter;
 
   useEffect(() => {
     fetch(`${API_BASE}/billing/stripe-status`)
@@ -124,6 +153,17 @@ export default function PricingPage() {
       .then((d) => {
         const max = (d?.plans || []).find((p: any) => p.id === "max");
         if (Array.isArray(max?.max_tiers) && max.max_tiers.length) setMaxTiers(max.max_tiers);
+        const next: Record<string, { concurrent_generations: number; included_team_seats: number; credits_per_month?: number }> = {};
+        for (const p of d?.plans || []) {
+          if (!p?.id) continue;
+          next[p.id] = {
+            concurrent_generations: Number(p.concurrent_generations ?? DEFAULT_LIMITS[p.id]?.concurrent_generations ?? 4),
+            included_team_seats: Number(p.included_team_seats ?? DEFAULT_LIMITS[p.id]?.included_team_seats ?? 0),
+            credits_per_month: Number(p.credits_per_month || 0) || undefined,
+          };
+        }
+        if (Object.keys(next).length) setApiLimits(next);
+        if (typeof d?.limits_honesty === "string" && d.limits_honesty) setLimitsHonesty(d.limits_honesty);
       })
       .catch(() => {});
     fetch(`${API_BASE}/billing/credit-packs`)
@@ -217,7 +257,10 @@ export default function PricingPage() {
               <span className="text-sm text-text-secondary">{L.perMonth}</span>
             </div>
             {yearly && <p className="text-xs text-brand mb-2">{L.billedYearly((plan.priceYearly * 12).toFixed(0))}</p>}
-            <p className="text-sm text-text-secondary mb-4">{L.creditsMo(plan.credits.toLocaleString())}</p>
+            <p className="text-sm text-text-secondary mb-1">{L.creditsMo(plan.credits.toLocaleString())}</p>
+            <p className="text-xs text-text-tertiary mb-4" data-testid={`pricing-card-limits-${plan.id}`}>
+              {L.concurrentLine(limitsFor(plan.id).concurrent_generations)} · {L.seatsLine(limitsFor(plan.id).included_team_seats)}
+            </p>
             <ul className="space-y-2.5 mb-6 flex-1">
               {PLAN_FEATURES[plan.id][locale].map((f) => (
                 <li key={f} className="flex items-start gap-2 text-sm">
@@ -247,7 +290,10 @@ export default function PricingPage() {
             <span className="text-sm text-text-secondary">{L.perMonth}</span>
           </div>
           {yearly && <p className="text-xs text-amber-600 mb-2">{L.billedYearly((maxTier.yearly * 12).toFixed(0))}</p>}
-          <p className="text-sm text-text-secondary mb-3">{L.creditsMo(maxTier.credits.toLocaleString())}</p>
+          <p className="text-sm text-text-secondary mb-1">{L.creditsMo(maxTier.credits.toLocaleString())}</p>
+          <p className="text-xs text-text-tertiary mb-3" data-testid="pricing-card-limits-max">
+            {L.concurrentLine(limitsFor("max").concurrent_generations)} · {L.seatsLine(limitsFor("max").included_team_seats)}
+          </p>
           {/* Slider */}
           <input type="range" min={0} max={maxTiers.length - 1} step={1} value={maxIdx}
             data-testid="pricing-max-slider"
@@ -291,6 +337,59 @@ export default function PricingPage() {
           </div>
         </div>
       </div>
+
+      {/* Yapper-style limits comparison */}
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.32 }} className="max-w-3xl mx-auto mb-16">
+        <h2 className="text-xl font-bold mb-4 text-center text-text-accent-cyan">{L.limitsTitle}</h2>
+        <div className="rounded-2xl border border-cosmic-border overflow-hidden" data-testid="pricing-limits-table">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-cosmic-border bg-cosmic-subtle">
+                {L.limitsTh.map((h) => (
+                  <th key={h} className="px-4 py-3 font-medium text-text-secondary text-left">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                {
+                  key: "credits",
+                  label: L.limitsCredits,
+                  cells: [
+                    "1,000",
+                    "3,000",
+                    "7,000",
+                    maxTier.credits.toLocaleString(),
+                  ],
+                },
+                {
+                  key: "concurrent",
+                  label: L.limitsConcurrent,
+                  cells: ["starter", "personal", "creator", "max"].map((id) => String(limitsFor(id).concurrent_generations)),
+                },
+                {
+                  key: "seats",
+                  label: L.limitsSeats,
+                  cells: ["starter", "personal", "creator", "max"].map((id) => {
+                    const n = limitsFor(id).included_team_seats;
+                    return n > 0 ? String(n) : L.limitsNone;
+                  }),
+                },
+              ] as const).map((row) => (
+                <tr key={row.key} className="border-b border-cosmic-border last:border-0" data-testid={`pricing-limits-row-${row.key}`}>
+                  <td className="px-4 py-3 text-text-accent-cyan font-medium">{row.label}</td>
+                  {row.cells.map((cell, i) => (
+                    <td key={`${row.key}-${i}`} className="px-4 py-3 text-text-secondary font-mono">{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-text-secondary text-center mt-3 flex items-center justify-center gap-1" data-testid="pricing-limits-honesty">
+          <Info className="w-3 h-3" />{limitsHonesty || L.limitsNote}
+        </p>
+      </motion.div>
 
       {/* Credit Usage Table */}
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="max-w-3xl mx-auto mb-16">

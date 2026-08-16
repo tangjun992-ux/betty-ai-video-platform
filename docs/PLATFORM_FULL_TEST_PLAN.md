@@ -2,6 +2,8 @@
 
 **版本：** 2026-07-16  
 **原则：** 界面可打开 ≠ 链路通 ≠ 真出片 ≠ 生产可运营。每一层必须独立判定；付费 live 成败如实记账。  
+**L6–L8（界面专业性 / UX / 性能）与 Yapper 核心面对照：** 见 `docs/CORE_YAPPER_FULL_TEST_PLAN.md`；入口 `backend/scripts/core_yapper_full_verify.py`。
+
 **可执行入口：**
 
 ```bash
