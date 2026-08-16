@@ -191,11 +191,31 @@ Celery/Redis 缺失导致 `enqueue:generate_image` 失败 = **环境问题**，�
 
 ---
 
-## 7. 验收清单
+## 7. 本轮实测（2026-08-16，本 VM）
 
-- [ ] `pytest tests/test_p4_core_yapper_ux.py` 全绿
-- [ ] Video / Pricing vitest 全绿
-- [ ] `core_yapper_full_verify.py` 契约段全绿
-- [ ] 视频灵感点击后 composer 有词，且未 `push('/agent')`
-- [ ] 定价表可见 4/6/10/40 与 —/—/2/7
-- [ ] 报告写明：active 仍为 9；Stripe 仍无 Key；未测付费出片
+| 套件 | 结果 | 备注 |
+|------|------|------|
+| `pytest tests/test_p4_core_yapper_ux.py` | **4/4** | 限额契约 + quote 预算 + 视频页源码门闩 |
+| Pricing vitest | **2/2** | 诚实条 + Limits 表 4/6/10/40 与 2/7 |
+| Video vitest | **2/2** | 芯片填词、不跳 Agent；Agent 细化带 `brief=` |
+| `core_yapper_full_verify.py` | **11/11** | `active=9`；quote min **8.64ms** / plans **34ms** / capabilities **4ms**（进程内，**不是 SLA**） |
+
+原始 JSON：`/opt/cursor/artifacts/core_yapper_full_verify.json`
+
+### 仍落后 Yapper（本轮不虚补）
+
+- 货架叙事 18+/29+ vs Betty **active=9**
+- Seedance **2.5** vs Betty **2.0**
+- MCP/API 产品页：无
+- Stripe/OIDC Key：无，不能收款
+- Explore millions：无；空库=0
+
+## 8. 验收清单
+
+- [x] `pytest tests/test_p4_core_yapper_ux.py` 全绿
+- [x] Pricing vitest 全绿
+- [x] Video vitest 全绿
+- [x] `core_yapper_full_verify.py` 契约段全绿
+- [x] 视频灵感源码：`setPrompt(idea.prompt)`，旧 /agent 跳走已删
+- [x] 定价表契约：4/6/10/40 与 0/0/2/7
+- [x] 报告写明：active 仍为 9；Stripe 仍无 Key；未测付费出片
