@@ -63,6 +63,7 @@ FE_ROUTES = [
     "/auth/login",
     "/auth/register",
     "/developer",
+    "/mcp",
     "/models",
     "/billing",
     "/tasks",

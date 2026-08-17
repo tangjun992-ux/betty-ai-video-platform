@@ -101,7 +101,7 @@ async def require_api_key(
     return k.user_id
 
 
-from app.api.generate import GenerateRequest, execute_generation  # no cycle: generate doesn't import developer
+from app.api.generate import GenerateRequest, execute_generation, quote_generation  # no cycle: generate doesn't import developer
 
 
 @router.post("/public/generate", summary="公开 API：提交生成（X-API-Key 鉴权）",
@@ -114,3 +114,52 @@ async def public_generate(
     """Public generation endpoint — reuses the full web pipeline (routing,
     moderation, cost, dispatch) scoped to the API key's owner."""
     return await execute_generation(req, db, key_user, team_id=None)
+
+
+@router.get("/public/models", summary="公开 API：已验证模型货架")
+async def public_models():
+    from app.api.mcp import _active_models
+    return await _active_models()
+
+
+@router.post("/public/quote", summary="公开 API：提交前报价（不扣费）")
+async def public_quote(
+    req: GenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    key_user: int = Depends(require_api_key),
+):
+    return await quote_generation(req, db, key_user)
+
+
+@router.get("/public/credits", summary="公开 API：账户积分")
+async def public_credits(
+    db: AsyncSession = Depends(get_db),
+    key_user: int = Depends(require_api_key),
+):
+    from app.api.mcp import _credits
+    return await _credits(db, key_user)
+
+
+@router.get("/public/tasks/{task_id}", summary="公开 API：查询本人任务")
+async def public_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_db),
+    key_user: int = Depends(require_api_key),
+):
+    from app.api.mcp import _get_task
+    try:
+        return await _get_task(db, key_user, task_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/public/assets", summary="公开 API：最近完成资产")
+async def public_assets(
+    limit: int = 12,
+    db: AsyncSession = Depends(get_db),
+    key_user: int = Depends(require_api_key),
+):
+    from app.api.mcp import _list_assets
+    return await _list_assets(db, key_user, limit)

@@ -136,7 +136,7 @@ L0–L5 细则仍以 `PLATFORM_FULL_TEST_PLAN.md` 为准。本文件只把 L6–
 |----|-------------------|-------|------|
 | S1 | Explore 18+ / 29+；定价卡 19+ / 30+ | active=9 | ❌ 货架叙事 |
 | S2 | Seedance 2.5 Omni-Video | Seedance 2.0 | ❌ 代际 |
-| S3 | MCP + REST「54+ models」 | 无 MCP 产品页 | ❌ 分发面 |
+| S3 | MCP + REST「54+ models」 | `/mcp` + JSON-RPC 连接器 + public REST；**active 货架 / API Key，非 OAuth / 非 54+** | ◐ 分发面已补协议，货架叙事仍落后 |
 
 这些项 **本方案只记录，不靠文案补齐**。
 
