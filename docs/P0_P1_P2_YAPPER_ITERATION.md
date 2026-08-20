@@ -104,7 +104,7 @@ betty_internal_readiness              → ≈90
 | **Extract IG 诚实禁用** | Instagram/X 仅 URL 时禁用提交 + 提示条 | `extract-ig-honesty` |
 | **Pricing 订阅禁用** | `subscription_ready` 绑定 disabled + toast | `pricing-stripe-honesty` |
 
-## 第四轮测试修复（2026-08-20）
+## P1/P2 第四轮测试修复（2026-08-20）
 
 | 项 | 实现 | 验证 |
 |----|------|------|
@@ -118,4 +118,14 @@ betty_internal_readiness              → ≈90
 | **Audit Redis 诚实** | 无 broker 时 enqueue 500 记 partial | yapper_full_matrix_audit.py |
 | **Playwright 扩展** | Extract IG + Pricing disabled E2E | 12/12 betty.spec.ts |
 
-勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检。
+## 商业开放裁决（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **commercial-open API** | `GET /system/commercial-open` 诚实 go/no-go | `test_commercial_open_honest_not_public` |
+| **Status 商业门** | `/status` 展示 blockers | `status-commercial-open` |
+| **首页去虚标** | 去掉 GPU 集群/已可商业授权；未开放诚实条 | `home-commercial-honesty` |
+| **页脚专业入口** | Status / MCP / Developer | 首页 footer |
+| **评估文档** | `docs/YAPPER_COMMERCIAL_OPEN_EVAL_2026-08-20.md` | 对标 yapper.so 当日 |
+
+勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检；首页不写 Kling 3.0 全量上线（仅 motion SKU 映射，且 live 未折）。

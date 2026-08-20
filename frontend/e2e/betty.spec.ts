@@ -72,6 +72,23 @@ test.describe("Extract / Pricing 诚实边界", () => {
       await expect(page.getByRole("button", { name: /选择|Choose|Creator/i }).first()).toBeDisabled();
     }
   });
+
+  test("首页诚实条：尚未对公众收费开放", async ({ page }) => {
+    await page.goto("/");
+    const cookie = page.getByRole("button", { name: "接受全部" });
+    if (await cookie.isVisible()) await cookie.click();
+    await expect(page.getByTestId("home-commercial-honesty")).toBeVisible({ timeout: 10000 });
+  });
+
+  test("状态页展示商业开放裁决", async ({ page }) => {
+    await page.goto("/status");
+    const cookie = page.getByRole("button", { name: "接受全部" });
+    try {
+      if (await cookie.isVisible({ timeout: 2000 })) await cookie.click();
+    } catch { /* banner already dismissed */ }
+    await expect(page.getByTestId("status-commercial-open")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/尚未商业开放|可对公众收费开放/)).toBeVisible();
+  });
 });
 
 test.describe("图片创作页", () => {

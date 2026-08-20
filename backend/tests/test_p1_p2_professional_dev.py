@@ -119,3 +119,22 @@ def test_lipsync_weekly_task_registered():
     from celery_app import app as celery_app
 
     assert "app.tasks.health_tasks.smoke_live_lipsync_weekly" in celery_app.tasks
+
+
+def test_commercial_open_honest_not_public(client: TestClient):
+    r = client.get("/api/v1/system/commercial-open")
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert "open_to_public" in d
+    assert "blockers" in d
+    assert "verdict" in d
+    assert d["verdict"] in (
+        "commercially_open",
+        "studio_ready_not_commercially_open",
+        "not_ready",
+    )
+    # This environment has no Stripe Key — must not claim public billing.
+    if not d.get("subscription_ready"):
+        assert d["open_to_public"] is False
+        assert any(b.get("id") == "stripe" for b in d["blockers"])
+    assert "不虚标" in (d.get("honesty") or "") or "active" in (d.get("honesty") or "")

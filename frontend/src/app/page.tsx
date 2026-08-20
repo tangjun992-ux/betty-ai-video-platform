@@ -194,13 +194,13 @@ const FEATURES = [
   {
     icon: Award,
     title: "专业品质",
-    desc: "4K 超高清输出，专业色彩管理，商业授权可用，满足从社交媒体到印刷品的全场景需求",
+    desc: "已验证链路支持 4K 输出；商业授权随付费套餐条款生效，未注入 Stripe 前不能对公众收款",
     color: "from-accent-violet to-accent-purple",
   },
   {
     icon: Timer,
-    title: "极速生成",
-    desc: "分布式 GPU 集群加速，图片秒级生成，视频分钟级交付，创作流程零等待",
+    title: "可预期时延",
+    desc: "图片通常秒级、视频分钟级；真实速度取决于已验证模型与队列，不虚标自有 GPU 集群",
     color: "from-brand-strong to-brand",
   },
 ];
@@ -211,10 +211,8 @@ const FOOTER_SECTIONS = [
     links: [
       { label: "图片生成", href: "/create/image" },
       { label: "视频生成", href: "/create/video" },
-      { label: "AI 放大", href: "/tools" },
-      { label: "背景移除", href: "/tools" },
-      { label: "AI 头像", href: "/tools" },
-      { label: "所有工具", href: "/tools" },
+      { label: "AI Agent", href: "/agent" },
+      { label: "全部工具", href: "/tools" },
     ],
   },
   {
@@ -222,13 +220,15 @@ const FOOTER_SECTIONS = [
     links: [
       { label: "探索作品", href: "/explore" },
       { label: "模型库", href: "/models" },
-      { label: "任务中心", href: "/tasks" },
+      { label: "系统状态", href: "/status" },
+      { label: "MCP / API", href: "/mcp" },
     ],
   },
   {
     title: "公司",
     links: [
       { label: "定价", href: "/pricing" },
+      { label: "开发者", href: "/developer" },
       { label: "联系我们", href: "mailto:hello@betty.ai" },
     ],
   },
@@ -475,7 +475,7 @@ function ModelsSection() {
             已验证可用 AI 模型
           </h2>
           <p className="text-body-sm text-text-tertiary">
-            持续接入最新模型，创作永不过时
+            仅展示已验证 active 模型，不并列 Veo / Sora / 55+ 未接入货架
           </p>
         </motion.div>
 
@@ -723,6 +723,7 @@ export default function HomePage() {
   const [heroMode, setHeroMode] = useState<"agent" | "image" | "video">("agent");
   const [demoVideoIdx, setDemoVideoIdx] = useState(0);
   const [heroEnhancing, setHeroEnhancing] = useState(false);
+  const [commercialOpen, setCommercialOpen] = useState<boolean | null>(null);
   const heroEnhance = async () => {
     if (!heroInput.trim() || heroEnhancing) return;
     setHeroEnhancing(true);
@@ -761,6 +762,16 @@ export default function HomePage() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    fetch(`${API_BASE}/system/commercial-open`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d.open_to_public === "boolean") setCommercialOpen(d.open_to_public);
+        else setCommercialOpen(false);
+      })
+      .catch(() => setCommercialOpen(false));
+  }, []);
+
   // Auto-advance demo carousel
   useEffect(() => {
     if (demoCards.length < 2) return;
@@ -785,7 +796,7 @@ export default function HomePage() {
               <Sparkles className="w-3 h-3" /> NEW
             </span>
             <span>
-              Seedance 2.0 &amp; Kling 3.0 现已上线！立即体验
+              Seedance 2.0 与已验证 Kling Avatar 现已上线（非 Veo / Sora / 2.5）
               <ArrowRight className="w-3.5 h-3.5 inline ml-1 -mt-0.5 group-hover:translate-x-0.5 transition-transform" />
             </span>
           </Link>
@@ -823,6 +834,14 @@ export default function HomePage() {
               <p className="text-lg md:text-xl text-text-secondary max-w-lg mb-8 leading-relaxed">
                 {t("home.subtitle")}
               </p>
+              {commercialOpen !== true && (
+                <p
+                  data-testid="home-commercial-honesty"
+                  className="max-w-lg mb-6 text-xs text-amber-800 dark:text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-xl px-3 py-2"
+                >
+                  本环境尚未对公众收费开放：无 Stripe 收款、队列/Worker 可能缺失，货架以已验证 active 数为准，不虚标 19+/29+。
+                </p>
+              )}
 
               {/* Mode tabs */}
               <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-cosmic-surface/50 border border-cosmic-border/50 mb-3 self-start">

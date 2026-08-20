@@ -267,6 +267,17 @@ def run_contract(client, headers: dict) -> list[dict]:
         ready.status_code == 200 and all(k in rd for k in ("stripe", "storage", "sso")),
         f"ok={rd.get('ok')} stripe={((rd.get('stripe') or {}).get('api_key_configured'))} oidc_blockers={len(((rd.get('sso') or {}).get('blockers') or []))}",
     ))
+    co = client.get("/api/v1/system/commercial-open")
+    cod = co.json() if co.status_code == 200 else {}
+    checks.append(_row(
+        "api:commercial_open_honest",
+        co.status_code == 200
+        and "open_to_public" in cod
+        and "blockers" in cod
+        and (cod.get("open_to_public") is False or cod.get("subscription_ready") is True),
+        f"verdict={cod.get('verdict')} open={cod.get('open_to_public')} blockers={len(cod.get('blockers') or [])}",
+        partial=not cod.get("open_to_public"),
+    ))
     stripe = client.get("/api/v1/billing/stripe-status")
     st = stripe.json() if stripe.status_code == 200 else {}
     checks.append(_row("ops:stripe_configured", bool(st.get("api_key_configured")), str(st)[:160], gap=not st.get("api_key_configured")))
