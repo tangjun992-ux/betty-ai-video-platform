@@ -257,8 +257,19 @@ export default function ExtractPage() {
                   <ol className="space-y-2">
                     {(result.viral.beats || []).map((b) => (
                       <li key={b.key} className="text-xs leading-relaxed">
-                        <span className="text-text-tertiary mr-1">{b.label}</span>
-                        <span className="text-text-secondary">{b.prompt}</span>
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-text-tertiary mr-1">{b.label}</span>
+                            <span className="text-text-secondary">{b.prompt}</span>
+                          </div>
+                          <Link
+                            href={`/create/video?shot=${encodeURIComponent(b.key)}&prompt=${encodeURIComponent(b.prompt)}&aspect=${encodeURIComponent(result.viral?.aspect || "9:16")}`}
+                            data-testid={`extract-beat-${b.key}`}
+                            className="shrink-0 text-[11px] px-2 py-1 rounded-md border border-cosmic-border hover:border-brand/50 text-brand"
+                          >
+                            生成此镜
+                          </Link>
+                        </div>
                       </li>
                     ))}
                   </ol>

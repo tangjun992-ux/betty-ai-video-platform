@@ -58,6 +58,10 @@ export default function GalleryPage() {
   const [lightbox, setLightbox] = useState<GalleryItem | null>(null);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [likeDelta, setLikeDelta] = useState<Record<string, number>>({});
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PAGE_SIZE = 36;
 
   useEffect(() => {
     try { setLiked(JSON.parse(localStorage.getItem("betty-liked") || "{}")); } catch {}
@@ -86,15 +90,20 @@ export default function GalleryPage() {
     return () => clearTimeout(t);
   }, [query]);
 
-  const fetchItems = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchItems = useCallback(async (append = false, fromOffset = 0) => {
+    if (append) setLoadingMore(true);
+    else {
+      setLoading(true);
+      setError(null);
+    }
     try {
+      const nextOffset = append ? fromOffset : 0;
       const params = new URLSearchParams({
         style,
         media_type: mediaFilter,
         sort,
-        limit: "36",
+        limit: String(PAGE_SIZE),
+        offset: String(nextOffset),
       });
       if (debouncedQ) params.set("q", debouncedQ);
       const resp = await fetch(`${API_BASE}/gallery/?${params.toString()}`);
@@ -106,7 +115,10 @@ export default function GalleryPage() {
         );
       }
       const data = await resp.json();
-      setItems(data.items || []);
+      const incoming = data.items || [];
+      setItems((prev) => (append ? [...prev, ...incoming] : incoming));
+      setHasMore(Boolean(data.has_more));
+      setOffset(nextOffset + incoming.length);
       if (data.styles) setStyleOptions(data.styles);
 
       try {
@@ -117,10 +129,14 @@ export default function GalleryPage() {
       setError(err.message || "加载画廊失败");
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, [style, mediaFilter, sort, debouncedQ]);
 
-  useEffect(() => { fetchItems(); }, [fetchItems]);
+  useEffect(() => {
+    setOffset(0);
+    fetchItems(false, 0);
+  }, [style, mediaFilter, sort, debouncedQ, fetchItems]);
 
   useEffect(() => {
     const onScroll = () => setShowScrollTop(window.scrollY > 600);
@@ -322,11 +338,13 @@ export default function GalleryPage() {
                   if (r.ok) {
                     const data = await r.json();
                     const params = new URLSearchParams();
-                    if (data.prompt) params.set("prompt", data.prompt);
-                    if (data.model) params.set("model", data.model);
-                    if (data.media_url) {
-                      params.set("image_url", data.media_url);
-                      params.set("ref", data.media_url);
+                    const cq = data.create_query || {};
+                    if (data.prompt || cq.prompt) params.set("prompt", data.prompt || cq.prompt);
+                    if (data.model || cq.model) params.set("model", data.model || cq.model);
+                    const refUrl = data.media_url || cq.ref || cq.image_url;
+                    if (refUrl) {
+                      params.set("image_url", refUrl);
+                      params.set("ref", refUrl);
                     }
                     window.location.href = `${data.create_path || (item.media_type === "video" ? "/create/video" : "/create/image")}?${params}`;
                     return;
@@ -438,6 +456,20 @@ export default function GalleryPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {!loading && !error && hasMore && (
+        <div className="text-center mt-8">
+          <button
+            type="button"
+            data-testid="gallery-load-more"
+            disabled={loadingMore}
+            onClick={() => fetchItems(true, offset)}
+            className="btn-secondary px-6 py-2.5 text-sm disabled:opacity-50"
+          >
+            {loadingMore ? "加载中…" : "加载更多作品"}
+          </button>
+        </div>
+      )}
 
       {/* CTA */}
       {!loading && !error && items.length > 0 && (

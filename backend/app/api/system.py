@@ -173,7 +173,13 @@ async def capabilities():
             "live_smoke": {
                 "image_sample": "scripts/smoke_live_image_sample.py",
                 "video_sample": "scripts/smoke_live_video_sample.py",
-                "gates": ["MODEL_SMOKE_LIVE", "MODEL_SMOKE_LIVE_VIDEO", "MODEL_SMOKE_LIVE_*_WEEKLY"],
+                "lipsync_weekly": "app.tasks.health_tasks.smoke_live_lipsync_weekly",
+                "gates": [
+                    "MODEL_SMOKE_LIVE",
+                    "MODEL_SMOKE_LIVE_VIDEO",
+                    "MODEL_SMOKE_LIVE_*_WEEKLY",
+                    "LIPSYNC_FIXTURE_LIVE_WEEKLY",
+                ],
                 "note": "outframe_ok 仅计入真出片；mapping 不再污染 Auto 路由成功率。",
             },
         },
@@ -211,7 +217,28 @@ async def slo_snapshot():
         },
         "models": rows,
         "last_smoke": _public_last_smoke(),
+        "lipsync_fixture": _public_lipsync_fixture(),
     }
+
+
+def _public_lipsync_fixture() -> dict | None:
+    from pathlib import Path
+    import json
+
+    path = Path(__file__).resolve().parents[2] / "fixtures" / "lipsync" / "last_run.json"
+    if not path.is_file():
+        return {"available": False, "note": "无折叠 last_run；设置 LIPSYNC_FIXTURE_LIVE_WEEKLY=1 启用周检"}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {
+            "available": True,
+            "ok": bool(data.get("ok")),
+            "ts": data.get("ts") or data.get("completed_at"),
+            "model": data.get("model"),
+            "weekly_gate": "LIPSYNC_FIXTURE_LIVE_WEEKLY=1",
+        }
+    except Exception:
+        return {"available": False}
 
 
 def _public_last_smoke() -> dict | None:

@@ -363,6 +363,7 @@ async def explore_gallery(
         "total": total,
         "limit": limit,
         "offset": offset,
+        "has_more": (offset + limit) < total,
         "styles": STYLE_OPTIONS,
         "seed_total": seed_total,
         "community_total": community_total,
@@ -575,6 +576,12 @@ async def remix_item(item_key: str, db: AsyncSession = Depends(get_db)):
         "model": row.selected_model or row.requested_model,
         "remixes": remixes,
         "create_path": f"/create/{'video' if media_type == 'video' else 'image'}",
+        "create_query": {
+            "prompt": prompt,
+            "model": row.selected_model or row.requested_model or "",
+            "ref": media_url,
+            "image_url": media_url,
+        },
     }
 
 

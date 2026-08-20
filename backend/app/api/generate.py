@@ -557,6 +557,54 @@ async def generate_pack(
     }
 
 
+@router.get("/pack/{batch_id}/status", summary="Photo Pack 批次进度（聚合轮询）")
+async def pack_batch_status(
+    batch_id: str,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(resolve_user_id),
+):
+    """Aggregate status for tasks sharing pack_batch — reduces N client polls."""
+    from sqlalchemy import select as sa_select
+
+    if not batch_id or not batch_id.startswith("pack-"):
+        raise HTTPException(status_code=400, detail="无效 batch_id")
+    rows = (
+        await db.execute(
+            sa_select(Task).where(Task.user_id == user_id).order_by(Task.created_at.asc())
+        )
+    ).scalars().all()
+    items = []
+    for t in rows:
+        params = t.parameters if isinstance(t.parameters, dict) else {}
+        if params.get("pack_batch") != batch_id:
+            continue
+        url = ""
+        if isinstance(t.results, list) and t.results and isinstance(t.results[0], dict):
+            url = t.results[0].get("media_url") or t.results[0].get("url") or ""
+        items.append({
+            "task_id": t.task_id,
+            "label": params.get("pack_variation") or params.get("pack_id") or "",
+            "status": t.status,
+            "progress": t.progress,
+            "url": url,
+            "error_message": t.error_message,
+        })
+    if not items:
+        raise HTTPException(status_code=404, detail="批次不存在或无权限")
+    done = sum(1 for it in items if it["status"] in ("completed", "failed"))
+    ok = sum(1 for it in items if it["status"] == "completed")
+    failed = sum(1 for it in items if it["status"] == "failed")
+    return {
+        "batch_id": batch_id,
+        "total": len(items),
+        "done": done,
+        "completed": ok,
+        "failed": failed,
+        "all_done": done >= len(items),
+        "items": items,
+    }
+
+
 class SpeechRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=5000, description="要配音的文本/脚本")
     voice: str = Field(default="Rachel", description="音色")

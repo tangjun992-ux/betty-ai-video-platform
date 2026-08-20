@@ -31,6 +31,41 @@ _SAMPLE_FILES = {
     "ref.mp4": "video/mp4",
 }
 
+_MOTION_PRESETS = [
+    {
+        "id": "canonical-v1",
+        "title": "标准输入样片对",
+        "desc": "正面人物静帧 + 4s 参考动作（≥3s，满足 Kling Motion Control）",
+        "style": "realistic",
+        "prompt": "自然肢体迁移，全身动作，柔和光影",
+        "note": "原生 SKU 输入样片（kling-3.0/motion-control）；非 Runway Act-One 质量对标",
+    },
+    {
+        "id": "dance-v1",
+        "title": "舞蹈节奏",
+        "desc": "同一输入对 · 舞蹈向提示词",
+        "style": "realistic",
+        "prompt": "跟随参考视频的舞蹈节奏，全身协调，舞台灯光",
+        "note": "复用 canonical 资产；提示词预设，非独立拍摄素材",
+    },
+    {
+        "id": "product-v1",
+        "title": "产品展示",
+        "desc": "同一输入对 · 产品向提示词",
+        "style": "realistic",
+        "prompt": "产品展示动作，稳定镜头，商业广告质感",
+        "note": "复用 canonical 资产；提示词预设",
+    },
+    {
+        "id": "anime-v1",
+        "title": "动漫风格",
+        "desc": "同一输入对 · 动漫向提示词",
+        "style": "anime",
+        "prompt": "anime style motion transfer, expressive pose, clean cel shading",
+        "note": "复用 canonical 资产；提示词预设",
+    },
+]
+
 
 # ─── Models ────────────────────────────────────────────
 
@@ -199,17 +234,14 @@ async def list_motion_samples():
     available = still.is_file() and ref.is_file()
     samples = []
     if available:
-        samples.append({
-            "id": "canonical-v1",
-            "title": "标准输入样片对",
-            "desc": "正面人物静帧 + 4s 参考动作（≥3s，满足 Kling Motion Control）",
-            "image_path": "/api/v1/motion/samples/canonical-v1/still.png",
-            "video_path": "/api/v1/motion/samples/canonical-v1/ref.mp4",
-            "style": "realistic",
-            "prompt": "自然肢体迁移，全身动作，柔和光影",
-            "duration_seconds": 4,
-            "note": "原生 SKU 输入样片（kling-3.0/motion-control）；非 Runway Act-One 质量对标",
-        })
+        for preset in _MOTION_PRESETS:
+            sid = preset["id"]
+            samples.append({
+                **preset,
+                "image_path": f"/api/v1/motion/samples/{sid}/still.png",
+                "video_path": f"/api/v1/motion/samples/{sid}/ref.mp4",
+                "duration_seconds": 4,
+            })
     return {
         "available": available,
         "mode": "native",
@@ -222,7 +254,8 @@ async def list_motion_samples():
 
 @router.get("/motion/samples/{sample_id}/{filename}", summary="下载 Motion 样片文件")
 async def get_motion_sample_file(sample_id: str, filename: str):
-    if sample_id != "canonical-v1":
+    known_ids = {p["id"] for p in _MOTION_PRESETS}
+    if sample_id not in known_ids:
         raise HTTPException(status_code=404, detail="样片不存在")
     if filename not in _SAMPLE_FILES:
         raise HTTPException(status_code=404, detail="文件不存在")

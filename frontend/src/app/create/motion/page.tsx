@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Upload, Video, Image, Play, ArrowRight, RefreshCw, CheckCircle, Lightbulb, Mic } from "lucide-react";
@@ -68,19 +68,36 @@ export default function MotionControlPage() {
   const [demoMode, setDemoMode] = useState(false);
   const [voiceText, setVoiceText] = useState("");
   const [voiceOn, setVoiceOn] = useState(false);
+  const [voiceId, setVoiceId] = useState("zh-CN-XiaoxiaoNeural");
+  const [voiceOptions, setVoiceOptions] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/lipsync/voices`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const voices = (d?.voices || []).map((v: { id: string; name: string }) => ({
+          id: v.id,
+          name: v.name,
+        }));
+        if (voices.length) setVoiceOptions(voices);
+        if (d?.default) setVoiceId(d.default);
+      })
+      .catch(() => {});
+  }, []);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [loadingSample, setLoadingSample] = useState(false);
 
-  const loadCanonicalSample = useCallback(async () => {
+  const loadMotionSample = useCallback(async (sampleId?: string) => {
     setLoadingSample(true);
     setError(null);
     try {
       const r = await fetch(`${API_BASE}/motion/samples`);
       if (!r.ok) throw new Error("样片库不可用");
       const data = await r.json();
-      const sample = data.samples?.[0];
+      const sample = (data.samples || []).find((s: { id: string }) => s.id === sampleId)
+        || data.samples?.[0];
       if (!sample) throw new Error("暂无样片资产");
       // Paths are /api/v1/... — prefix host from API_BASE
       const origin = API_BASE.replace(/\/api\/v1\/?$/, "");
@@ -114,6 +131,8 @@ export default function MotionControlPage() {
       setLoadingSample(false);
     }
   }, []);
+
+  const loadCanonicalSample = () => loadMotionSample("canonical-v1");
 
   const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -173,6 +192,7 @@ export default function MotionControlPage() {
           style: selectedStyle,
           tier,
           voice_text: voiceOn && voiceText.trim() ? voiceText.trim() : undefined,
+          voice: voiceOn ? voiceId : undefined,
         }),
       });
       if (!res.ok) {
@@ -235,6 +255,12 @@ export default function MotionControlPage() {
     setSelectedStyle(ex.style);
     setPrompt(ex.prompt);
     setError(null);
+    const sampleMap: Record<string, string> = {
+      dance: "dance-v1",
+      product: "product-v1",
+      anime: "anime-v1",
+    };
+    if (sampleMap[ex.id]) loadMotionSample(sampleMap[ex.id]);
   };
 
   return (
@@ -431,14 +457,26 @@ export default function MotionControlPage() {
               生成后叠一层配音。这是 TTS 旁白，不是实时变声 / RVC / Voice Changer。
             </p>
             {voiceOn && (
-              <textarea
-                data-testid="motion-voice-text"
-                value={voiceText}
-                onChange={(e) => setVoiceText(e.target.value)}
-                placeholder="旁白文案（将走 Edge/ElevenLabs TTS）"
-                rows={2}
-                className="mt-2 w-full rounded-lg bg-cosmic-subtle border border-cosmic-border px-3 py-2 text-sm resize-none"
-              />
+              <>
+                <select
+                  data-testid="motion-voice-select"
+                  value={voiceId}
+                  onChange={(e) => setVoiceId(e.target.value)}
+                  className="mt-2 w-full rounded-lg bg-cosmic-subtle border border-cosmic-border px-3 py-2 text-sm"
+                >
+                  {(voiceOptions.length ? voiceOptions : [{ id: voiceId, name: voiceId }]).map((v) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+                <textarea
+                  data-testid="motion-voice-text"
+                  value={voiceText}
+                  onChange={(e) => setVoiceText(e.target.value)}
+                  placeholder="旁白文案（将走 Edge/ElevenLabs TTS）"
+                  rows={2}
+                  className="mt-2 w-full rounded-lg bg-cosmic-subtle border border-cosmic-border px-3 py-2 text-sm resize-none"
+                />
+              </>
             )}
           </div>
 

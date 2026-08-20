@@ -73,9 +73,24 @@ betty_internal_readiness              → ≈90
 1. Stripe/OIDC **密钥注入**（代码已就绪；本轮只加诚实条，不假装可收款）  
 2. 更多 KIE 模型 ID 校正后才能诚实扩 active（仍 9，不虚标）  
 3. URL-to-Viral：**oEmbed + 投放规格分镜已落地**；IG 仍需上传/直链；禁止宣称逐帧反推  
-4. Explore **真实社区规模**（搜索/remix/诚实密度已有；禁止 millions 话术）  
-5. Lipsync **周检 Beat**  
+4. Explore **真实社区规模**（搜索/remix/诚实密度已有；**分页 load-more 已落地**；禁止 millions 话术）  
+5. Lipsync **周检 Beat**（`smoke_live_lipsync_weekly` + Studio 样片 + `/system/slo` 状态）  
 6. Folders 仍是**标签目录**，不是嵌套文件系统 / 团队共享盘  
 7. 真 Voice Changer / IP-Adapter 身份锁 / Max 滑块真实收款（需 Stripe Key）  
+
+## P1/P2 本轮继续（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **Explore 分页** | `has_more` + FE load-more | `test_p1_p2_professional_dev.py` |
+| **Remix 深链** | `create_query` + ref/prompt | gallery remix API |
+| **URL 分镜 CTA** | extract 每 beat「生成此镜」 | FE `extract-beat-*` |
+| **Motion 样片预设** | dance/product/anime-v1 | `/motion/samples` ≥4 |
+| **Performance 样片** | `/performance/samples` | FE load demo |
+| **Lipsync Studio** | `/lipsync/samples` + 周检 Celery beat | slo.lipsync_fixture |
+| **Face Swap 视觉模板** | icon + color on templates | templates API |
+| **Motion TTS 音色** | voice select from `/lipsync/voices` | motion page |
+| **Pack 批次进度** | `GET /generate/pack/{batch_id}/status` | 404 contract |
+| **团队席位账** | included/purchased/members_count | teams API |
 
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检。

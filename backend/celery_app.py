@@ -140,6 +140,11 @@ app.conf.update(
             "schedule": 604800.0,
             "options": {"queue": "pipeline_q"},
         },
+        "model-health-live-lipsync-weekly": {
+            "task": "app.tasks.health_tasks.smoke_live_lipsync_weekly",
+            "schedule": 604800.0,
+            "options": {"queue": "pipeline_q"},
+        },
     } if os.getenv("VIS_COLLECTION_AUTO", "true").lower() == "true" else {
         "model-health-smoke-daily": {
             "task": "app.tasks.health_tasks.smoke_active_models",
@@ -153,6 +158,11 @@ app.conf.update(
         },
         "model-health-live-image-weekly": {
             "task": "app.tasks.health_tasks.smoke_live_image_weekly",
+            "schedule": 604800.0,
+            "options": {"queue": "pipeline_q"},
+        },
+        "model-health-live-lipsync-weekly": {
+            "task": "app.tasks.health_tasks.smoke_live_lipsync_weekly",
             "schedule": 604800.0,
             "options": {"queue": "pipeline_q"},
         },

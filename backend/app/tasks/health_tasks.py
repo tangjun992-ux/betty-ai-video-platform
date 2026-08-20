@@ -79,3 +79,56 @@ def smoke_live_image_weekly(self):
         report["probed"], report["outframe_ok"], report["failed"],
     )
     return report
+
+
+@app.task(name="app.tasks.health_tasks.smoke_live_lipsync_weekly", bind=True, max_retries=0)
+def smoke_live_lipsync_weekly(self):
+    """Weekly lipsync live probe — gated by LIPSYNC_FIXTURE_LIVE_WEEKLY=1.
+
+    Uses fixture_derivative_harness optional live path; skipped when gate off.
+    """
+    weekly = os.getenv("LIPSYNC_FIXTURE_LIVE_WEEKLY", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    live = os.getenv("LIPSYNC_FIXTURE_LIVE", "").strip().lower() in ("1", "true", "yes", "on")
+    if not (weekly or live):
+        return {
+            "mode": "live_lipsync_sample",
+            "skipped": True,
+            "reason": "LIPSYNC_FIXTURE_LIVE_WEEKLY not enabled",
+            "ok": False,
+        }
+    os.environ.setdefault("LIPSYNC_FIXTURE_LIVE", "1")
+    from pathlib import Path
+    import json
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    script = root / "scripts" / "fixture_derivative_harness.py"
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(script)],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=600,
+            env={**os.environ, "LIPSYNC_FIXTURE_LIVE": "1"},
+        )
+        report = {"returncode": proc.returncode, "ok": proc.returncode == 0}
+        for line in (proc.stderr or "").splitlines():
+            if line.strip().startswith("{"):
+                try:
+                    payload = json.loads(line)
+                    if "lipsync_live" in payload:
+                        report.update(payload["lipsync_live"])
+                except json.JSONDecodeError:
+                    pass
+        last_run = root / "fixtures" / "lipsync" / "last_run.json"
+        if last_run.is_file():
+            report["last_run"] = json.loads(last_run.read_text(encoding="utf-8"))
+        logger.info("live_lipsync weekly smoke: ok=%s skipped=%s", report.get("ok"), report.get("skipped"))
+        return report
+    except Exception as exc:
+        logger.exception("live_lipsync weekly smoke failed")
+        return {"mode": "live_lipsync_sample", "ok": False, "error": str(exc)[:200]}

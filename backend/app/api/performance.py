@@ -124,3 +124,25 @@ async def submit_performance(
         queue="video_q",
     )
     return PerformanceResponse(task_id=task_id, estimated_cost_credits=cost)
+
+
+@router.get("/performance/samples", summary="Performance Drive 样片（复用 Motion 输入对）")
+async def list_performance_samples():
+    """Performance 页 Demo 样片 — 与 Motion canonical 资产同源，诚实标注 ≠ Act-One。"""
+    from app.api.motion import list_motion_samples
+
+    motion = await list_motion_samples()
+    perf_samples = []
+    for s in motion.get("samples") or []:
+        perf_samples.append({
+            **s,
+            "with_talk_default": True,
+            "sample_voice_text": "大家好，这是 Performance Drive 口播测试。Motion + 可选 Lipsync，不是 Act-One。",
+            "note": (s.get("note") or "") + " Performance = Motion + 可选 Lipsync；≠ Runway Act-One。",
+        })
+    return {
+        "available": motion.get("available", False),
+        "mode": "motion_plus_optional_lipsync",
+        "samples": perf_samples,
+        "honesty": "Betty Performance Drive = 原生 Kling Motion Control + 可选 Lipsync；不是 Runway Act-One 表演编码器。",
+    }
