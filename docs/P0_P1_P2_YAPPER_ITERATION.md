@@ -73,9 +73,114 @@ betty_internal_readiness              → ≈90
 1. Stripe/OIDC **密钥注入**（代码已就绪；本轮只加诚实条，不假装可收款）  
 2. 更多 KIE 模型 ID 校正后才能诚实扩 active（仍 9，不虚标）  
 3. URL-to-Viral：**oEmbed + 投放规格分镜已落地**；IG 仍需上传/直链；禁止宣称逐帧反推  
-4. Explore **真实社区规模**（搜索/remix/诚实密度已有；禁止 millions 话术）  
-5. Lipsync **周检 Beat**  
+4. Explore **真实社区规模**（搜索/remix/诚实密度已有；**分页 load-more 已落地**；禁止 millions 话术）  
+5. Lipsync **周检 Beat**（`smoke_live_lipsync_weekly` + Studio 样片 + `/system/slo` 状态）  
 6. Folders 仍是**标签目录**，不是嵌套文件系统 / 团队共享盘  
 7. 真 Voice Changer / IP-Adapter 身份锁 / Max 滑块真实收款（需 Stripe Key）  
 
-勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检。
+## P1/P2 本轮继续（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **Explore 分页** | `has_more` + FE load-more | `test_p1_p2_professional_dev.py` |
+| **Remix 深链** | `create_query` + ref/prompt | gallery remix API |
+| **URL 分镜 CTA** | extract 每 beat「生成此镜」 | FE `extract-beat-*` |
+| **Motion 样片预设** | dance/product/anime-v1 | `/motion/samples` ≥4 |
+| **Performance 样片** | `/performance/samples` | FE load demo |
+| **Lipsync Studio** | `/lipsync/samples` + 周检 Celery beat | slo.lipsync_fixture |
+| **Face Swap 视觉模板** | icon + color on templates | templates API |
+| **Motion TTS 音色** | voice select from `/lipsync/voices` | motion page |
+| **Pack 批次进度** | `GET /generate/pack/{batch_id}/status` | 404 contract |
+| **团队席位账** | included/purchased/members_count | teams API |
+
+## P1/P2 第三轮继续（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **Playwright 选择器对齐** | 首页 strict / VideoComposer 参数条 / 图片页 ImageComposer | `e2e/betty.spec.ts` |
+| **Vitest CosmicParamPanel** | Info `aria-label` 替代过时 testid | vitest 21/21 |
+| **Pack FE 聚合轮询** | `getPackBatchStatus` + BatchPackStudio 单请求轮询 | BatchPackStudio test |
+| **任务页 Explore CTA** | 完成态 `publishShare` 按钮 | `task-publish-explore` |
+| **Extract IG 诚实禁用** | Instagram/X 仅 URL 时禁用提交 + 提示条 | `extract-ig-honesty` |
+| **Pricing 订阅禁用** | `subscription_ready` 绑定 disabled + toast | `pricing-stripe-honesty` |
+
+## P1/P2 第四轮测试修复（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **Lipsync 测试漂移** | 断言 `gateway.generate_lipsync` / `kling-ai-avatar` | test_audio_prep_lipsync |
+| **Director minimal 契约** | 无 scenario 静图 brief 跳过 compose；scenario 包装保留 | yapper_live + director_scenarios |
+| **字幕 cue 时长** | 对齐默认 2.4s/cue | test_director_subtitle |
+| **Task authz 签名** | 补 `Request` 参数 | test_tasks_authz |
+| **Face/Performance 契约** | TestClient + stub Celery send_task | test_gap_faceswap |
+| **Edit tool 测试** | mock gateway 替代 KieAdapter | test_p1_cost_storyboard_stripe |
+| **Matrix audit stdout** | lifespan 日志重定向 stderr + JSON 解析 | test_yapper_full_matrix_audit |
+| **Audit Redis 诚实** | 无 broker 时 enqueue 500 记 partial | yapper_full_matrix_audit.py |
+| **Playwright 扩展** | Extract IG + Pricing disabled E2E | 12/12 betty.spec.ts |
+
+## 商业开放裁决（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **commercial-open API** | `GET /system/commercial-open` 诚实 go/no-go | `test_commercial_open_honest_not_public` |
+| **Status 商业门** | `/status` 展示 blockers | `status-commercial-open` |
+| **首页去虚标** | 去掉 GPU 集群/已可商业授权；未开放诚实条 | `home-commercial-honesty` |
+| **页脚专业入口** | Status / MCP / Developer | 首页 footer |
+| **评估文档** | `docs/YAPPER_COMMERCIAL_OPEN_EVAL_2026-08-20.md` | 对标 yapper.so 当日 |
+
+## 界面工作室化（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **光谱** | 点缀恢复电蓝/紫/品红；brand 阶 600>500 | globals.css / tailwind |
+| **Tools 枢纽** | Video/Image/Utility 分区；去掉竞品名 | ToolsPage.test + e2e |
+| **首页 SKU 路由** | 放大/抠图/头像/产品不再误进 image | `home-tool--create-*` |
+| **已验证 marquee** | 首屏品牌墙节奏，不并列 Veo/Sora | `verified-model-marquee` |
+| **演示条** | 细顶栏，不盖住工作室 | `demo-mode-banner` |
+
+## 影院创作台（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **默认暗色** | Theme 默认 dark；Create 路径 `html.studio` | ThemeScript + studio-shell |
+| **空画布** | StudioStage 代替帮助段落 | `studio-stage` |
+| **Explore** | 左对齐编辑头 + 仅社区/示例筛选 | `explore-origin-community` |
+
+## 导演台时间线（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **分镜竖轨** | `DirectorTimeline` 镜号 01/02；running 为「第 n/m 步」（含 audio/subtitle，不虚称纯镜头） | vitest + `agent-timeline` e2e |
+| **Try Feature** | idle 按视频 / 图片分区；工作室 token 渐变 | `agent-try-video` / `agent-try-image` |
+| **文案** | Just Direct，去掉 DIRECTOR AGENT 实习生腔；诚实声明非 Yapper 授权 | betty.spec 导演台 |
+
+## 对齐差距刷新（2026-08-20 下午）
+
+| 项 | 结论 | 验证 |
+|----|------|------|
+| **当日 Yapper** | 视频主推 **Seedance 2.5**；定价卡仍写 20+/30+ 与 2.0 Omni（口径裂缝） | yapper.so 抓取 |
+| **vs_yapper API** | `yapper_video_hero=seedance_2.5` / `betty_video_hero=seedance_2.0` | `test_commercial_open_honest_not_public` |
+| **产品完成度** | 加权 **≈69 / 100**；不能对公众收费 | `docs/YAPPER_ALIGNMENT_GAP_2026-08-20.md` |
+
+## 公开 Composer 同构（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **首页四 CTA** | 与 Dashboard 同一套：优化提示词 / 开始创作 / 帮我构思 / 生成音频 | `home-cta-*` e2e |
+| **提示词助手** | Agent Utility 卡走 enhance，不进 `SCENARIO_IDS` | `agent-try-utility` / `agent-scenario-prompt_helper` |
+
+## 导演监视器（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **当前步** | running 竖轨实心点亮 + 自动滚入视口 | `agent-timeline-current` |
+| **右侧监视器** | 规划时空舞台；执行中当前镜；完成后成片 | `agent-monitor` e2e 预览 |
+
+## 竖屏 brief + 步骤缩略图（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **画幅** | brief「竖屏/抖音」覆盖广告/商业片/动漫默认 16:9；显式 `export_placement` 仍优先 | `test_douyin_vertical_overrides_commercial_16x9` |
+| **步骤缩略图** | 时间线步骤卡嵌该镜预览（dry-run 占位图，不虚称 Kling） | `agent-step-thumb` |
+
+勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检；首页不写 Kling 3.0 全量上线（仅 motion SKU 映射，且 live 未折）。

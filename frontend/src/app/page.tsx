@@ -30,6 +30,7 @@ import {
   Brain,
   Film,
   CheckCircle2,
+  AudioLines,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
@@ -76,92 +77,23 @@ const fadeScaleItem = {
   },
 };
 
+function looksLikeImage(prompt: string): boolean {
+  return /图|海报|头像|产品照|摄影|image|photo|poster|portrait|still/i.test(prompt);
+}
+
 // ─── Data ──────────────────────────────────────────────
 
 const FEATURED_TOOLS = [
-  {
-    icon: Video,
-    label: "视频生成",
-    desc: "Seedance 2.0 多模态输入，唇形同步，多镜头叙事",
-    iconColor: "text-blue-600",
-    iconBg: "bg-blue-50",
-    href: "/create/video",
-    badge: "New",
-  },
-  {
-    icon: ImageIcon,
-    label: "图片生成",
-    desc: "GPT Image 2.0 超高质量文本到图像，专业级输出",
-    iconColor: "text-brand-600",
-    iconBg: "bg-brand-50",
-    href: "/create/image",
-    badge: "Hot",
-  },
-  {
-    icon: Maximize2,
-    label: "AI 放大",
-    desc: "2倍分辨率提升，保持画质不失真",
-    iconColor: "text-cyan-600",
-    iconBg: "bg-cyan-50",
-    href: "/create/image",
-  },
-  {
-    icon: Scissors,
-    label: "背景移除",
-    desc: "AI 智能去背景，透明输出",
-    iconColor: "text-emerald-600",
-    iconBg: "bg-emerald-50",
-    href: "/create/image",
-  },
-  {
-    icon: User,
-    label: "AI 头像",
-    desc: "专业商务头像，LinkedIn 简历照",
-    iconColor: "text-pink-600",
-    iconBg: "bg-pink-50",
-    href: "/create/image",
-  },
-  {
-    icon: Mic,
-    label: "唇形同步",
-    desc: "图片+音频生成说话视频，虚拟主播",
-    iconColor: "text-amber-600",
-    iconBg: "bg-amber-50",
-    href: "/create/lipsync",
-    badge: "Pro",
-  },
-  {
-    icon: Camera,
-    label: "产品摄影",
-    desc: "AI 批量生成产品图，电商专用",
-    iconColor: "text-indigo-600",
-    iconBg: "bg-indigo-50",
-    href: "/create/image",
-  },
-  {
-    icon: RefreshCw,
-    label: "运动控制",
-    desc: "参考视频精准动作引导生成",
-    iconColor: "text-red-600",
-    iconBg: "bg-red-50",
-    href: "/create/motion",
-  },
-  {
-    icon: Layers,
-    label: "时间轴编辑",
-    desc: "强大的视频时间轴编辑器",
-    iconColor: "text-sky-600",
-    iconBg: "bg-sky-50",
-    href: "/create/timeline",
-  },
-  {
-    icon: Music,
-    label: "音频生成",
-    desc: "AI 配乐与音效",
-    iconColor: "text-orange-600",
-    iconBg: "bg-orange-50",
-    href: "/agent",
-  },
+  { icon: Video, label: "视频生成", desc: "Seedance 2.0 多模态输入，唇形同步，多镜头叙事", href: "/create/video", badge: "New" },
+  { icon: ImageIcon, label: "图片生成", desc: "GPT Image 2 文生图 / 多参考图", href: "/create/image", badge: "Hot" },
+  { icon: Mic, label: "唇形同步", desc: "图片+音频生成说话视频", href: "/create/lipsync", badge: "Pro" },
+  { icon: RefreshCw, label: "运动控制", desc: "参考视频精准动作引导（≠ Act-One）", href: "/create/motion" },
+  { icon: User, label: "职业头像", desc: "商务 / LinkedIn 套系", href: "/create/headshots" },
+  { icon: Camera, label: "产品摄影", desc: "电商产品图批量 SKU", href: "/create/product" },
+  { icon: Maximize2, label: "AI 放大", desc: "2×/4× 超分，保持画质", href: "/create/upscale" },
+  { icon: Scissors, label: "背景移除", desc: "一键抠图，透明 PNG", href: "/create/bg-remove" },
+  { icon: Layers, label: "时间轴编辑", desc: "片段、字幕与合成", href: "/create/timeline" },
+  { icon: Music, label: "语音合成", desc: "TTS 配音（非实时变声）", href: "/create/audio" },
 ];
 
 // 仅列平台实测可用（真实跑通）的模型，避免虚标点了就报错
@@ -194,13 +126,13 @@ const FEATURES = [
   {
     icon: Award,
     title: "专业品质",
-    desc: "4K 超高清输出，专业色彩管理，商业授权可用，满足从社交媒体到印刷品的全场景需求",
+    desc: "已验证链路支持 4K 输出；商业授权随付费套餐条款生效，未注入 Stripe 前不能对公众收款",
     color: "from-accent-violet to-accent-purple",
   },
   {
     icon: Timer,
-    title: "极速生成",
-    desc: "分布式 GPU 集群加速，图片秒级生成，视频分钟级交付，创作流程零等待",
+    title: "可预期时延",
+    desc: "图片通常秒级、视频分钟级；真实速度取决于已验证模型与队列，不虚标自有 GPU 集群",
     color: "from-brand-strong to-brand",
   },
 ];
@@ -211,10 +143,8 @@ const FOOTER_SECTIONS = [
     links: [
       { label: "图片生成", href: "/create/image" },
       { label: "视频生成", href: "/create/video" },
-      { label: "AI 放大", href: "/tools" },
-      { label: "背景移除", href: "/tools" },
-      { label: "AI 头像", href: "/tools" },
-      { label: "所有工具", href: "/tools" },
+      { label: "AI Agent", href: "/agent" },
+      { label: "全部工具", href: "/tools" },
     ],
   },
   {
@@ -222,13 +152,15 @@ const FOOTER_SECTIONS = [
     links: [
       { label: "探索作品", href: "/explore" },
       { label: "模型库", href: "/models" },
-      { label: "任务中心", href: "/tasks" },
+      { label: "系统状态", href: "/status" },
+      { label: "MCP / API", href: "/mcp" },
     ],
   },
   {
     title: "公司",
     links: [
       { label: "定价", href: "/pricing" },
+      { label: "开发者", href: "/developer" },
       { label: "联系我们", href: "mailto:hello@betty.ai" },
     ],
   },
@@ -405,6 +337,7 @@ function ToolGrid() {
             <motion.div key={tool.label} variants={fadeScaleItem}>
               <Link
                 href={tool.href}
+                data-testid={`home-tool-${tool.href.replace(/\//g, "-")}`}
                 className="relative block p-5 rounded-xl border border-cosmic-border bg-cosmic-surface hover:border-cosmic-border-hover hover:shadow-card-hover transition-all duration-300 group h-full"
               >
                 {/* Badge */}
@@ -440,7 +373,7 @@ function ToolGrid() {
 
                 {/* CTA */}
                 <div className="mt-auto pt-1">
-                  <span className="text-xs font-medium text-brand-600 group-hover:text-brand-700 inline-flex items-center gap-1 transition-colors">
+                  <span className="text-xs font-medium text-brand group-hover:text-brand-strong inline-flex items-center gap-1 transition-colors">
                     开始使用 <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                   </span>
                 </div>
@@ -475,7 +408,7 @@ function ModelsSection() {
             已验证可用 AI 模型
           </h2>
           <p className="text-body-sm text-text-tertiary">
-            持续接入最新模型，创作永不过时
+            仅展示已验证 active 模型，不并列 Veo / Sora / 55+ 未接入货架
           </p>
         </motion.div>
 
@@ -712,6 +645,41 @@ function Footer() {
   );
 }
 
+function VerifiedModelMarquee() {
+  const loop = [...MODELS, ...MODELS];
+  return (
+    <div
+      data-testid="verified-model-marquee"
+      className="border-b border-cosmic-border/70 bg-cosmic-subtle/60 overflow-hidden"
+    >
+      <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-4">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+          Powered by
+        </span>
+        <div className="relative flex-1 overflow-hidden">
+          <div className="flex w-max gap-6 animate-marquee-x hover:[animation-play-state:paused]">
+            {loop.map((m, i) => (
+              <span
+                key={`${m.name}-${i}`}
+                className="inline-flex items-center gap-2 text-xs text-text-secondary whitespace-nowrap"
+              >
+                <span className="w-5 h-5 rounded-md bg-brand/10 border border-brand/15 text-[10px] font-bold text-brand flex items-center justify-center">
+                  {m.mono}
+                </span>
+                {m.name}
+                <span className="text-text-tertiary">{m.provider}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <span className="hidden sm:inline shrink-0 text-[10px] text-text-tertiary">
+          已验证 {MODELS.length} · 不并列 Veo / Sora
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════
 //  HomePage
 // ═══════════════════════════════════════════════════════
@@ -723,20 +691,27 @@ export default function HomePage() {
   const [heroMode, setHeroMode] = useState<"agent" | "image" | "video">("agent");
   const [demoVideoIdx, setDemoVideoIdx] = useState(0);
   const [heroEnhancing, setHeroEnhancing] = useState(false);
+  const [commercialOpen, setCommercialOpen] = useState<boolean | null>(null);
   const heroEnhance = async () => {
     if (!heroInput.trim() || heroEnhancing) return;
     setHeroEnhancing(true);
     try {
-      const r = await enhancePrompt(heroInput, heroMode === "video" ? "video" : "image");
+      const media = looksLikeImage(heroInput) ? "image" : heroMode === "image" ? "image" : "video";
+      const r = await enhancePrompt(heroInput, media);
       if (r?.enhanced) setHeroInput(r.enhanced);
     } catch { /* best-effort */ } finally { setHeroEnhancing(false); }
   };
 
-  const heroGo = (override?: "agent" | "image" | "video") => {
+  const heroGo = (override?: "agent" | "image" | "video" | "audio") => {
     const m = override || heroMode;
-    const path = m === "agent" ? "/agent" : m === "video" ? "/create/video" : "/create/image";
-    const key = m === "agent" ? "brief" : "prompt";
+    const path = m === "agent" ? "/agent" : m === "video" ? "/create/video" : m === "audio" ? "/create/audio" : "/create/image";
+    const key = m === "agent" ? "brief" : m === "audio" ? "text" : "prompt";
     router.push(heroInput.trim() ? `${path}?${key}=${encodeURIComponent(heroInput)}` : path);
+  };
+
+  const heroCreateContent = () => {
+    if (!heroInput.trim()) { heroGo(); return; }
+    heroGo(looksLikeImage(heroInput) ? "image" : "video");
   };
 
   // Real generated works power the hero showcase (fetched from the gallery).
@@ -759,6 +734,16 @@ export default function HomePage() {
       })
       .catch(() => {});
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/system/commercial-open`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d && typeof d.open_to_public === "boolean") setCommercialOpen(d.open_to_public);
+        else setCommercialOpen(false);
+      })
+      .catch(() => setCommercialOpen(false));
   }, []);
 
   // Auto-advance demo carousel
@@ -785,12 +770,14 @@ export default function HomePage() {
               <Sparkles className="w-3 h-3" /> NEW
             </span>
             <span>
-              Seedance 2.0 &amp; Kling 3.0 现已上线！立即体验
+              Seedance 2.0 与已验证 Kling Avatar 现已上线（非 Veo / Sora / 2.5）
               <ArrowRight className="w-3.5 h-3.5 inline ml-1 -mt-0.5 group-hover:translate-x-0.5 transition-transform" />
             </span>
           </Link>
         </div>
       </div>
+
+      <VerifiedModelMarquee />
 
       {/* ═══ HERO: Left-Right Split ═══ */}
       <section className="relative overflow-hidden">
@@ -823,6 +810,14 @@ export default function HomePage() {
               <p className="text-lg md:text-xl text-text-secondary max-w-lg mb-8 leading-relaxed">
                 {t("home.subtitle")}
               </p>
+              {commercialOpen !== true && (
+                <p
+                  data-testid="home-commercial-honesty"
+                  className="max-w-lg mb-6 text-xs text-amber-800 dark:text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-xl px-3 py-2"
+                >
+                  本环境尚未对公众收费开放：无 Stripe 收款、队列/Worker 可能缺失，货架以已验证 active 数为准，不虚标 19+/29+。
+                </p>
+              )}
 
               {/* Mode tabs */}
               <div className="inline-flex items-center gap-1 p-1 rounded-xl bg-cosmic-surface/50 border border-cosmic-border/50 mb-3 self-start">
@@ -851,9 +846,10 @@ export default function HomePage() {
               <div className="input-canvas mb-4 relative">
                 <textarea
                   value={heroInput}
+                  data-testid="home-hero-prompt"
                   onChange={(e) => setHeroInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); heroGo(); }
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); heroCreateContent(); }
                   }}
                   rows={2}
                   style={{ paddingRight: "5.5rem" }}
@@ -908,18 +904,21 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* 4 Quick actions (对标 yapper) */}
-              <div className="flex flex-wrap gap-2 mb-8">
+              {/* 4 CTAs — same contract as /dashboard (Yapper Help Prompt / Create / Ideate / Audio) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-8">
                 {[
-                  { label: "帮我构思", icon: Bot, go: () => heroGo("agent") },
-                  { label: "创作内容", icon: Sparkles, go: () => heroGo() },
-                  { label: "优化提示词", icon: Wand2, go: () => heroGo("agent") },
-                  { label: "生成视频", icon: Video, go: () => heroGo("video") },
+                  { testId: "home-cta-help-prompt", label: t("dashboard.helpPrompt"), icon: Sparkles, go: () => void heroEnhance(), disabled: !heroInput.trim() || heroEnhancing },
+                  { testId: "home-cta-create-content", label: t("dashboard.createContent"), icon: Wand2, go: heroCreateContent, disabled: false },
+                  { testId: "home-cta-help-ideate", label: t("dashboard.helpIdeate"), icon: Lightbulb, go: () => heroGo("agent"), disabled: false },
+                  { testId: "home-cta-generate-audio", label: t("dashboard.generateAudio"), icon: AudioLines, go: () => heroGo("audio"), disabled: false },
                 ].map((a) => (
                   <button
-                    key={a.label}
+                    key={a.testId}
+                    type="button"
+                    data-testid={a.testId}
                     onClick={a.go}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cosmic-surface/40 border border-cosmic-border/40 text-body-sm text-text-secondary hover:text-accent-cyan hover:border-accent-cyan/30 transition-all"
+                    disabled={a.disabled}
+                    className="inline-flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl bg-cosmic-surface/40 border border-cosmic-border/40 text-body-sm text-text-secondary hover:text-accent-cyan hover:border-accent-cyan/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <a.icon className="w-4 h-4" /><span>{a.label}</span>
                   </button>

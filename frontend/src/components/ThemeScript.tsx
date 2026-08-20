@@ -10,8 +10,12 @@ export function ThemeScript() {
           (function() {
             try {
               var stored = localStorage.getItem('betty-theme');
-              var theme = (stored === 'dark' || stored === 'light') ? stored : 'light';
+              var theme = (stored === 'dark' || stored === 'light') ? stored : 'dark';
               document.documentElement.classList.add(theme);
+              var p = location.pathname || '';
+              if (/^\\/(create|agent|explore|gallery|library|dashboard|tools|sessions|models)(\\/|$)/.test(p)) {
+                document.documentElement.classList.add('studio');
+              }
             } catch(e) {}
           })();
         `,

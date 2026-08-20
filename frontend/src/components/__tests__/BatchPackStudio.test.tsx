@@ -29,6 +29,7 @@ vi.mock("@/lib/api", () => ({
     honesty: "N 个独立图像任务（非单请求多图）。",
   })),
   generatePack: vi.fn(),
+  getPackBatchStatus: vi.fn(),
   getTaskStatus: vi.fn(),
   uploadImage: vi.fn(),
   publishShare: vi.fn(),

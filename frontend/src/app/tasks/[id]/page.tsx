@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { API_BASE, getTaskStatus, listTasks } from "@/lib/api";
+import { Globe, Loader2 } from "lucide-react";
+import { API_BASE, getTaskStatus, listTasks, publishShare } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 
 /** Relative media paths (/api/v1/media/…) are served by the API host, not the
     frontend origin — prefix them so results render regardless of where we run. */
@@ -16,10 +18,13 @@ function resolveMedia(url: string): string {
 export default function TaskDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const toast = useToast();
   const taskId = params?.id as string;
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [similarTasks, setSimilarTasks] = useState<any[]>([]);
+  const [published, setPublished] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const fetchTask = useCallback(async () => {
     try {
@@ -88,6 +93,20 @@ export default function TaskDetailPage() {
   const isComplete = task.status === "completed";
   const paramsData = task.parameters || {};
 
+  const handlePublish = async () => {
+    if (publishing || published) return;
+    setPublishing(true);
+    try {
+      await publishShare(taskId);
+      setPublished(true);
+      toast.success("已发布到 Explore", "作品已进入探索画廊，可被 Remix");
+    } catch (e: any) {
+      toast.error("发布失败", e?.message || "请稍后重试");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   return (
     <main className="max-w-4xl mx-auto px-4 py-8">
       {/* Back button + status */}
@@ -154,7 +173,19 @@ export default function TaskDetailPage() {
       {/* Results */}
       {isComplete && results.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-lg font-bold mb-3">生成结果</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-bold">生成结果</h2>
+            <button
+              type="button"
+              onClick={handlePublish}
+              disabled={publishing || published}
+              data-testid="task-publish-explore"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-cosmic-border/60 text-text-secondary hover:text-accent-cyan hover:border-accent-cyan/40 transition-colors disabled:opacity-50"
+            >
+              {publishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+              {published ? "已发布到 Explore" : "发布到 Explore"}
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {results.map((r: any, idx: number) => (
               <div key={idx} className="bg-dark-900/50 border border-dark-800 rounded-xl overflow-hidden">

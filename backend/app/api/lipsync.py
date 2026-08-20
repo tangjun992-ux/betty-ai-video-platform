@@ -4,9 +4,11 @@ Lipsync API — AI 唇形同步: 图片 + 音频/文字 → 说话视频
 import json
 import logging
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +24,12 @@ from celery_app import app as celery_app
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "lipsync"
+_SAMPLE_FILES = {
+    "portrait.png": "image/png",
+    "line.wav": "audio/wav",
+}
 
 
 class LipsyncResponse(BaseModel):
@@ -151,3 +159,48 @@ async def list_voices():
             "自备音频请保证响度充足、无严重背景噪声",
         ],
     }
+
+
+@router.get("/lipsync/samples", summary="Lipsync Studio 样片（输入资产 + 周检状态）")
+async def list_lipsync_samples():
+    """Fixture portrait + line audio for Studio UX; includes folded last_run when present."""
+    portrait = _FIXTURE_DIR / "portrait.png"
+    line = _FIXTURE_DIR / "line.wav"
+    available = portrait.is_file() and line.is_file()
+    last_run = None
+    last_run_path = _FIXTURE_DIR / "last_run.json"
+    if last_run_path.is_file():
+        try:
+            last_run = json.loads(last_run_path.read_text(encoding="utf-8"))
+        except Exception:
+            last_run = None
+    return {
+        "available": available,
+        "samples": [
+            {
+                "id": "studio-v1",
+                "title": "Studio 标准样片",
+                "desc": "正面人像 + 8–12 秒中文台词（Edge TTS 可测）",
+                "portrait_path": "/api/v1/lipsync/samples/studio-v1/portrait.png",
+                "audio_path": "/api/v1/lipsync/samples/studio-v1/line.wav",
+                "sample_text": "大家好，我是 Betty 数字人口播测试。口型与响度已做归一化。",
+                "voice_id": "zh-CN-XiaoxiaoNeural",
+                "note": "输入样片，非成片质量承诺；live 证据见 last_run",
+            }
+        ] if available else [],
+        "last_run": last_run,
+        "weekly_beat": "LIPSYNC_FIXTURE_LIVE_WEEKLY=1",
+        "honesty": "样片用于 Studio 体验与周检；≠ 专有数字人训练引擎",
+    }
+
+
+@router.get("/lipsync/samples/{sample_id}/{filename}", summary="下载 Lipsync 样片文件")
+async def get_lipsync_sample_file(sample_id: str, filename: str):
+    if sample_id != "studio-v1":
+        raise HTTPException(status_code=404, detail="样片不存在")
+    if filename not in _SAMPLE_FILES:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    path = _FIXTURE_DIR / filename
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="样片文件缺失，请运行 scripts/generate_lipsync_fixtures.py")
+    return FileResponse(path, media_type=_SAMPLE_FILES[filename], filename=filename)

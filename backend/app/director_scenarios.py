@@ -159,7 +159,8 @@ ANIME_BEATS = [
      "lingering anime close, soft afterglow, sequel-ready pause"),
 ]
 
-# 强制画幅（渠道对标）：竖屏信息流 / 横屏投放与品牌片
+# 默认画幅（渠道对标）：竖屏信息流 / 横屏投放与品牌片。
+# 不是死锁：brief 的竖屏/抖音或 export_placement 可覆盖。
 _ASPECT_9_16 = ("ugc", "micro_drama", "talking_avatar")
 _ASPECT_16_9 = ("product_ad", "product_commercial", "anime")
 
@@ -229,7 +230,11 @@ def scenario_vertical(scenario: str) -> bool:
 
 
 def scenario_aspect(scenario: str) -> str | None:
-    """Hard channel aspect for video cards. None = do not force (stills / freeform)."""
+    """Default channel aspect for video cards. None = do not force (stills / freeform).
+
+    This is a default, not an unbreakable lock: an explicit 竖屏/抖音 brief or
+    export_placement overrides it in DirectorPlanner.plan().
+    """
     if scenario in _ASPECT_9_16:
         return "9:16"
     if scenario in _ASPECT_16_9:

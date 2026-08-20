@@ -47,14 +47,29 @@ def _seat_limit_for_role(role: str | None) -> int:
     return SEAT_LIMIT_BY_ROLE.get((role or "").lower(), DEFAULT_SEAT_LIMIT)
 
 
-def _team_dict(t: Team, members: list[TeamMember] | None = None, balance: TeamBalance | None = None) -> dict:
+def _team_dict(
+    t: Team,
+    members: list[TeamMember] | None = None,
+    balance: TeamBalance | None = None,
+    owner_role: str | None = None,
+) -> dict:
+    from app.api.pricing import PLAN_INCLUDED_SEATS, normalize_plan_id
+
+    seat_limit = getattr(t, "seat_limit", None) or DEFAULT_SEAT_LIMIT
+    member_list = members or []
+    active_members = [m for m in member_list if (m.status or "active") == "active" and int(m.user_id or 0) > 0]
+    included_seats = int(PLAN_INCLUDED_SEATS.get(normalize_plan_id(owner_role or ""), 0))
+    purchased_seats = max(0, int(seat_limit) - included_seats)
     return {
         "team_id": t.team_id,
         "name": t.name,
         "description": t.description,
         "owner_user_id": t.owner_user_id,
         "default_visibility": t.default_visibility,
-        "seat_limit": getattr(t, "seat_limit", None) or DEFAULT_SEAT_LIMIT,
+        "seat_limit": seat_limit,
+        "included_seats": included_seats,
+        "purchased_seats": purchased_seats,
+        "members_count": len(active_members),
         "shared_credits": (balance.credits + getattr(balance, "daily_credits", 0)) if balance else 0,
         "created_at": t.created_at.isoformat() if t.created_at else "",
         "members": [
@@ -100,7 +115,15 @@ async def create_team(
     db.add(owner_member)
     db.add(team_balance)
     await db.commit()
-    return _team_dict(team, [owner_member], team_balance)
+    return _team_dict(team, [owner_member], team_balance, owner_role=user.role)
+
+
+async def _owner_role(db: AsyncSession, owner_user_id: int | None) -> str | None:
+    if not owner_user_id:
+        return None
+    row = await db.execute(select(User).where(User.id == owner_user_id))
+    owner = row.scalar_one_or_none()
+    return owner.role if owner else None
 
 
 @router.get("/", summary="我的团队列表")
@@ -119,7 +142,8 @@ async def list_teams(
     for t in teams:
         mres = await db.execute(select(TeamMember).where(TeamMember.team_id == t.team_id))
         bres = await db.execute(select(TeamBalance).where(TeamBalance.team_id == t.team_id))
-        out.append(_team_dict(t, list(mres.scalars().all()), bres.scalar_one_or_none()))
+        owner_role = await _owner_role(db, t.owner_user_id)
+        out.append(_team_dict(t, list(mres.scalars().all()), bres.scalar_one_or_none(), owner_role=owner_role))
     return {"teams": out}
 
 
@@ -139,7 +163,8 @@ async def get_team(
         raise HTTPException(status_code=404, detail="团队不存在")
     mres = await db.execute(select(TeamMember).where(TeamMember.team_id == team_id))
     bres = await db.execute(select(TeamBalance).where(TeamBalance.team_id == team_id))
-    return _team_dict(team, list(mres.scalars().all()), bres.scalar_one_or_none())
+    owner_role = await _owner_role(db, team.owner_user_id)
+    return _team_dict(team, list(mres.scalars().all()), bres.scalar_one_or_none(), owner_role=owner_role)
 
 
 @router.post("/{team_id}/invite", summary="邀请成员（email / username）")

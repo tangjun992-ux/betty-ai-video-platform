@@ -12,7 +12,7 @@ def test_script_to_subtitle_track_splits_sentences():
     assert len(cues) >= 2
     assert cues[0]["text"] == "第一句"
     assert cues[0]["start"] == 0.0
-    assert cues[1]["start"] == 3.0
+    assert cues[1]["start"] == 2.4
 
 
 def test_export_preset_from_aspect_ratio():

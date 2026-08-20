@@ -134,6 +134,7 @@ export default function PricingPage() {
   const [yearly, setYearly] = useState(false);
   const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
   const [stripeEnabled, setStripeEnabled] = useState(false);
+  const [subscriptionReady, setSubscriptionReady] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [maxIdx, setMaxIdx] = useState(1);
   const [maxTiers, setMaxTiers] = useState(MAX_TIERS);
@@ -146,7 +147,10 @@ export default function PricingPage() {
   useEffect(() => {
     fetch(`${API_BASE}/billing/stripe-status`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (d && typeof d.api_key_configured === "boolean") setStripeEnabled(d.api_key_configured); })
+      .then((d) => {
+        if (d && typeof d.api_key_configured === "boolean") setStripeEnabled(d.api_key_configured);
+        if (d && typeof d.subscription_ready === "boolean") setSubscriptionReady(d.subscription_ready);
+      })
       .catch(() => {});
     fetch(`${API_BASE}/pricing/plans`)
       .then((r) => (r.ok ? r.json() : null))
@@ -176,6 +180,12 @@ export default function PricingPage() {
   // Stripe is configured — matching Yapper/Dzine global default; the WeChat /
   // Alipay QR modal remains the China path.
   const subscribe = async (planId: string) => {
+    if (!subscriptionReady) {
+      toast.error(locale === "en" ? "Checkout unavailable" : "无法真实收款", locale === "en"
+        ? "Stripe is not configured in this environment."
+        : "本环境未注入 Stripe Key / Price，订阅无法真实收款。");
+      return;
+    }
     if (locale === "en" || stripeEnabled) {
       setBusy(planId);
       try {
@@ -191,6 +201,12 @@ export default function PricingPage() {
     setPayTarget({ kind: "plan", id: planId, cycle: yearly ? "yearly" : "monthly" });
   };
   const buyPack = async (packId: string) => {
+    if (!subscriptionReady) {
+      toast.error(locale === "en" ? "Checkout unavailable" : "无法真实收款", locale === "en"
+        ? "Stripe is not configured in this environment."
+        : "本环境未注入 Stripe Key / Price，积分包无法真实收款。");
+      return;
+    }
     if (locale === "en" || stripeEnabled) {
       setBusy(packId);
       try {
@@ -212,7 +228,7 @@ export default function PricingPage() {
       <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
         <h1 className="text-3xl md:text-4xl font-display font-bold mb-3 text-text-accent-cyan">{t("pricing.title")}</h1>
         <p className="text-text-secondary max-w-lg mx-auto mb-8">{t("pricing.subtitle")}</p>
-        {!stripeEnabled && (
+        {!subscriptionReady && (
           <p
             data-testid="pricing-stripe-honesty"
             className="max-w-xl mx-auto mb-6 text-xs text-amber-800 dark:text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-xl px-3 py-2"
@@ -268,7 +284,7 @@ export default function PricingPage() {
                 </li>
               ))}
             </ul>
-            <button onClick={() => subscribe(plan.id)} disabled={!!busy}
+            <button onClick={() => subscribe(plan.id)} disabled={!!busy || !subscriptionReady}
               className={`w-full py-2.5 rounded-xl text-sm font-semibold text-center transition-all active:scale-[0.98] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 ${
               plan.popular ? "bg-brand text-white hover:bg-brand-strong shadow-button-glow" : "bg-cosmic-subtle border border-cosmic-border text-text-primary hover:bg-cosmic-border"}`}>
               {busy === plan.id && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -309,7 +325,7 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <button onClick={() => subscribe("max")} disabled={!!busy}
+          <button onClick={() => subscribe("max")} disabled={!!busy || !subscriptionReady}
             className="w-full py-2.5 rounded-xl text-sm font-semibold text-center bg-amber-500/[0.06] border border-amber-500/30 text-amber-600 hover:bg-amber-500/[0.12] transition-all active:scale-[0.98] inline-flex items-center justify-center gap-1.5 disabled:opacity-60">
             {busy === "max" && <Loader2 className="w-4 h-4 animate-spin" />}
             {L.chooseMax}
@@ -328,7 +344,7 @@ export default function PricingPage() {
                 type="button"
                 data-testid={`pricing-pack-${p.id}`}
                 onClick={() => buyPack(p.id)}
-                disabled={!!busy}
+                disabled={!!busy || !subscriptionReady}
                 className="px-3 py-1.5 rounded-lg border border-cosmic-border text-sm text-text-secondary hover:text-text-primary hover:border-brand/40"
               >
                 {p.credits >= 1000 ? `${p.credits / 1000}k` : p.credits} · ${p.price_usd}

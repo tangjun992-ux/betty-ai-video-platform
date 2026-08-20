@@ -16,6 +16,7 @@ unless --strict-live).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import io
 import json
 import logging
@@ -266,6 +267,17 @@ def run_contract(client, headers: dict) -> list[dict]:
         ready.status_code == 200 and all(k in rd for k in ("stripe", "storage", "sso")),
         f"ok={rd.get('ok')} stripe={((rd.get('stripe') or {}).get('api_key_configured'))} oidc_blockers={len(((rd.get('sso') or {}).get('blockers') or []))}",
     ))
+    co = client.get("/api/v1/system/commercial-open")
+    cod = co.json() if co.status_code == 200 else {}
+    checks.append(_row(
+        "api:commercial_open_honest",
+        co.status_code == 200
+        and "open_to_public" in cod
+        and "blockers" in cod
+        and (cod.get("open_to_public") is False or cod.get("subscription_ready") is True),
+        f"verdict={cod.get('verdict')} open={cod.get('open_to_public')} blockers={len(cod.get('blockers') or [])}",
+        partial=not cod.get("open_to_public"),
+    ))
     stripe = client.get("/api/v1/billing/stripe-status")
     st = stripe.json() if stripe.status_code == 200 else {}
     checks.append(_row("ops:stripe_configured", bool(st.get("api_key_configured")), str(st)[:160], gap=not st.get("api_key_configured")))
@@ -283,11 +295,17 @@ def run_contract(client, headers: dict) -> list[dict]:
         json={"prompt": "audit smoke still life", "media_type": "image", "model": "auto", "dry_run": True},
         headers=headers,
     )
-    # dry_run may or may not exist — accept 200 with task or 422
+    broker_down = (
+        gen_img.status_code == 500
+        and ("任务调度失败" in gen_img.text or "Redis" in gen_img.text or "Celery" in gen_img.text)
+    )
+    # dry_run may or may not exist — accept 200 with task or 422; dev without Redis → 500 honesty
     checks.append(_row(
         "enqueue:generate_image",
-        gen_img.status_code in (200, 201, 202, 400, 422),
+        gen_img.status_code in (200, 201, 202, 400, 422) or broker_down,
         f"status={gen_img.status_code} {gen_img.text[:100]}",
+        partial=broker_down,
+        gap=broker_down,
     ))
 
     # Speech — contract only (empty text → 422). Do NOT call paid TTS here.
@@ -635,29 +653,30 @@ def main() -> int:
     from fastapi.testclient import TestClient
     from app.main import app
 
-    with TestClient(app) as c:
-        email = f"audit_{uuid.uuid4().hex[:8]}@test.local"
-        reg = c.post("/api/v1/auth/register", json={"email": email, "password": "Test1234!", "username": f"a{uuid.uuid4().hex[:6]}"})
-        token = reg.json().get("access_token") if reg.status_code == 200 else None
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
+    with contextlib.redirect_stdout(sys.stderr):
+        with TestClient(app) as c:
+            email = f"audit_{uuid.uuid4().hex[:8]}@test.local"
+            reg = c.post("/api/v1/auth/register", json={"email": email, "password": "Test1234!", "username": f"a{uuid.uuid4().hex[:6]}"})
+            token = reg.json().get("access_token") if reg.status_code == 200 else None
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
 
-        checks = [_row("auth_register", bool(token), f"status={reg.status_code}")]
-        checks.extend(run_contract(c, headers))
+            checks = [_row("auth_register", bool(token), f"status={reg.status_code}")]
+            checks.extend(run_contract(c, headers))
 
-        # meta for scoring
-        models = c.get("/api/v1/models").json() or {}
-        gal = c.get("/api/v1/gallery/").json() or {}
-        stripe = c.get("/api/v1/billing/stripe-status").json() or {}
-        oidc = c.get("/api/v1/auth/oidc/status").json() or {}
-        meta = {
-            "active_models": int(models.get("active_count") or 0),
-            "lab_models": int(models.get("lab_count") or 0),
-            "gallery_items": len(gal.get("items") or []),
-            "gallery_total": gal.get("total"),
-            "stripe": bool(stripe.get("api_key_configured")),
-            "oidc": bool(oidc.get("configured")),
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        }
+            # meta for scoring
+            models = c.get("/api/v1/models").json() or {}
+            gal = c.get("/api/v1/gallery/").json() or {}
+            stripe = c.get("/api/v1/billing/stripe-status").json() or {}
+            oidc = c.get("/api/v1/auth/oidc/status").json() or {}
+            meta = {
+                "active_models": int(models.get("active_count") or 0),
+                "lab_models": int(models.get("lab_count") or 0),
+                "gallery_items": len(gal.get("items") or []),
+                "gallery_total": gal.get("total"),
+                "stripe": bool(stripe.get("api_key_configured")),
+                "oidc": bool(oidc.get("configured")),
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
 
     live = run_live({})
     # Enrich meta from folded evidence + contract for depth scoring

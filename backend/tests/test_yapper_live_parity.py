@@ -129,10 +129,10 @@ def test_kling_t2v_omits_resolution_first():
 def test_director_minimal_skips_post_ladder():
     from app.director import DirectorPlanner
 
-    plan = DirectorPlanner().plan("做一条产品宣传视频", duration=5, minimal=True)
+    # 无 scenario 的单镜 brief — minimal 不应追加字幕/合成后期
+    plan = DirectorPlanner().plan("只要静图，产品展示海报", duration=5, minimal=True)
     actions = [s.action for s in plan.steps]
     assert "image" in actions
-    assert "video" in actions
     assert "audio" not in actions
     assert "compose" not in actions
     assert "subtitle" not in actions

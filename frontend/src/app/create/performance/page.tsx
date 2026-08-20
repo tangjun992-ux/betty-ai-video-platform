@@ -24,6 +24,34 @@ export default function PerformancePage() {
   const [withTalk, setWithTalk] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [loadingSample, setLoadingSample] = useState(false);
+
+  const loadDemoSample = async () => {
+    setLoadingSample(true);
+    try {
+      const r = await fetch(`${API_BASE}/performance/samples`);
+      if (!r.ok) throw new Error("样片不可用");
+      const data = await r.json();
+      const sample = data.samples?.[0];
+      if (!sample) throw new Error("暂无 Performance 样片");
+      const origin = API_BASE.replace(/\/api\/v1\/?$/, "");
+      const [imgBlob, vidBlob] = await Promise.all([
+        fetch(`${origin}${sample.image_path}`).then((x) => x.blob()),
+        fetch(`${origin}${sample.video_path}`).then((x) => x.blob()),
+      ]);
+      setImageFile(new File([imgBlob], "still.png", { type: "image/png" }));
+      setImagePreview(URL.createObjectURL(imgBlob));
+      setVideoFile(new File([vidBlob], "ref.mp4", { type: "video/mp4" }));
+      setVideoPreview(URL.createObjectURL(vidBlob));
+      setPrompt(sample.prompt || "");
+      if (sample.sample_voice_text) setVoiceText(sample.sample_voice_text);
+      toast.success("已加载 Demo 样片", data.honesty || "");
+    } catch (e: any) {
+      toast.error("加载样片失败", e?.message || "");
+    } finally {
+      setLoadingSample(false);
+    }
+  };
 
   const onImage = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -95,6 +123,16 @@ export default function PerformancePage() {
           原生 Kling Motion Control + 可选 Lipsync 口播分轨。对标「表演驱动」工作流，但不是 Runway Act-One 编码器。
         </p>
         <CapabilityNotice feature="motion" className="mb-4" />
+        <button
+          type="button"
+          data-testid="performance-load-sample"
+          onClick={loadDemoSample}
+          disabled={loadingSample || submitting}
+          className="btn-secondary text-sm inline-flex items-center gap-2 mb-4 disabled:opacity-40"
+        >
+          {loadingSample ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clapperboard className="w-4 h-4" />}
+          加载 Demo 样片对
+        </button>
       </motion.div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">

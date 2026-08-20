@@ -44,10 +44,13 @@ async def test_list_tasks_filters_by_user_id():
 @pytest.mark.asyncio
 async def test_get_task_status_forbidden_for_other_user():
     from fastapi import HTTPException
+    from starlette.requests import Request
 
     db = AsyncMock()
     other = _task("t2", 99)
     db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=lambda: other))
+    scope = {"type": "http", "method": "GET", "path": "/api/v1/tasks/t2", "headers": [], "query_string": b""}
+    request = Request(scope)
     with pytest.raises(HTTPException) as exc:
-        await get_task_status("t2", user_id=1, db=db)
+        await get_task_status("t2", request, user_id=1, db=db)
     assert exc.value.status_code == 403

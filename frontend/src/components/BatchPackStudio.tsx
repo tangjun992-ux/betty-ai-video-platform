@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ImagePlus, X, Download, Maximize2, Sparkles, Loader2, CheckCircle2, Globe } from "lucide-react";
-import { listPhotoPacks, generatePack, quotePack, getTaskStatus, uploadImage, publishShare, type PhotoPack, type TaskResult } from "@/lib/api";
+import { listPhotoPacks, generatePack, quotePack, getPackBatchStatus, uploadImage, publishShare, type PhotoPack } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { cn } from "@/lib/utils";
 
@@ -62,21 +62,24 @@ export function BatchPackStudio({
     e.target.value = "";
   };
 
-  const pollOne = useCallback(async (taskId: string, label: string) => {
+  const pollBatch = useCallback(async (batchId: string) => {
     for (let i = 0; i < 80; i++) {
       try {
-        const s = await getTaskStatus(taskId);
-        if (s.status === "completed" || s.status === "failed") {
-          const r = (s as TaskResult).results?.[0];
-          setCells((prev) => prev.map((c) => c.taskId === taskId
-            ? { ...c, status: s.status, url: r?.url, error: (s as TaskResult).error_message }
-            : c));
-          return;
-        }
+        const s = await getPackBatchStatus(batchId);
+        setCells(s.items.map((it) => ({
+          label: it.label,
+          taskId: it.task_id,
+          status: it.status,
+          url: it.url,
+          error: it.error_message,
+        })));
+        if (s.all_done) return;
       } catch { /* keep polling */ }
       await new Promise((r) => setTimeout(r, 3000));
     }
-    setCells((prev) => prev.map((c) => c.taskId === taskId ? { ...c, status: "failed", error: "超时" } : c));
+    setCells((prev) => prev.map((c) => c.status !== "completed" && c.status !== "failed"
+      ? { ...c, status: "failed", error: "超时" }
+      : c));
   }, []);
 
   const handleGenerate = useCallback(async () => {
@@ -98,13 +101,13 @@ export function BatchPackStudio({
       } else {
         toast.success("已开始批量生成", `${batch.dispatched} 张 · 预估 ${batch.estimated_cost_credits} 积分`);
       }
-      await Promise.all(batch.items.filter((it) => it.status !== "failed").map((it) => pollOne(it.task_id, it.label)));
+      await pollBatch(batch.batch_id);
     } catch (e: any) {
       toast.error("生成失败", e.message || "");
     } finally {
       setBusy(false);
     }
-  }, [pack, busy, refFile, subject, effCount, pollOne, toast]);
+  }, [pack, busy, refFile, subject, effCount, pollBatch, toast]);
 
   const downloadAll = () => {
     cells.filter((c) => c.url).forEach((c, i) => setTimeout(() => {

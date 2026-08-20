@@ -234,12 +234,18 @@ export default function FaceSwapPage() {
               data-testid={`face-swap-template-${t.id}`}
               onClick={() => setPrompt(t.text)}
               className={cn(
-                "text-left px-3 py-2.5 rounded-xl text-xs border transition-colors",
+                "text-left px-3 py-2.5 rounded-xl text-xs border transition-colors overflow-hidden",
                 prompt === t.text
                   ? "border-brand bg-brand/10 text-brand"
                   : "border-cosmic-border text-text-secondary hover:border-brand/40",
               )}
+              style={{
+                backgroundImage: (t as { color?: string }).color
+                  ? `linear-gradient(135deg, ${(t as { color?: string }).color}22, transparent)`
+                  : undefined,
+              }}
             >
+              <span className="block text-base mb-0.5">{(t as { icon?: string }).icon || "🎭"}</span>
               <span className="block font-semibold text-text-primary">{t.label}</span>
               <span className="block text-[10px] text-text-secondary/80 mt-0.5">{t.hint}</span>
             </button>

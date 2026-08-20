@@ -97,8 +97,11 @@ def test_series_prompts_forbid_collage_and_strip_count():
 
 
 def test_aspect_hardening_by_scenario():
-    """UGC/短剧/口播 → 9:16；广告/商业片/动漫 → 16:9（竖屏关键词也不能撬开）。"""
-    expect = {
+    """UGC/短剧/口播 → 9:16；广告/商业片/动漫无竖屏关键词时默认 16:9。
+
+    Brief 里的「竖屏 / 抖音 / 9:16」覆盖场景默认；显式 export_placement 仍优先。
+    """
+    expect_default = {
         "ugc": "9:16",
         "micro_drama": "9:16",
         "talking_avatar": "9:16",
@@ -106,20 +109,52 @@ def test_aspect_hardening_by_scenario():
         "product_commercial": "16:9",
         "anime": "16:9",
     }
-    for sc, ar in expect.items():
+    for sc, ar in expect_default.items():
         assert scenario_aspect(sc) == ar
+        plan = DirectorPlanner().plan(
+            f"{sc} 测试成片", duration=15, minimal=True, scenario=sc,
+        )
+        for s in plan.steps:
+            if s.action in ("video", "lipsync", "compose"):
+                assert s.params.get("aspect_ratio") == ar, (sc, s.action, s.params)
+
+    for sc in ("product_ad", "product_commercial", "anime"):
         plan = DirectorPlanner().plan(
             f"竖屏 9:16 {sc} 测试", duration=15, minimal=True, scenario=sc,
         )
         for s in plan.steps:
             if s.action in ("video", "lipsync", "compose"):
-                assert s.params.get("aspect_ratio") == ar, (sc, s.action, s.params)
-        if sc == "product_ad":
-            refined, changes = refine_plan(plan, "改成竖屏 9:16")
-            assert any("锁定" in c or "9:16" in c for c in changes) or all(
-                s.params.get("aspect_ratio") == "16:9"
-                for s in refined.steps if s.action == "video"
-            )
+                assert s.params.get("aspect_ratio") == "9:16", (sc, s.action, s.params)
+
+    locked = DirectorPlanner().plan(
+        "竖屏抖音产品广告", duration=15, minimal=True, scenario="product_ad",
+        export_placement="meta_feed",
+    )
+    for s in locked.steps:
+        if s.action in ("video", "lipsync", "compose"):
+            assert s.params.get("aspect_ratio") == "16:9", s.params
+
+    landscape = DirectorPlanner().plan(
+        "高转化产品广告", duration=15, minimal=True, scenario="product_ad",
+    )
+    refined, changes = refine_plan(landscape, "改成竖屏 9:16")
+    assert any("9:16" in c for c in changes)
+    for s in refined.steps:
+        if s.action in ("video", "lipsync", "compose"):
+            assert s.params.get("aspect_ratio") == "9:16", s.params
+
+
+def test_douyin_vertical_overrides_commercial_16x9():
+    """黄金路径：宣传片 + 竖屏抖音 → product_commercial 且 9:16，不是锁死横屏。"""
+    plan = DirectorPlanner().plan("做一个15秒的咖啡产品宣传片，电影级画质，竖屏抖音")
+    assert plan.scenario == "product_commercial"
+    media = [s for s in plan.steps if s.action in ("image", "video", "lipsync", "compose")]
+    assert media, "expected media steps"
+    for s in media:
+        assert s.params.get("aspect_ratio") == "9:16", (s.action, s.title, s.params)
+    comp = next(s for s in plan.steps if s.action == "compose")
+    assert comp.params.get("export_placement") == "tiktok"
+    assert comp.params.get("export_preset") == "portrait_9_16"
 
 
 def test_finish_packaging_subtitle_bgm_cta():

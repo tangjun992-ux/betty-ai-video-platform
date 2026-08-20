@@ -37,6 +37,49 @@ export default function LipsyncPage() {
   const [offlineDemo, setOfflineDemo] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [stage, setStage] = useState("");
+  const [loadingSample, setLoadingSample] = useState(false);
+  const [fixtureStatus, setFixtureStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/system/slo`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const lf = d?.lipsync_fixture;
+        if (!lf?.available) {
+          setFixtureStatus("周检：暂无折叠 last_run 证据");
+        } else if (lf.ok) {
+          setFixtureStatus(`周检 last_run OK${lf.ts ? ` · ${lf.ts}` : ""}`);
+        } else {
+          setFixtureStatus("周检 last_run 未通过或待跑");
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadStudioSample = async () => {
+    setLoadingSample(true);
+    setError(null);
+    try {
+      const r = await fetch(`${API_BASE}/lipsync/samples`);
+      if (!r.ok) throw new Error("样片不可用");
+      const data = await r.json();
+      const sample = data.samples?.[0];
+      if (!sample) throw new Error("缺少 Studio 样片");
+      const origin = API_BASE.replace(/\/api\/v1\/?$/, "");
+      const portraitUrl = `${origin}${sample.portrait_path}`;
+      setRemoteImageUrl(portraitUrl);
+      setImagePreview(portraitUrl);
+      setImageFile(null);
+      setInputMode("text");
+      setText(sample.sample_text || "");
+      setVoiceId(sample.voice_id || voiceId);
+      toast.success("已加载 Studio 样片", sample.note || "");
+    } catch (e: any) {
+      toast.error("加载样片失败", e?.message || "");
+    } finally {
+      setLoadingSample(false);
+    }
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -158,6 +201,23 @@ export default function LipsyncPage() {
               <div className="text-[10px] text-text-secondary mt-0.5">{t.desc}</div>
             </button>
           ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <button
+            type="button"
+            data-testid="lipsync-load-sample"
+            onClick={loadStudioSample}
+            disabled={loadingSample || submitting}
+            className="btn-secondary text-sm inline-flex items-center gap-2 disabled:opacity-40"
+          >
+            {loadingSample ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            加载 Studio 样片
+          </button>
+          {fixtureStatus && (
+            <span className="text-[11px] text-text-tertiary" data-testid="lipsync-fixture-status">
+              {fixtureStatus}
+            </span>
+          )}
         </div>
       </motion.div>
 

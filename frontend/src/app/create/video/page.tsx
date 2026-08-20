@@ -9,11 +9,12 @@ import { useCreationStore } from "@/lib/stores";
 import { submitGeneration, getTaskStatus, uploadMedia, runStoryboard, enhancePrompt, quoteGeneration, type TaskResult, type GenerationQuote, API_BASE } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { useLocale } from "@/i18n/LocaleProvider";
-import { Loading, Empty, ErrorState } from "@/components/StatusStates";
+import { Loading, ErrorState } from "@/components/StatusStates";
 import { ResultGrid } from "@/components/ResultGrid";
 import { VideoComposer } from "@/components/VideoComposer";
 import { VideoAppsRow } from "@/components/VideoAppsRow";
 import { SessionChip } from "@/components/SessionChip";
+import { StudioStage } from "@/components/StudioStage";
 
 /* ════════════════════════════════════════════════════════ Data ═══ */
 
@@ -427,9 +428,13 @@ export default function CreateVideoPage() {
 
           {/* Empty */}
           {!submitting && !error && videoResults.length === 0 && (
-            <div className="mt-4">
-              <Empty title={en ? "Start creating video" : "开始创作视频"} description={en ? "Describe the scene and camera moves and AI will generate it — with multi-shot sequencing, reference media (image/video/audio) guidance, and AI enhancement." : "输入 prompt 描述画面与运镜，AI 将为你生成。支持多镜头编排、参考素材（图/视频/音频）引导与 AI 优化。"} />
-            </div>
+            <StudioStage
+              kind="video"
+              title={en ? "The frame will land here" : "画面将出现在这里"}
+              hint={en
+                ? "Describe the shot, add a reference, or pick a Video Idea above."
+                : "描述运镜与氛围，或点上方 Video Idea；支持参考图/视频/音频与多镜头。"}
+            />
           )}
 
           {/* Video Apps */}

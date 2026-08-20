@@ -204,11 +204,14 @@ async def readiness():
         checks["database"] = "ok"
     except Exception as e:
         checks["database"] = f"error: {str(e)[:60]}"; hard_ok = False
-    # Redis + Celery workers + queue backlog
+    # Redis + Celery workers + queue backlog.
+    # Skip Celery ping when the broker is down — control.ping otherwise blocks ~6s.
+    redis_ok = False
     try:
         import redis as _redis
-        c = _redis.Redis.from_url(settings.CELERY_BROKER_URL, socket_timeout=2)
+        c = _redis.Redis.from_url(settings.CELERY_BROKER_URL, socket_timeout=0.4)
         c.ping()
+        redis_ok = True
         checks["redis"] = "ok"
         depths = {}
         for q in ("celery", "image_q", "video_q", "director_q"):
@@ -219,13 +222,14 @@ async def readiness():
         checks["queue_depth"] = depths
     except Exception as e:
         checks["redis"] = f"error: {str(e)[:60]}"; hard_ok = False
-    # Celery workers (best-effort ping)
-    try:
-        from celery_app import app as celery_app
-        pong = celery_app.control.ping(timeout=1.0)
-        checks["celery_workers"] = len(pong)
-    except Exception:
-        checks["celery_workers"] = 0
+    checks["celery_workers"] = 0
+    if redis_ok:
+        try:
+            from celery_app import app as celery_app
+            pong = celery_app.control.ping(timeout=0.3)
+            checks["celery_workers"] = len(pong or [])
+        except Exception:
+            checks["celery_workers"] = 0
     body = {"status": "ready" if hard_ok else "not_ready",
             "version": settings.APP_VERSION, "checks": checks}
     return JSONResponse(status_code=200 if hard_ok else 503, content=body)

@@ -192,14 +192,14 @@ export default function SessionsPage() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-medium mb-3">
-          <Bot className="w-3.5 h-3.5" /> DIRECTOR AGENT
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-semibold uppercase tracking-wider mb-3">
+          <Bot className="w-3.5 h-3.5" /> Just Direct
         </div>
         <h1 className="text-2xl font-semibold text-text-primary mb-1">
           创作会话
         </h1>
         <p className="text-sm text-text-secondary">
-          Director Agent 创作历史
+          Betty 导演台的创作历史
         </p>
       </motion.div>
 

@@ -35,24 +35,47 @@ export default function StatusPage() {
     outframe_ok?: number; outframe_skipped?: number;
     failed_count?: number; quarantined_count?: number; skipped_count?: number;
   } | null>(null);
+  const [commercial, setCommercial] = useState<{
+    open_to_public?: boolean;
+    verdict?: string;
+    blockers?: { id: string; severity: string; message: string }[];
+    honesty?: string;
+    verified_model_count?: number;
+    subscription_ready?: boolean;
+  } | null>(null);
 
   const load = useCallback(async () => {
     const t0 = performance.now();
-    try {
-      const res = await fetch(`${ORIGIN}/health/ready`, { cache: "no-store" });
-      setLatency(Math.round(performance.now() - t0));
-      const j = await res.json();
-      setData(j); setErr(false);
-    } catch { setErr(true); setData(null); }
-    try {
-      const mh = await fetch(`${API_BASE}/models/health`, { cache: "no-store" });
-      if (mh.ok) {
-        const j = await mh.json();
+    const [readyRes, coRes, mhRes] = await Promise.allSettled([
+      fetch(`${ORIGIN}/health/ready`, { cache: "no-store" }),
+      fetch(`${API_BASE}/system/commercial-open`, { cache: "no-store" }),
+      fetch(`${API_BASE}/models/health`, { cache: "no-store" }),
+    ]);
+    setLatency(Math.round(performance.now() - t0));
+    if (readyRes.status === "fulfilled") {
+      try {
+        const j = await readyRes.value.json();
+        setData(j);
+        setErr(false);
+      } catch {
+        setErr(true);
+        setData(null);
+      }
+    } else {
+      setErr(true);
+      setData(null);
+    }
+    if (coRes.status === "fulfilled" && coRes.value.ok) {
+      try { setCommercial(await coRes.value.json()); } catch { /* ignore */ }
+    }
+    if (mhRes.status === "fulfilled" && mhRes.value.ok) {
+      try {
+        const j = await mhRes.value.json();
         setModelHealth(j.models || []);
         setCircuitsOpen(j.circuits_open || 0);
         setLastSmoke(j.last_smoke || null);
-      }
-    } catch { /* ignore */ }
+      } catch { /* ignore */ }
+    }
     setUpdated(new Date().toLocaleTimeString());
   }, []);
 
@@ -175,8 +198,40 @@ export default function StatusPage() {
         </div>
       )}
 
+      <div
+        className={cn(
+          "mt-6 rounded-2xl border p-4",
+          commercial?.open_to_public
+            ? "border-success/30 bg-success/[0.06]"
+            : "border-amber-400/30 bg-amber-500/10",
+        )}
+        data-testid="status-commercial-open"
+      >
+        <div className="text-sm font-semibold text-text-primary mb-1">
+          {commercial?.open_to_public ? "可对公众收费开放" : "工作室底盘就绪 · 尚未商业开放"}
+        </div>
+        <p className="text-[11px] text-text-secondary leading-relaxed mb-2">
+          {commercial?.honesty || "正在读取商业开放裁决（Stripe / 队列 / 货架）。API 不可达时默认视为未对公众收费开放。"}
+        </p>
+        <p className="text-[11px] text-text-tertiary mb-2">
+          裁决 {commercial?.verdict || "pending"} · 已验证模型 {commercial?.verified_model_count ?? "—"} ·
+          Stripe {commercial?.subscription_ready ? "可收款" : "未配置"}
+        </p>
+        {(commercial?.blockers || []).length > 0 && (
+          <ul className="space-y-1">
+            {(commercial.blockers || []).map((b) => (
+              <li key={b.id} className="text-[11px] text-text-secondary">
+                <span className="font-mono text-amber-700 dark:text-amber-200">{b.severity}</span>
+                {" · "}{b.message}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <p className="text-xs text-text-tertiary mt-6 text-center">
-        实时读取 <code>/health/ready</code> 与 <code>/models/health</code>。生产环境建议接入 Prometheus 抓取 <code>/metrics</code> + 告警。
+        实时读取 <code>/health/ready</code>、<code>/models/health</code> 与 <code>/system/commercial-open</code>。
+        生产环境建议接入 Prometheus 抓取 <code>/metrics</code> + 告警。
       </p>
     </div>
   );

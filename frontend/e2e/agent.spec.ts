@@ -40,11 +40,23 @@ test.describe("Director Agent 黄金路径", () => {
 
     // Director returns a real multi-step plan (works in demo/dry-run without keys)
     await expect(page.getByTestId("agent-plan")).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId("agent-timeline")).toBeVisible();
     const steps = page.getByTestId("agent-step");
     await expect(steps.first()).toBeVisible({ timeout: 45_000 });
     expect(await steps.count()).toBeGreaterThan(0);
+    expect(await page.getByTestId("agent-shot-index").count()).toBeGreaterThan(0);
+    // 竖屏抖音 brief must not be planned as 16:9 (ad/commercial default).
+    await expect(page.getByTestId("agent-step").filter({ hasText: "9:16" }).first()).toBeVisible();
 
     // Plan summary + credit estimate are shown (trust: cost is disclosed upfront)
     await expect(page.getByText(/积分/).first()).toBeVisible();
+    await expect(page.getByTestId("agent-monitor")).toBeVisible();
+    await expect(page.getByTestId("agent-monitor-empty")).toBeVisible();
+
+    await page.getByTestId("agent-preview-btn").click();
+    await expect(
+      page.getByTestId("agent-timeline-current").or(page.getByTestId("agent-monitor-media")),
+    ).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("agent-step-thumb").first()).toBeVisible({ timeout: 60_000 });
   });
 });

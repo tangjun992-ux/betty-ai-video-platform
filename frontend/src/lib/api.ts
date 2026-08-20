@@ -436,6 +436,35 @@ export async function generatePack(req: {
   return res.json();
 }
 
+export interface PackBatchStatus {
+  batch_id: string;
+  total: number;
+  done: number;
+  completed: number;
+  failed: number;
+  all_done: boolean;
+  items: {
+    task_id: string;
+    label: string;
+    status: string;
+    progress?: number;
+    url?: string;
+    error_message?: string;
+  }[];
+}
+
+/** Aggregate poll for a photo-pack batch — one request instead of N task polls. */
+export async function getPackBatchStatus(batchId: string): Promise<PackBatchStatus> {
+  const res = await fetch(`${API_BASE}/generate/pack/${encodeURIComponent(batchId)}/status`, {
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.detail || `批次状态查询失败: ${res.status}`);
+  }
+  return res.json();
+}
+
 // ─── Creative sessions (reuse Director session store for the image workspace) ───
 
 export interface CreativeSession {
