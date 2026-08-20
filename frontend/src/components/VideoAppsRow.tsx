@@ -18,13 +18,13 @@ interface AppCard {
 }
 
 const APPS: AppCard[] = [
-  { label: "Seedance 2.0 Omni", desc: "多模态输入 + 唇形 + 多镜头叙事", icon: Film, gradient: "from-indigo-600 to-blue-400", href: "/create/video", tag: "Video" },
-  { label: "工作室唇形同步", desc: "口播 / 数字分身 / 政治讽刺短片", icon: Mic, gradient: "from-purple-600 to-fuchsia-400", href: "/create/lipsync", tag: "Video" },
-  { label: "动态控制", desc: "用参考视频 + 角色图精准引导运动", icon: Sparkles, gradient: "from-rose-500 to-orange-400", href: "/create/motion", tag: "Video" },
-  { label: "数字人", desc: "图片 + 音频，一键生成说话数字人", icon: User, gradient: "from-emerald-600 to-teal-400", href: "/create/avatar", tag: "Video" },
-  { label: "媒体放大", desc: "AI 超分辨率，2×/4× 画质提升", icon: Maximize2, gradient: "from-cyan-500 to-sky-400", href: "/create/upscale", tag: "Utility" },
-  { label: "URL-to-Viral", desc: "链接反推提示词 + 投放规格分镜（非原片搬运）", icon: ScanText, gradient: "from-amber-500 to-yellow-400", href: "/create/extract", tag: "Utility" },
-  { label: "时间线编辑器", desc: "多片段剪辑、转场、字幕与配音合成", icon: Clapperboard, gradient: "from-slate-500 to-slate-400", href: "/create/timeline", tag: "Utility" },
+  { label: "Seedance 2.0 Omni", desc: "多模态输入 + 唇形 + 多镜头叙事", icon: Film, gradient: "from-accent-blue to-accent-violet", href: "/create/video", tag: "Video" },
+  { label: "工作室唇形同步", desc: "口播 / 数字分身（Kling Avatar）", icon: Mic, gradient: "from-accent-violet to-accent-fuchsia", href: "/create/lipsync", tag: "Video" },
+  { label: "动态控制", desc: "参考视频 + 角色图引导运动（≠ Act-One）", icon: Sparkles, gradient: "from-accent-fuchsia to-brand", href: "/create/motion", tag: "Video" },
+  { label: "数字人", desc: "图片 + 音频，说话数字人", icon: User, gradient: "from-brand to-accent-blue", href: "/create/avatar", tag: "Video" },
+  { label: "媒体放大", desc: "AI 超分辨率，2×/4×", icon: Maximize2, gradient: "from-accent-blue to-brand", href: "/create/upscale", tag: "Utility" },
+  { label: "URL-to-Viral", desc: "链接反推提示词 + 投放规格（非原片搬运）", icon: ScanText, gradient: "from-accent-violet to-accent-blue", href: "/create/extract", tag: "Utility" },
+  { label: "时间线编辑器", desc: "多片段、字幕与配音合成", icon: Clapperboard, gradient: "from-brand-strong to-accent-violet", href: "/create/timeline", tag: "Utility" },
 ];
 
 export function VideoAppsRow({ className }: { className?: string }) {

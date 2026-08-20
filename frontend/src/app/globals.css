@@ -3,10 +3,10 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════
-   betty Design System v4 — AURORA
-   亮色消费级 · ink teal 品牌 #0F766E · 干净精致 · border-first · 克制留白
-   对标 yapper / Linear / Stripe / Canva 的顶级气质
-   （保留 v3 全部类名/变量名/动画名 → 组件零改动自动继承新主题）
+   betty Design System v5 — STUDIO
+   品牌 CTA 仍用 ink teal；点缀恢复影视工作室光谱（电蓝 / 紫 / 品红）
+   对标 yapper 的媒体气质：高对比、品牌墙、工具分区；不虚标货架
+   （保留 v3/v4 类名与变量名 → 组件自动继承）
    ═══════════════════════════════════════════════════════════════ */
 
 /* ═══════════════════════════════════════════════════════════════
@@ -22,17 +22,19 @@
     --cosmic-elevated: 240 33% 98%;       /* #F8F8FC — 浮层/弹层 */
     --cosmic-subtle: 240 24% 97%;         /* #F4F4F8 — hover 底/分组底 */
     --cosmic-border: 240 18% 91%;         /* #E6E6EE — 默认边框 */
-    --cosmic-border-hover: 174 28% 72%;   /* 悬停边框(微 teal) */
+    --cosmic-border-hover: 221 40% 72%;   /* 悬停边框跟随电蓝，而不是再抹一层绿 */
 
-    /* ─── BRAND INK TEAL SPECTRUM (#0F766E 主导) ─── */
-    --accent-cyan: 175 77% 26%;           /* #0F766E — 品牌主色(沿用cyan变量名) */
-    --accent-blue: 186 70% 36%;           /* #1C9BA8 — 青蓝点缀 */
-    --accent-violet: 168 55% 38%;         /* #2C9A87 — 青绿 */
-    --accent-purple: 158 48% 42%;         /* #38A169 — 翠绿 */
-    --accent-fuchsia: 192 62% 42%;        /* #2A8FAd — 水色点缀 */
-    --brand: 175 77% 26%;                 /* #0F766E — 语义品牌色 (ink teal) */
-    --brand-strong: 175 78% 20%;          /* #0A5C56 — 按下/深色态 */
-    --brand-soft: 170 55% 96%;            /* #F0FAF8 — 品牌浅底 */
+    /* ─── BRAND + STUDIO ACCENTS ───
+       Yapper 公开面是暗底 + 电蓝 CTA。Betty 保留 teal 主按钮，
+       但点缀必须是真的蓝/紫/品红，不能再把整条光谱压成医院绿。 */
+    --accent-cyan: 175 72% 32%;           /* 略提亮的品牌青，避免泥灰 */
+    --accent-blue: 221 83% 53%;           /* 电蓝 — 对标 yapper 主 CTA 能量 */
+    --accent-violet: 258 70% 56%;         /* 影视紫 */
+    --accent-purple: 271 64% 52%;         /* 品红紫 */
+    --accent-fuchsia: 292 76% 54%;        /* 唇形/热标签 */
+    --brand: 175 72% 32%;                 /* 语义品牌（与 accent-cyan 对齐） */
+    --brand-strong: 175 78% 22%;          /* 按下 */
+    --brand-soft: 170 55% 96%;            /* 品牌浅底 */
 
     /* ─── TEXT (深色文字, 亮底) ─── */
     --text-primary: 240 24% 9%;           /* #12121C — 主文字 */
@@ -76,7 +78,7 @@
     --cosmic-elevated: 240 12% 14%;       /* #21212B 浮层 */
     --cosmic-subtle: 240 11% 16%;         /* #24242E hover 底 */
     --cosmic-border: 240 9% 22%;          /* #34343E 边框 */
-    --cosmic-border-hover: 174 28% 36%;   /* 悬停边框(微 teal) */
+    --cosmic-border-hover: 221 40% 38%;   /* 暗底悬停：电蓝而不是泥绿 */
 
     --brand-soft: 174 35% 14%;            /* 暗底品牌浅底 */
 
@@ -608,6 +610,14 @@
 .nav-link:hover::after,
 .nav-link.active::after { width: 100%; left: 0; }
 
+/* ─── VERIFIED MODEL MARQUEE (honest shelf, Yapper brand-wall cadence) ─── */
+@keyframes betty-marquee-x {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee-x {
+  animation: betty-marquee-x 32s linear infinite;
+}
 
 /* ─── REDUCED MOTION ─── */
 @media (prefers-reduced-motion: reduce) {

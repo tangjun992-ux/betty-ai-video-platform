@@ -108,3 +108,29 @@ test.describe("图片创作页", () => {
     await expect(textarea).toBeVisible();
   });
 });
+
+test.describe("Studio 工具矩阵", () => {
+  test("Video / Image 分区，入口真实且不含竞品名", async ({ page }) => {
+    await page.goto("/tools");
+    const cookie = page.getByRole("button", { name: "接受全部" });
+    try { if (await cookie.isVisible({ timeout: 2000 })) await cookie.click(); } catch { /* ignore */ }
+    await expect(page.getByTestId("tools-video-section")).toBeVisible();
+    await expect(page.getByTestId("tools-image-section")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Video Tools" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /唇形同步/ })).toHaveAttribute("href", "/create/lipsync");
+    await expect(page.getByRole("link", { name: /背景移除/ })).toHaveAttribute("href", "/create/bg-remove");
+    await expect(page.getByText("Yapper-style")).toHaveCount(0);
+  });
+});
+
+test.describe("首页工具路由", () => {
+  test("放大与抠图指向独立 SKU 页", async ({ page }) => {
+    await page.goto("/");
+    const cookie = page.getByRole("button", { name: "接受全部" });
+    try { if (await cookie.isVisible({ timeout: 2000 })) await cookie.click(); } catch { /* ignore */ }
+    await expect(page.getByTestId("verified-model-marquee")).toBeVisible();
+    await expect(page.getByTestId("home-tool--create-upscale")).toHaveAttribute("href", "/create/upscale");
+    await expect(page.getByTestId("home-tool--create-bg-remove")).toHaveAttribute("href", "/create/bg-remove");
+    await expect(page.getByTestId("home-tool--create-product")).toHaveAttribute("href", "/create/product");
+  });
+});

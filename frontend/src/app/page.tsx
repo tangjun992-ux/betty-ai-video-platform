@@ -79,89 +79,16 @@ const fadeScaleItem = {
 // ─── Data ──────────────────────────────────────────────
 
 const FEATURED_TOOLS = [
-  {
-    icon: Video,
-    label: "视频生成",
-    desc: "Seedance 2.0 多模态输入，唇形同步，多镜头叙事",
-    iconColor: "text-blue-600",
-    iconBg: "bg-blue-50",
-    href: "/create/video",
-    badge: "New",
-  },
-  {
-    icon: ImageIcon,
-    label: "图片生成",
-    desc: "GPT Image 2.0 超高质量文本到图像，专业级输出",
-    iconColor: "text-brand-600",
-    iconBg: "bg-brand-50",
-    href: "/create/image",
-    badge: "Hot",
-  },
-  {
-    icon: Maximize2,
-    label: "AI 放大",
-    desc: "2倍分辨率提升，保持画质不失真",
-    iconColor: "text-cyan-600",
-    iconBg: "bg-cyan-50",
-    href: "/create/image",
-  },
-  {
-    icon: Scissors,
-    label: "背景移除",
-    desc: "AI 智能去背景，透明输出",
-    iconColor: "text-emerald-600",
-    iconBg: "bg-emerald-50",
-    href: "/create/image",
-  },
-  {
-    icon: User,
-    label: "AI 头像",
-    desc: "专业商务头像，LinkedIn 简历照",
-    iconColor: "text-pink-600",
-    iconBg: "bg-pink-50",
-    href: "/create/image",
-  },
-  {
-    icon: Mic,
-    label: "唇形同步",
-    desc: "图片+音频生成说话视频，虚拟主播",
-    iconColor: "text-amber-600",
-    iconBg: "bg-amber-50",
-    href: "/create/lipsync",
-    badge: "Pro",
-  },
-  {
-    icon: Camera,
-    label: "产品摄影",
-    desc: "AI 批量生成产品图，电商专用",
-    iconColor: "text-indigo-600",
-    iconBg: "bg-indigo-50",
-    href: "/create/image",
-  },
-  {
-    icon: RefreshCw,
-    label: "运动控制",
-    desc: "参考视频精准动作引导生成",
-    iconColor: "text-red-600",
-    iconBg: "bg-red-50",
-    href: "/create/motion",
-  },
-  {
-    icon: Layers,
-    label: "时间轴编辑",
-    desc: "强大的视频时间轴编辑器",
-    iconColor: "text-sky-600",
-    iconBg: "bg-sky-50",
-    href: "/create/timeline",
-  },
-  {
-    icon: Music,
-    label: "音频生成",
-    desc: "AI 配乐与音效",
-    iconColor: "text-orange-600",
-    iconBg: "bg-orange-50",
-    href: "/agent",
-  },
+  { icon: Video, label: "视频生成", desc: "Seedance 2.0 多模态输入，唇形同步，多镜头叙事", href: "/create/video", badge: "New" },
+  { icon: ImageIcon, label: "图片生成", desc: "GPT Image 2 文生图 / 多参考图", href: "/create/image", badge: "Hot" },
+  { icon: Mic, label: "唇形同步", desc: "图片+音频生成说话视频", href: "/create/lipsync", badge: "Pro" },
+  { icon: RefreshCw, label: "运动控制", desc: "参考视频精准动作引导（≠ Act-One）", href: "/create/motion" },
+  { icon: User, label: "职业头像", desc: "商务 / LinkedIn 套系", href: "/create/headshots" },
+  { icon: Camera, label: "产品摄影", desc: "电商产品图批量 SKU", href: "/create/product" },
+  { icon: Maximize2, label: "AI 放大", desc: "2×/4× 超分，保持画质", href: "/create/upscale" },
+  { icon: Scissors, label: "背景移除", desc: "一键抠图，透明 PNG", href: "/create/bg-remove" },
+  { icon: Layers, label: "时间轴编辑", desc: "片段、字幕与合成", href: "/create/timeline" },
+  { icon: Music, label: "语音合成", desc: "TTS 配音（非实时变声）", href: "/create/audio" },
 ];
 
 // 仅列平台实测可用（真实跑通）的模型，避免虚标点了就报错
@@ -405,6 +332,7 @@ function ToolGrid() {
             <motion.div key={tool.label} variants={fadeScaleItem}>
               <Link
                 href={tool.href}
+                data-testid={`home-tool-${tool.href.replace(/\//g, "-")}`}
                 className="relative block p-5 rounded-xl border border-cosmic-border bg-cosmic-surface hover:border-cosmic-border-hover hover:shadow-card-hover transition-all duration-300 group h-full"
               >
                 {/* Badge */}
@@ -440,7 +368,7 @@ function ToolGrid() {
 
                 {/* CTA */}
                 <div className="mt-auto pt-1">
-                  <span className="text-xs font-medium text-brand-600 group-hover:text-brand-700 inline-flex items-center gap-1 transition-colors">
+                  <span className="text-xs font-medium text-brand group-hover:text-brand-strong inline-flex items-center gap-1 transition-colors">
                     开始使用 <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                   </span>
                 </div>
@@ -712,6 +640,41 @@ function Footer() {
   );
 }
 
+function VerifiedModelMarquee() {
+  const loop = [...MODELS, ...MODELS];
+  return (
+    <div
+      data-testid="verified-model-marquee"
+      className="border-b border-cosmic-border/70 bg-cosmic-subtle/60 overflow-hidden"
+    >
+      <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-4">
+        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+          Powered by
+        </span>
+        <div className="relative flex-1 overflow-hidden">
+          <div className="flex w-max gap-6 animate-marquee-x hover:[animation-play-state:paused]">
+            {loop.map((m, i) => (
+              <span
+                key={`${m.name}-${i}`}
+                className="inline-flex items-center gap-2 text-xs text-text-secondary whitespace-nowrap"
+              >
+                <span className="w-5 h-5 rounded-md bg-brand/10 border border-brand/15 text-[10px] font-bold text-brand flex items-center justify-center">
+                  {m.mono}
+                </span>
+                {m.name}
+                <span className="text-text-tertiary">{m.provider}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <span className="hidden sm:inline shrink-0 text-[10px] text-text-tertiary">
+          已验证 {MODELS.length} · 不并列 Veo / Sora
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════
 //  HomePage
 // ═══════════════════════════════════════════════════════
@@ -802,6 +765,8 @@ export default function HomePage() {
           </Link>
         </div>
       </div>
+
+      <VerifiedModelMarquee />
 
       {/* ═══ HERO: Left-Right Split ═══ */}
       <section className="relative overflow-hidden">

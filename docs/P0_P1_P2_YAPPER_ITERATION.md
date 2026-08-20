@@ -128,4 +128,14 @@ betty_internal_readiness              → ≈90
 | **页脚专业入口** | Status / MCP / Developer | 首页 footer |
 | **评估文档** | `docs/YAPPER_COMMERCIAL_OPEN_EVAL_2026-08-20.md` | 对标 yapper.so 当日 |
 
+## 界面工作室化（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **光谱** | 点缀恢复电蓝/紫/品红；brand 阶 600>500 | globals.css / tailwind |
+| **Tools 枢纽** | Video/Image/Utility 分区；去掉竞品名 | ToolsPage.test + e2e |
+| **首页 SKU 路由** | 放大/抠图/头像/产品不再误进 image | `home-tool--create-*` |
+| **已验证 marquee** | 首屏品牌墙节奏，不并列 Veo/Sora | `verified-model-marquee` |
+| **演示条** | 细顶栏，不盖住工作室 | `demo-mode-banner` |
+
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检；首页不写 Kling 3.0 全量上线（仅 motion SKU 映射，且 live 未折）。

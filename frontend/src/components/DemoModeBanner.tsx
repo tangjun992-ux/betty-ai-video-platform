@@ -24,12 +24,15 @@ export function DemoModeBanner() {
   if (!show) return null;
 
   return (
-    <div className="mx-4 mt-3 mb-1 flex items-start gap-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-200">
-      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-      <div>
+    <div
+      data-testid="demo-mode-banner"
+      className="border-b border-amber-400/25 bg-amber-500/[0.07] px-4 py-1.5 text-[11px] text-amber-900 dark:text-amber-200 flex items-center justify-center gap-1.5"
+    >
+      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+      <p className="truncate">
         <span className="font-semibold">演示模式</span>
-        <span className="opacity-90"> — {label}。配置 KIE_API_KEY 等凭证后可启用真实 AI 生成。</span>
-      </div>
+        <span className="opacity-90"> — {label}。配置模型 Key 后可真实出片。</span>
+      </p>
     </div>
   );
 }
