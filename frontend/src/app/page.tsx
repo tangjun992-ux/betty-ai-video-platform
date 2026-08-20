@@ -30,6 +30,7 @@ import {
   Brain,
   Film,
   CheckCircle2,
+  AudioLines,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BrandMark } from "@/components/BrandLogo";
@@ -75,6 +76,10 @@ const fadeScaleItem = {
     transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as const },
   },
 };
+
+function looksLikeImage(prompt: string): boolean {
+  return /图|海报|头像|产品照|摄影|image|photo|poster|portrait|still/i.test(prompt);
+}
 
 // ─── Data ──────────────────────────────────────────────
 
@@ -691,16 +696,22 @@ export default function HomePage() {
     if (!heroInput.trim() || heroEnhancing) return;
     setHeroEnhancing(true);
     try {
-      const r = await enhancePrompt(heroInput, heroMode === "video" ? "video" : "image");
+      const media = looksLikeImage(heroInput) ? "image" : heroMode === "image" ? "image" : "video";
+      const r = await enhancePrompt(heroInput, media);
       if (r?.enhanced) setHeroInput(r.enhanced);
     } catch { /* best-effort */ } finally { setHeroEnhancing(false); }
   };
 
-  const heroGo = (override?: "agent" | "image" | "video") => {
+  const heroGo = (override?: "agent" | "image" | "video" | "audio") => {
     const m = override || heroMode;
-    const path = m === "agent" ? "/agent" : m === "video" ? "/create/video" : "/create/image";
-    const key = m === "agent" ? "brief" : "prompt";
+    const path = m === "agent" ? "/agent" : m === "video" ? "/create/video" : m === "audio" ? "/create/audio" : "/create/image";
+    const key = m === "agent" ? "brief" : m === "audio" ? "text" : "prompt";
     router.push(heroInput.trim() ? `${path}?${key}=${encodeURIComponent(heroInput)}` : path);
+  };
+
+  const heroCreateContent = () => {
+    if (!heroInput.trim()) { heroGo(); return; }
+    heroGo(looksLikeImage(heroInput) ? "image" : "video");
   };
 
   // Real generated works power the hero showcase (fetched from the gallery).
@@ -835,9 +846,10 @@ export default function HomePage() {
               <div className="input-canvas mb-4 relative">
                 <textarea
                   value={heroInput}
+                  data-testid="home-hero-prompt"
                   onChange={(e) => setHeroInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); heroGo(); }
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); heroCreateContent(); }
                   }}
                   rows={2}
                   style={{ paddingRight: "5.5rem" }}
@@ -892,18 +904,21 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* 4 Quick actions (对标 yapper) */}
-              <div className="flex flex-wrap gap-2 mb-8">
+              {/* 4 CTAs — same contract as /dashboard (Yapper Help Prompt / Create / Ideate / Audio) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-8">
                 {[
-                  { label: "帮我构思", icon: Bot, go: () => heroGo("agent") },
-                  { label: "创作内容", icon: Sparkles, go: () => heroGo() },
-                  { label: "优化提示词", icon: Wand2, go: () => heroGo("agent") },
-                  { label: "生成视频", icon: Video, go: () => heroGo("video") },
+                  { testId: "home-cta-help-prompt", label: t("dashboard.helpPrompt"), icon: Sparkles, go: () => void heroEnhance(), disabled: !heroInput.trim() || heroEnhancing },
+                  { testId: "home-cta-create-content", label: t("dashboard.createContent"), icon: Wand2, go: heroCreateContent, disabled: false },
+                  { testId: "home-cta-help-ideate", label: t("dashboard.helpIdeate"), icon: Lightbulb, go: () => heroGo("agent"), disabled: false },
+                  { testId: "home-cta-generate-audio", label: t("dashboard.generateAudio"), icon: AudioLines, go: () => heroGo("audio"), disabled: false },
                 ].map((a) => (
                   <button
-                    key={a.label}
+                    key={a.testId}
+                    type="button"
+                    data-testid={a.testId}
                     onClick={a.go}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cosmic-surface/40 border border-cosmic-border/40 text-body-sm text-text-secondary hover:text-accent-cyan hover:border-accent-cyan/30 transition-all"
+                    disabled={a.disabled}
+                    className="inline-flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl bg-cosmic-surface/40 border border-cosmic-border/40 text-body-sm text-text-secondary hover:text-accent-cyan hover:border-accent-cyan/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <a.icon className="w-4 h-4" /><span>{a.label}</span>
                   </button>

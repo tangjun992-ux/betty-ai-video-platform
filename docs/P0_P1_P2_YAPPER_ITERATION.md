@@ -162,4 +162,11 @@ betty_internal_readiness              → ≈90
 | **vs_yapper API** | `yapper_video_hero=seedance_2.5` / `betty_video_hero=seedance_2.0` | `test_commercial_open_honest_not_public` |
 | **产品完成度** | 加权 **≈69 / 100**；不能对公众收费 | `docs/YAPPER_ALIGNMENT_GAP_2026-08-20.md` |
 
+## 公开 Composer 同构（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **首页四 CTA** | 与 Dashboard 同一套：优化提示词 / 开始创作 / 帮我构思 / 生成音频 | `home-cta-*` e2e |
+| **提示词助手** | Agent Utility 卡走 enhance，不进 `SCENARIO_IDS` | `agent-try-utility` / `agent-scenario-prompt_helper` |
+
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检；首页不写 Kling 3.0 全量上线（仅 motion SKU 映射，且 live 未折）。

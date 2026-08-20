@@ -4,7 +4,8 @@ test.describe("首页", () => {
   test("加载并显示 Hero 区域", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("h1")).toContainText(/让每个创意|Turn every idea/);
-    await expect(page.getByRole("button", { name: /生成视频|Generate video/i }).first()).toBeVisible();
+    await expect(page.getByTestId("home-cta-create-content")).toBeVisible();
+    await expect(page.getByTestId("home-cta-generate-audio")).toBeVisible();
     // STATS 卡片与段落均含「已验证 AI 模型」— 取首个避免 strict mode
     await expect(page.getByText(/已验证 AI 模型|Verified AI models/i).first()).toBeVisible();
   });
@@ -133,6 +134,17 @@ test.describe("首页工具路由", () => {
     await expect(page.getByTestId("home-tool--create-bg-remove")).toHaveAttribute("href", "/create/bg-remove");
     await expect(page.getByTestId("home-tool--create-product")).toHaveAttribute("href", "/create/product");
   });
+
+  test("四 CTA 与 Dashboard 同构：生成音频进 TTS 页", async ({ page }) => {
+    await page.goto("/");
+    const cookie = page.getByRole("button", { name: "接受全部" });
+    try { if (await cookie.isVisible({ timeout: 2000 })) await cookie.click(); } catch { /* ignore */ }
+    await expect(page.getByTestId("home-cta-help-prompt")).toBeVisible();
+    await expect(page.getByTestId("home-cta-help-ideate")).toBeVisible();
+    await page.getByTestId("home-hero-prompt").fill("欢迎来到 Betty");
+    await page.getByTestId("home-cta-generate-audio").click();
+    await expect(page).toHaveURL(/\/create\/audio/);
+  });
 });
 
 test.describe("影院创作台", () => {
@@ -163,6 +175,8 @@ test.describe("导演台", () => {
     await expect(page.getByTestId("studio-stage")).toBeVisible();
     await expect(page.getByTestId("agent-try-video")).toBeVisible();
     await expect(page.getByTestId("agent-try-image")).toBeVisible();
+    await expect(page.getByTestId("agent-try-utility")).toBeVisible();
+    await expect(page.getByTestId("agent-scenario-prompt_helper")).toBeVisible();
     await expect(page.getByText("Just Direct").first()).toBeVisible();
     await expect(page.getByText(/分镜时间线将出现在这里|The shot list will land here/)).toBeVisible();
   });

@@ -81,8 +81,8 @@ interface VariantGalleryItem {
 interface Session { id: string; title: string; lastMessage: string; }
 interface ModelOpt { id: string; name: string; }
 
-// 场景化专业工作流 — 严格对标 yapper.so/agent 的 "Try Feature" 能力卡片
-// id 必须与 backend director_scenarios.SCENARIO_IDS 对齐
+// 导演场景卡 id 必须与 backend director_scenarios.SCENARIO_IDS 对齐。
+// prompt_helper 是前端 Utility 卡：走 /generate/enhance，不进 director scenario。
 interface Scenario {
   id: string; icon: any; cat: "视频" | "图片" | "工具"; title: string; desc: string;
   brief: string; duration?: number; vertical?: boolean;
@@ -112,6 +112,9 @@ const SCENARIOS: Scenario[] = [
   { id: "talking_avatar", icon: Wand2, cat: "视频", title: "数字人口播",
     desc: "图像 + 文案生成开口说话的数字人讲解视频",
     brief: "一个竖屏数字人口播视频，自然口型同步，正面棚拍形象，讲解产品卖点", duration: 15, vertical: true },
+  { id: "prompt_helper", icon: Wand2, cat: "工具", title: "提示词助手",
+    desc: "把粗想法扩成可生成的提示词（现有润色接口，不是新模型）",
+    brief: "一条15秒咖啡产品短视频，要有钩子和卖点，电影级画质" },
 ];
 
 // English copy for scenario cards (title/desc) keyed by id; briefs stay in the
@@ -125,6 +128,7 @@ const SCENARIO_EN: Record<string, { title: string; desc: string }> = {
   product_photo: { title: "Product Photography", desc: "Studio-grade product shots — lighting, scene, props, commercial finish" },
   ai_portrait: { title: "AI Headshots", desc: "Professional portraits for LinkedIn, resumes, and social avatars" },
   talking_avatar: { title: "Talking Avatar", desc: "Image + script into a talking digital-human explainer video" },
+  prompt_helper: { title: "Prompt Helper", desc: "Turn a rough idea into a generation-ready prompt — existing enhance API, not a new model" },
 };
 const CAT_EN: Record<string, string> = { "视频": "Video", "图片": "Image", "工具": "Tools" };
 
@@ -377,6 +381,22 @@ export default function AgentPage() {
   };
 
   const startScenario = async (sc: Scenario) => {
+    if (sc.id === "prompt_helper") {
+      setBrief(sc.brief);
+      setActiveScenario(null);
+      setComposerBusy("polish");
+      try {
+        const r = await fetch(`${API_BASE}/generate/enhance`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: sc.brief, media_type: "auto" }),
+        });
+        const d = await r.json();
+        if (d.enhanced) setBrief(d.enhanced);
+      } catch { /* keep seed brief */ } finally {
+        setComposerBusy(null);
+      }
+      return;
+    }
     if (sc.duration) setDuration(sc.duration);
     setBrief(sc.brief);
     setActiveScenario(sc.id);
@@ -1160,6 +1180,7 @@ export default function AgentPage() {
                 catOf={(cat) => (en ? (CAT_EN[cat] ?? cat) : cat)}
                 videoLabel={en ? "Video" : "视频"}
                 imageLabel={en ? "Image" : "图片"}
+                utilityLabel={en ? "Utility" : "工具"}
               />
             </>
           )}

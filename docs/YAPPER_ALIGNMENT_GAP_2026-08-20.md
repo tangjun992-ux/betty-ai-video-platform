@@ -145,8 +145,8 @@ Yapper 自己也有口径裂缝（首页 2.5 vs 定价卡仍写 2.0 Omni、Explo
 
 **代码可做、且不虚标：**
 
-1. 首页 Hero 与 `/dashboard` 四 CTA 同构（Help Prompt / Create Content / Help Ideate / Generate Audio）——Yapper 公开首屏就是这块。  
-2. Agent Try Feature 增加 **提示词助手**（走现有 enhance，cat=工具）；**不要**做 Earn with agent。  
+1. ~~首页 Hero 与 `/dashboard` 四 CTA 同构~~ **已落地**（Help Prompt 就地润色 / Create Content / Help Ideate / Generate Audio）  
+2. ~~Agent Try Feature 增加提示词助手~~ **已落地**（`/generate/enhance`，cat=工具；**没有** Earn with agent）  
 3. 导演执行中点亮当前步；成片预览进时间线右侧。  
 
 **代码做了也追不上、不要假装：**

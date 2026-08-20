@@ -25,4 +25,22 @@ describe("AgentScenarioBoard", () => {
     expect(screen.getByText("产品广告")).toBeTruthy();
     expect(screen.getByText("AI 写真")).toBeTruthy();
   });
+
+  it("renders a Utility Prompt Helper without inventing Earn", () => {
+    render(
+      <AgentScenarioBoard
+        items={[
+          { id: "prompt_helper", icon: Film, cat: "工具", title: "提示词助手", desc: "润色" },
+        ]}
+        onSelect={vi.fn()}
+        titleOf={(s) => s.title}
+        descOf={(s) => s.desc}
+        catOf={(c) => c}
+        utilityLabel="工具"
+      />,
+    );
+    expect(screen.getByTestId("agent-try-utility")).toBeTruthy();
+    expect(screen.getByTestId("agent-scenario-prompt_helper")).toBeTruthy();
+    expect(screen.queryByText(/Earn/i)).toBeNull();
+  });
 });

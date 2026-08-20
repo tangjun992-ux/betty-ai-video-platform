@@ -47,6 +47,7 @@ function ScenarioSection({
             type="button"
             onClick={() => onSelect(sc.id)}
             className="group relative flex items-start gap-3 rounded-2xl border border-cosmic-border/50 bg-cosmic-surface/50 p-4 text-left transition-all hover:border-brand/40 hover:shadow-card"
+            data-testid={`agent-scenario-${sc.id}`}
           >
             <div
               className={cn(
@@ -84,6 +85,7 @@ export function AgentScenarioBoard({
   catOf,
   videoLabel = "视频",
   imageLabel = "图片",
+  utilityLabel = "工具",
 }: {
   items: AgentScenarioCard[];
   onSelect: (id: string) => void;
@@ -92,6 +94,7 @@ export function AgentScenarioBoard({
   catOf: (cat: string) => string;
   videoLabel?: string;
   imageLabel?: string;
+  utilityLabel?: string;
 }) {
   const video = items.filter((s) => s.cat === "视频");
   const image = items.filter((s) => s.cat === "图片");
@@ -123,7 +126,7 @@ export function AgentScenarioBoard({
       {other.length > 0 && (
         <ScenarioSection
           testId="agent-try-utility"
-          label="Utility"
+          label={utilityLabel}
           list={other}
           onSelect={onSelect}
           titleOf={titleOf}
