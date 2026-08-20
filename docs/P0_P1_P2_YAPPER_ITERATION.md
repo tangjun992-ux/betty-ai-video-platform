@@ -146,4 +146,12 @@ betty_internal_readiness              → ≈90
 | **空画布** | StudioStage 代替帮助段落 | `studio-stage` |
 | **Explore** | 左对齐编辑头 + 仅社区/示例筛选 | `explore-origin-community` |
 
+## 导演台时间线（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **分镜竖轨** | `DirectorTimeline` 镜号 01/02；running 为「第 n/m 步」（含 audio/subtitle，不虚称纯镜头） | vitest + `agent-timeline` e2e |
+| **Try Feature** | idle 按视频 / 图片分区；工作室 token 渐变 | `agent-try-video` / `agent-try-image` |
+| **文案** | Just Direct，去掉 DIRECTOR AGENT 实习生腔；诚实声明非 Yapper 授权 | betty.spec 导演台 |
+
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检；首页不写 Kling 3.0 全量上线（仅 motion SKU 映射，且 live 未折）。

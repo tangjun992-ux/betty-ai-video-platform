@@ -153,3 +153,17 @@ test.describe("Explore 来源诚实", () => {
     await expect(page.getByRole("heading", { name: /看看能做什么/ })).toBeVisible();
   });
 });
+
+test.describe("导演台", () => {
+  test("idle 分视频/图片场景，时间线舞台可见", async ({ page }) => {
+    await page.goto("/agent");
+    const cookie = page.getByRole("button", { name: "接受全部" });
+    try { if (await cookie.isVisible({ timeout: 2000 })) await cookie.click(); } catch { /* ignore */ }
+    await expect(page.getByTestId("studio-shell")).toBeVisible();
+    await expect(page.getByTestId("studio-stage")).toBeVisible();
+    await expect(page.getByTestId("agent-try-video")).toBeVisible();
+    await expect(page.getByTestId("agent-try-image")).toBeVisible();
+    await expect(page.getByText("Just Direct").first()).toBeVisible();
+    await expect(page.getByText(/分镜时间线将出现在这里|The shot list will land here/)).toBeVisible();
+  });
+});

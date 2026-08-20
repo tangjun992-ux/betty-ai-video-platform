@@ -40,9 +40,11 @@ test.describe("Director Agent 黄金路径", () => {
 
     // Director returns a real multi-step plan (works in demo/dry-run without keys)
     await expect(page.getByTestId("agent-plan")).toBeVisible({ timeout: 45_000 });
+    await expect(page.getByTestId("agent-timeline")).toBeVisible();
     const steps = page.getByTestId("agent-step");
     await expect(steps.first()).toBeVisible({ timeout: 45_000 });
     expect(await steps.count()).toBeGreaterThan(0);
+    expect(await page.getByTestId("agent-shot-index").count()).toBeGreaterThan(0);
 
     // Plan summary + credit estimate are shown (trust: cost is disclosed upfront)
     await expect(page.getByText(/积分/).first()).toBeVisible();

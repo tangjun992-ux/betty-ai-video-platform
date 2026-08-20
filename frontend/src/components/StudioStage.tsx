@@ -8,11 +8,13 @@ export function StudioStage({
   title,
   hint,
   kind = "video",
+  compact = false,
   className,
 }: {
   title: string;
   hint: string;
   kind?: "video" | "image";
+  compact?: boolean;
   className?: string;
 }) {
   const Icon = kind === "image" ? ImageIcon : Play;
@@ -27,7 +29,11 @@ export function StudioStage({
       <div
         className={cn(
           "relative flex flex-col items-center justify-center px-6",
-          kind === "image" ? "py-14 min-h-[220px]" : "py-16 min-h-[260px]",
+          compact
+            ? "py-10 min-h-[148px]"
+            : kind === "image"
+              ? "py-14 min-h-[220px]"
+              : "py-16 min-h-[260px]",
         )}
       >
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,hsl(var(--accent-blue)/0.12),transparent_68%)]" />

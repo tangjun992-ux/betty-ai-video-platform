@@ -14,6 +14,9 @@ import { API_BASE } from "@/lib/api";
 import { useLocale } from "@/i18n/LocaleProvider";
 import { PayModal, type PayTarget } from "@/components/PayModal";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { StudioStage } from "@/components/StudioStage";
+import { AgentScenarioBoard } from "@/components/AgentScenarioBoard";
+import { DirectorTimeline, TimelineShot, timelineProgressLabel } from "@/components/DirectorTimeline";
 
 /* Compact borderless dropdown chip for the agent composer toolbar. */
 function AgentChip({ icon: Icon, label, value, children }: {
@@ -82,31 +85,31 @@ interface ModelOpt { id: string; name: string; }
 // id 必须与 backend director_scenarios.SCENARIO_IDS 对齐
 interface Scenario {
   id: string; icon: any; cat: "视频" | "图片" | "工具"; title: string; desc: string;
-  brief: string; duration?: number; vertical?: boolean; color: string;
+  brief: string; duration?: number; vertical?: boolean;
 }
 const SCENARIOS: Scenario[] = [
-  { id: "product_ad", icon: Clapperboard, cat: "视频", title: "产品广告", color: "from-amber-500 to-orange-600",
+  { id: "product_ad", icon: Clapperboard, cat: "视频", title: "产品广告",
     desc: "从产品/卖点/粗略创意，快速生成高转化投放广告",
     brief: "为新品制作一条高转化产品广告视频，突出核心卖点，适合社媒快速投放测试，电影级画质", duration: 15 },
-  { id: "product_commercial", icon: Film, cat: "视频", title: "产品商业片", color: "from-brand to-accent-violet",
+  { id: "product_commercial", icon: Film, cat: "视频", title: "产品商业片",
     desc: "电影级产品视频与品牌大片，用于发布与品牌campaign",
     brief: "一条电影级产品商业宣传片，精致布光与流畅运镜，高级品牌质感，多镜头叙事", duration: 30 },
-  { id: "ugc", icon: Mic, cat: "视频", title: "UGC 种草", color: "from-rose-500 to-pink-600",
+  { id: "ugc", icon: Mic, cat: "视频", title: "UGC 种草",
     desc: "真实、原生的创作者风格短视频，适配社交信息流",
     brief: "一条 UGC 风格种草短视频，真实自然，竖屏手机拍摄感，口语化推荐产品", duration: 15, vertical: true },
-  { id: "micro_drama", icon: Layers, cat: "视频", title: "微短剧", color: "from-violet-500 to-purple-600",
+  { id: "micro_drama", icon: Layers, cat: "视频", title: "微短剧",
     desc: "从一个前提/反转/人物弧，生成可追的竖屏短剧",
     brief: "一部竖屏微短剧短片，强钩子开场加剧情反转，人物情绪张力，电影级叙事运镜", duration: 30, vertical: true },
-  { id: "anime", icon: Sparkles, cat: "视频", title: "动漫生成", color: "from-cyan-500 to-blue-600",
+  { id: "anime", icon: Sparkles, cat: "视频", title: "动漫生成",
     desc: "从故事或情绪，生成电影级动漫场景、角色与运动",
     brief: "一段电影级动漫短片，唯美场景与角色，新海诚式光影与色彩，细腻氛围", duration: 15 },
-  { id: "product_photo", icon: ImageIcon, cat: "图片", title: "产品摄影", color: "from-emerald-500 to-teal-600",
+  { id: "product_photo", icon: ImageIcon, cat: "图片", title: "产品摄影",
     desc: "影棚级产品图，布光/场景/道具/商业质感一步到位",
     brief: "一组影棚级产品摄影图，柔光箱布光，纯净背景，反射高光，商业级质感，系列四张" },
-  { id: "ai_portrait", icon: Lightbulb, cat: "图片", title: "AI 写真", color: "from-fuchsia-500 to-pink-600",
+  { id: "ai_portrait", icon: Lightbulb, cat: "图片", title: "AI 写真",
     desc: "专业形象照，适合领英、简历、名片、社媒头像",
     brief: "一组专业形象写真，正装，柔和棚拍布光，自然表情，四张统一风格" },
-  { id: "talking_avatar", icon: Wand2, cat: "视频", title: "数字人口播", color: "from-sky-500 to-indigo-600",
+  { id: "talking_avatar", icon: Wand2, cat: "视频", title: "数字人口播",
     desc: "图像 + 文案生成开口说话的数字人讲解视频",
     brief: "一个竖屏数字人口播视频，自然口型同步，正面棚拍形象，讲解产品卖点", duration: 15, vertical: true },
 ];
@@ -819,8 +822,8 @@ export default function AgentPage() {
           {/* Header */}
           <div className="text-center mb-6">
             <div className="flex items-center justify-center gap-2 mb-3 flex-wrap">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-medium">
-                <Sparkles className="w-3.5 h-3.5" /> DIRECTOR AGENT
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand/10 text-brand text-xs font-semibold uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5" /> Just Direct
               </div>
               {modeLabel && (
                 <div className={cn(
@@ -835,7 +838,11 @@ export default function AgentPage() {
               )}
             </div>
             <h1 className="text-2xl font-display font-bold mb-1">{t("agent.title")}</h1>
-            <p className="text-sm text-text-secondary">一句话说出你想要的，AI 自动拆分镜、智能选模型、逐镜生成、剪辑成片</p>
+            <p className="text-sm text-text-secondary">
+              {en
+                ? "State the cut you want. Agent breaks it into an executable shot list. This is Betty's director — not a Yapper login."
+                : "写清意图，Agent 拆成可执行分镜。这是 Betty 自己的导演台，不是 Yapper 账号授权。"}
+            </p>
           </div>
 
           {/* Input — unified Yapper-style director composer */}
@@ -1130,31 +1137,31 @@ export default function AgentPage() {
             </div>
           )}
 
-          {/* Empty → scenario feature cards (对标 yapper /agent Try Feature) */}
+          {/* Empty → compact stage + Video / Image Try Feature */}
           {phase === "idle" && !err && (
-            <div className="mt-5">
-              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-3">选择一个专业场景 · 或直接描述你的创意</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {SCENARIOS.map((sc) => (
-                  <button key={sc.title} onClick={() => startScenario(sc)}
-                    className="group relative flex items-start gap-3 p-4 rounded-2xl bg-cosmic-surface/50 border border-cosmic-border/50 hover:border-brand/40 hover:shadow-card transition-all text-left">
-                    <div className={cn("w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center flex-shrink-0", sc.color)}>
-                      <sc.icon className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-sm font-semibold text-text-primary">{en ? (SCENARIO_EN[sc.id]?.title ?? sc.title) : sc.title}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cosmic-subtle text-text-tertiary">{en ? (CAT_EN[sc.cat] ?? sc.cat) : sc.cat}</span>
-                      </div>
-                      <p className="text-[11px] text-text-secondary leading-snug line-clamp-2">{en ? (SCENARIO_EN[sc.id]?.desc ?? sc.desc) : sc.desc}</p>
-                    </div>
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 text-[11px] font-medium text-brand opacity-0 group-hover:opacity-100 transition-opacity">
-                      试用 <ArrowRight className="w-3 h-3" />
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <>
+              <StudioStage
+                compact
+                kind="video"
+                className="mt-4"
+                title={en ? "The shot list will land here" : "分镜时间线将出现在这里"}
+                hint={en
+                  ? "Write the intent, or start from a Video / Image scenario. After planning, steps line up as 01, 02."
+                  : "写清意图，或从下方视频 / 图片场景开始。规划后步骤会按 01、02 排成竖轨。"}
+              />
+              <AgentScenarioBoard
+                items={SCENARIOS}
+                onSelect={(id) => {
+                  const sc = SCENARIOS.find((s) => s.id === id);
+                  if (sc) void startScenario(sc);
+                }}
+                titleOf={(s) => (en ? (SCENARIO_EN[s.id]?.title ?? s.title) : s.title)}
+                descOf={(s) => (en ? (SCENARIO_EN[s.id]?.desc ?? s.desc) : s.desc)}
+                catOf={(cat) => (en ? (CAT_EN[cat] ?? cat) : cat)}
+                videoLabel={en ? "Video" : "视频"}
+                imageLabel={en ? "Image" : "图片"}
+              />
+            </>
           )}
 
           {/* Plan view */}
@@ -1166,7 +1173,7 @@ export default function AgentPage() {
                     <span className="px-2.5 py-1 rounded-lg bg-brand/10 text-brand text-xs font-medium">
                       {intentLabel[plan.intent] || plan.intent}
                     </span>
-                    <span className="text-xs text-text-secondary">{plan.steps.length} 步 · 分镜脚本</span>
+                    <span className="text-xs text-text-secondary">{plan.steps.length} 步 · 分镜时间线</span>
                   </div>
                   <div className="flex items-center gap-1 text-xs text-amber-500">
                     <Coins className="w-3.5 h-3.5" />{plan.steps.filter((s) => !s.skip).reduce((n, s) => n + s.est_credits, 0)} 积分
@@ -1174,7 +1181,7 @@ export default function AgentPage() {
                 </div>
                 <p className="text-sm text-text-secondary mb-4">{plan.summary}</p>
 
-                <div className="space-y-2">
+                <DirectorTimeline progressLabel={timelineProgressLabel(phase, plan.steps)}>
                   {plan.steps.map((s, i) => {
                     const Icon = actionIcon(s.action);
                     const done = s.status === "done";
@@ -1184,7 +1191,8 @@ export default function AgentPage() {
                     const editing = editingId === s.id;
                     const opts = modelOptsFor(s.action);
                     return (
-                      <motion.div key={s.id} data-testid="agent-step" initial={{ opacity: 0, x: -8 }} animate={{ opacity: skipped ? 0.5 : 1, x: 0 }} transition={{ delay: i * 0.03 }}
+                      <TimelineShot key={s.id} index={i} total={plan.steps.length} status={s.status} skipped={skipped}>
+                      <motion.div data-testid="agent-step" initial={{ opacity: 0, x: -8 }} animate={{ opacity: skipped ? 0.5 : 1, x: 0 }} transition={{ delay: i * 0.03 }}
                         className={cn("rounded-xl border transition-colors",
                           isRunning ? "border-brand/40 bg-brand/[0.03]" : done ? "border-emerald-500/30 bg-emerald-500/[0.02]" : "border-cosmic-border/40 bg-cosmic-surface/30")}>
                         <div className="flex gap-3 p-3">
@@ -1258,9 +1266,10 @@ export default function AgentPage() {
                           )}
                         </AnimatePresence>
                       </motion.div>
+                      </TimelineShot>
                     );
                   })}
-                </div>
+                </DirectorTimeline>
 
                 {/* Add shot */}
                 {phase !== "running" && plan.steps.some((s) => s.action === "video") && (
