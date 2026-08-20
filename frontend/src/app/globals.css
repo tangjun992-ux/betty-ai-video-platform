@@ -92,6 +92,26 @@
     --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.35);
     --shadow-lg: 0 12px 28px -6px rgb(0 0 0 / 0.55), 0 6px 12px -6px rgb(0 0 0 / 0.40);
   }
+
+  /* Create / Agent / Explore — cinematic bay (Yapper studio, not document white) */
+  html.studio {
+    --cosmic-void: 240 16% 4%;
+    --cosmic-deep: 232 18% 6%;
+    --cosmic-surface: 232 14% 10%;
+    --cosmic-elevated: 232 14% 13%;
+    --cosmic-subtle: 232 12% 15%;
+    --cosmic-border: 232 10% 20%;
+    --cosmic-border-hover: 221 50% 42%;
+    --brand-soft: 221 35% 14%;
+    --text-primary: 240 20% 96%;
+    --text-secondary: 240 8% 70%;
+    --text-tertiary: 240 8% 52%;
+    --text-disabled: 240 8% 34%;
+    --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.30);
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.40), 0 1px 2px -1px rgb(0 0 0 / 0.35);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.45), 0 2px 6px -2px rgb(0 0 0 / 0.35);
+    --shadow-lg: 0 12px 28px -6px rgb(0 0 0 / 0.55), 0 6px 12px -6px rgb(0 0 0 / 0.40);
+  }
 }
 
 
@@ -617,6 +637,12 @@
 }
 .animate-marquee-x {
   animation: betty-marquee-x 32s linear infinite;
+}
+
+.studio-shell main {
+  background:
+    radial-gradient(90% 55% at 50% -8%, hsl(var(--accent-blue) / 0.10), transparent 55%),
+    hsl(var(--cosmic-deep));
 }
 
 /* ─── REDUCED MOTION ─── */

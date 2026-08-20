@@ -1,15 +1,17 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/lib/stores";
 import { AppSidebar } from "./AppSidebar";
 import { TopBar } from "./TopBar";
 
-/* ═══════════════════════════════════════════════════════
-   AppShell — AURORA 亮色主题
-   左侧 AppSidebar + 右侧 (TopBar + main content)
-   ═══════════════════════════════════════════════════════ */
+const STUDIO_RE = /^\/(create|agent|explore|gallery|library|dashboard|tools|sessions|models)(\/|$)/;
+
+export function isStudioPath(pathname: string | null): boolean {
+  return STUDIO_RE.test(pathname || "");
+}
 
 interface AppShellProps {
   children: ReactNode;
@@ -18,16 +20,24 @@ interface AppShellProps {
 
 export function AppShell({ children, showTopBar = true }: AppShellProps) {
   const { sidebarCollapsed } = useUIStore();
+  const pathname = usePathname();
+  const studio = isStudioPath(pathname);
 
-  // Keep the full labeled sidebar on every route (including creation / agent),
-  // matching Yapper — a persistent, navigable nav reads far more professional
-  // than an unlabeled icon rail. Users can still collapse it manually.
+  useEffect(() => {
+    document.documentElement.classList.toggle("studio", studio);
+    return () => document.documentElement.classList.remove("studio");
+  }, [studio]);
+
   return (
-    <div className="flex h-screen bg-cosmic-deep text-text-primary overflow-hidden">
-      {/* ── Left: AppSidebar ── */}
+    <div
+      data-testid={studio ? "studio-shell" : "marketing-shell"}
+      className={cn(
+        "flex h-screen bg-cosmic-deep text-text-primary overflow-hidden",
+        studio && "studio-shell",
+      )}
+    >
       <AppSidebar />
 
-      {/* ── Right: TopBar + main content area ── */}
       <div
         className={cn(
           "flex-1 flex flex-col min-w-0 overflow-hidden",
@@ -37,10 +47,7 @@ export function AppShell({ children, showTopBar = true }: AppShellProps) {
           marginLeft: sidebarCollapsed ? "64px" : "240px",
         }}
       >
-        {/* ── TopBar (optional) ── */}
         {showTopBar && <TopBar />}
-
-        {/* ── Main content ── subtle top-down gradient for gentle depth ── */}
         <main className="flex-1 overflow-y-auto bg-gradient-to-b from-cosmic-deep to-cosmic-subtle/60">
           {children}
         </main>

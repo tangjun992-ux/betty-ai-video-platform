@@ -20,8 +20,9 @@ export function useTheme() {
 }
 
 function getSystemTheme(): Theme {
-  // Light-first product (Aurora). Dark is an explicit opt-in via the toggle.
-  return "light";
+  // Media studio default — Yapper / Runway cinematic dark.
+  // Users can still opt into light via the toggle (persisted).
+  return "dark";
 }
 
 function getStoredTheme(): Theme | null {
@@ -34,7 +35,7 @@ function getStoredTheme(): Theme | null {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
+  const [theme, setThemeState] = useState<Theme>("dark");
   const [mounted, setMounted] = useState(false);
 
   // On mount, determine initial theme

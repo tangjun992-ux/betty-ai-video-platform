@@ -134,3 +134,22 @@ test.describe("首页工具路由", () => {
     await expect(page.getByTestId("home-tool--create-product")).toHaveAttribute("href", "/create/product");
   });
 });
+
+test.describe("影院创作台", () => {
+  test("视频页使用 studio-shell 与空画布舞台", async ({ page }) => {
+    await page.goto("/create/video");
+    await expect(page.getByTestId("studio-shell")).toBeVisible();
+    await expect(page.getByTestId("studio-stage")).toBeVisible();
+    await expect(page.getByText(/画面将出现在这里|The frame will land here/)).toBeVisible();
+  });
+});
+
+test.describe("Explore 来源诚实", () => {
+  test("仅社区筛选可见", async ({ page }) => {
+    await page.goto("/explore");
+    const cookie = page.getByRole("button", { name: "接受全部" });
+    try { if (await cookie.isVisible({ timeout: 2000 })) await cookie.click(); } catch { /* ignore */ }
+    await expect(page.getByTestId("explore-origin-community")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /看看能做什么/ })).toBeVisible();
+  });
+});

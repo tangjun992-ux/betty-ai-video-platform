@@ -55,6 +55,7 @@ export default function GalleryPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [resFilter, setResFilter] = useState("all");
   const [durFilter, setDurFilter] = useState("all");
+  const [origin, setOrigin] = useState<"all" | "community" | "seed">("all");
   const [lightbox, setLightbox] = useState<GalleryItem | null>(null);
   const [liked, setLiked] = useState<Record<string, boolean>>({});
   const [likeDelta, setLikeDelta] = useState<Record<string, number>>({});
@@ -154,18 +155,23 @@ export default function GalleryPage() {
     durFilter === "all" ||
     (durFilter === "short" && (it.duration || 0) > 0 && (it.duration || 0) <= 5) ||
     (durFilter === "long" && (it.duration || 0) > 5);
-  const filtered = items.filter((it) => matchRes(it) && matchDur(it));
+  const filtered = items.filter((it) => matchRes(it) && matchDur(it)).filter((it) => {
+    const sample = !!(it.is_seed || it.is_demo);
+    if (origin === "seed") return sample;
+    if (origin === "community") return !sample;
+    return true;
+  });
 
   return (
     <main className="max-w-7xl mx-auto px-4 py-8">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-8"
+        className="mb-8"
       >
-        <h1 className="text-3xl font-bold mb-2 gradient-text-static">探索</h1>
-        <p className="text-text-secondary">发现社区优质创作，一键做同款</p>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-text-tertiary mb-2">Explore</p>
+        <h1 className="text-3xl font-semibold tracking-tight mb-2">看看能做什么</h1>
+        <p className="text-text-secondary max-w-xl">发现作品，一键做同款。社区密度以公开数为准，不写 millions。</p>
         {stats?.honesty && (
           <p className="text-[11px] text-text-tertiary mt-2" data-testid="explore-honesty">
             {stats.honesty}
@@ -174,7 +180,7 @@ export default function GalleryPage() {
           </p>
         )}
         {stats && (
-          <div className="flex justify-center gap-6 mt-4 text-sm text-text-secondary">
+          <div className="flex flex-wrap gap-6 mt-4 text-sm text-text-secondary">
             <span className="inline-flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-accent-fuchsia" />
               {stats.total_images || 0} 图片
@@ -247,6 +253,28 @@ export default function GalleryPage() {
         )}
 
         {/* Sort + All Filters */}
+        <div className="flex gap-2 items-center flex-wrap justify-center">
+          {[
+            { key: "all" as const, label: "全部来源" },
+            { key: "community" as const, label: "仅社区" },
+            { key: "seed" as const, label: "平台示例" },
+          ].map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              data-testid={`explore-origin-${s.key}`}
+              onClick={() => setOrigin(s.key)}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200",
+                origin === s.key
+                  ? "bg-accent-blue/15 text-accent-blue border border-accent-blue/25"
+                  : "bg-cosmic-surface text-text-secondary border border-cosmic-border hover:border-cosmic-border-hover"
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
         <div className="flex gap-2 items-center">
           {[
             { key: "popular", label: "最热" },
@@ -309,8 +337,14 @@ export default function GalleryPage() {
           <ErrorState message={error} onRetry={fetchItems} />
         ) : filtered.length === 0 ? (
           <Empty
-            title={debouncedQ ? "没有匹配的案例" : "还没有作品"}
-            description={debouncedQ ? "换个关键词，或去创作并发布到 Explore" : "快去创作第一个吧！"}
+            title={debouncedQ ? "没有匹配的案例" : origin === "community" ? "还没有社区公开作品" : "还没有作品"}
+            description={
+              debouncedQ
+                ? "换个关键词，或去创作并发布到 Explore"
+                : origin === "community"
+                  ? "当前多为平台示例。创作并发布后会出现在「仅社区」。不写 millions。"
+                  : "快去创作第一个吧！"
+            }
             action={{ label: "开始创作", onClick: () => window.location.href = "/create/image" }}
           />
         ) : (

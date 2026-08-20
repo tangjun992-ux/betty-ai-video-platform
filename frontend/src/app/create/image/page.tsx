@@ -14,6 +14,7 @@ import { ImageAppsRow } from "@/components/ImageAppsRow";
 import { BatchPromptInput } from "@/components/BatchPromptInput";
 import type { CreativityLevel } from "@/components/CreativitySlider";
 import { Loading, Empty, ErrorState } from "@/components/StatusStates";
+import { StudioStage } from "@/components/StudioStage";
 import { useAuthStore, useCreationStore, useOnboardingStore } from "@/lib/stores";
 import { useToast } from "@/components/Toast";
 import { useLocale } from "@/i18n/LocaleProvider";
@@ -754,6 +755,13 @@ export default function CreateImagePage() {
                   <span className="px-1 py-0.5 rounded text-[8px] font-semibold bg-accent-cyan/[0.12] text-accent-cyan">{pill.badge}</span>
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => setPrompt(SUGGESTIONS[0])}
+                className="group inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-cosmic-surface/50 border border-cosmic-border/60 text-text-secondary hover:text-text-primary hover:border-accent-cyan/40 transition-colors"
+              >
+                {en ? "Try a suggestion" : "试试推荐词"}
+              </button>
             </div>
           </div>
 
@@ -903,25 +911,22 @@ export default function CreateImagePage() {
                 exit={{ opacity: 0, y: -8 }}
                 className="mt-4"
               >
+              {hasSubmitted ? (
                 <Empty
                   icon={<Wand2 className="w-7 h-7 text-text-secondary/40" />}
-                  title={hasSubmitted ? (en ? "No results" : "没有生成结果") : (en ? "Start creating" : "开始创作")}
-                  description={
-                    hasSubmitted
-                      ? (en ? "Generation finished but returned no image — adjust the parameters and retry." : "生成已完成但未返回图片，请尝试调整参数后重试")
-                      : (en ? "Describe the image you want and AI will generate it for you." : "输入 prompt 描述你想要的画面，AI 将为你生成精美图片")
-                  }
-                  action={
-                    hasSubmitted
-                      ? { label: en ? "Regenerate" : "重新生成", onClick: handleRetry }
-                      : undefined
-                  }
-                  secondaryAction={
-                    !hasSubmitted
-                      ? { label: en ? "Try a suggestion" : "试试推荐词", onClick: () => setPrompt(SUGGESTIONS[0]) }
-                      : undefined
-                  }
+                  title={en ? "No results" : "没有生成结果"}
+                  description={en ? "Generation finished but returned no image — adjust the parameters and retry." : "生成已完成但未返回图片，请尝试调整参数后重试"}
+                  action={{ label: en ? "Regenerate" : "重新生成", onClick: handleRetry }}
                 />
+              ) : (
+                <StudioStage
+                  kind="image"
+                  title={en ? "The image will land here" : "画面将出现在这里"}
+                  hint={en
+                    ? "Describe the shot or drop a reference — Image Apps are below."
+                    : "描述你想要的画面，或添加参考图。下方 Image Apps 可进编辑 / 头像 / 产品套系。"}
+                />
+              )}
               </motion.div>
             )}
           </AnimatePresence>

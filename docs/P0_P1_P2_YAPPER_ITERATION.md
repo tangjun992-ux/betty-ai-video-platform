@@ -138,4 +138,12 @@ betty_internal_readiness              → ≈90
 | **已验证 marquee** | 首屏品牌墙节奏，不并列 Veo/Sora | `verified-model-marquee` |
 | **演示条** | 细顶栏，不盖住工作室 | `demo-mode-banner` |
 
+## 影院创作台（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **默认暗色** | Theme 默认 dark；Create 路径 `html.studio` | ThemeScript + studio-shell |
+| **空画布** | StudioStage 代替帮助段落 | `studio-stage` |
+| **Explore** | 左对齐编辑头 + 仅社区/示例筛选 | `explore-origin-community` |
+
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检；首页不写 Kling 3.0 全量上线（仅 motion SKU 映射，且 live 未折）。
