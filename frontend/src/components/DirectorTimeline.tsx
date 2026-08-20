@@ -59,7 +59,11 @@ export function TimelineShot({
   const nodeRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
-    if (running) nodeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (!running) return;
+    const el = nodeRef.current;
+    if (typeof el?.scrollIntoView === "function") {
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
   }, [running]);
 
   return (
