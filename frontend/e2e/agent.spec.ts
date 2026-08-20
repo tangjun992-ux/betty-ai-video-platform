@@ -48,5 +48,12 @@ test.describe("Director Agent 黄金路径", () => {
 
     // Plan summary + credit estimate are shown (trust: cost is disclosed upfront)
     await expect(page.getByText(/积分/).first()).toBeVisible();
+    await expect(page.getByTestId("agent-monitor")).toBeVisible();
+    await expect(page.getByTestId("agent-monitor-empty")).toBeVisible();
+
+    await page.getByTestId("agent-preview-btn").click();
+    await expect(
+      page.getByTestId("agent-timeline-current").or(page.getByTestId("agent-monitor-media")),
+    ).toBeVisible({ timeout: 60_000 });
   });
 });

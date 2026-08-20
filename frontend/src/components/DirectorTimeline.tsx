@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Check, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -55,15 +56,25 @@ export function TimelineShot({
   const failed = status === "failed";
   const last = index === total - 1;
   const label = String(index + 1).padStart(2, "0");
+  const nodeRef = useRef<HTMLLIElement>(null);
+
+  useEffect(() => {
+    if (running) nodeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [running]);
 
   return (
-    <li className={cn("relative flex gap-3", skipped && "opacity-50")}>
+    <li
+      ref={nodeRef}
+      data-current-step={running ? "true" : undefined}
+      data-testid={running ? "agent-timeline-current" : undefined}
+      className={cn("relative flex gap-3", skipped && "opacity-50")}
+    >
       <div className="flex w-8 shrink-0 flex-col items-center" aria-hidden>
         <div
           data-testid="agent-shot-index"
           className={cn(
             "relative z-10 flex h-8 w-8 items-center justify-center rounded-full border text-[10px] font-mono font-semibold",
-            running && "border-brand bg-brand/15 text-brand ring-2 ring-brand/30",
+            running && "border-brand bg-brand text-white ring-2 ring-brand/40 shadow-[0_0_12px_hsl(var(--brand)/0.45)]",
             done && "border-emerald-500/40 bg-emerald-500/15 text-emerald-500",
             failed && "border-red-500/40 bg-red-500/15 text-red-500",
             !running && !done && !failed && "border-cosmic-border bg-cosmic-surface text-text-secondary",
@@ -83,7 +94,7 @@ export function TimelineShot({
           <div
             className={cn(
               "w-px min-h-[16px] flex-1",
-              done ? "bg-emerald-500/35" : "bg-cosmic-border/70",
+              done ? "bg-emerald-500/35" : running ? "bg-brand/50" : "bg-cosmic-border/70",
             )}
           />
         )}

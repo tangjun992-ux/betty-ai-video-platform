@@ -6,7 +6,7 @@ import {
   Send, Plus, MessageSquare, ImagePlus, Sparkles, Wand2, Lightbulb,
   Film, Image as ImageIcon, Mic, Layers, Clapperboard, Check, Loader2, Coins, ArrowRight,
   Pencil, RefreshCw, X, Music, Type as TypeIcon, Scissors, Ratio,
-  Download, Trash2, StopCircle, CornerDownLeft, Star,
+  Download, Trash2, StopCircle, CornerDownLeft,
   ChevronsUpDown, ArrowUp, Zap, SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { StudioStage } from "@/components/StudioStage";
 import { AgentScenarioBoard } from "@/components/AgentScenarioBoard";
 import { DirectorTimeline, TimelineShot, timelineProgressLabel } from "@/components/DirectorTimeline";
+import { DirectorMonitor, pickMonitorAsset } from "@/components/DirectorMonitor";
 
 /* Compact borderless dropdown chip for the agent composer toolbar. */
 function AgentChip({ icon: Icon, label, value, children }: {
@@ -811,6 +812,16 @@ export default function AgentPage() {
 
   const modelOptsFor = (action: string) => (action.includes("video") || action === "lipsync" ? models.video : models.image);
   const running = phase === "running";
+  const monitorAsset = pickMonitorAsset(assets, phase);
+  const monitorUrl = resolveMedia(monitorAsset?.media_url || monitorAsset?.url);
+  const monitorKind: "video" | "image" = monitorAsset?.type === "image" ? "image" : "video";
+  const runningStep = plan?.steps.find((s) => s.status === "running");
+  const monitorTitle = monitorAsset?.final
+    ? "成片 · Final Cut"
+    : (runningStep?.title || monitorAsset?.step);
+  const monitorHonesty = dryRunMode && (phase === "running" || phase === "done")
+    ? "本地预览 · 非真实模型"
+    : (monitorAsset?.honesty || monitorAsset?.mode || undefined);
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">
@@ -838,7 +849,7 @@ export default function AgentPage() {
 
       {/* Director canvas */}
       <div className="flex-1 flex flex-col overflow-y-auto">
-        <div className="max-w-3xl w-full mx-auto px-4 py-8 flex-1">
+        <div className={cn("w-full mx-auto px-4 py-8 flex-1", plan ? "max-w-5xl" : "max-w-3xl")}>
           {/* Header */}
           <div className="text-center mb-6">
             <div className="flex items-center justify-center gap-2 mb-3 flex-wrap">
@@ -1202,6 +1213,8 @@ export default function AgentPage() {
                 </div>
                 <p className="text-sm text-text-secondary mb-4">{plan.summary}</p>
 
+                <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(240px,320px)] lg:gap-5 lg:items-start">
+                <div>
                 <DirectorTimeline progressLabel={timelineProgressLabel(phase, plan.steps)}>
                   {plan.steps.map((s, i) => {
                     const Icon = actionIcon(s.action);
@@ -1213,9 +1226,9 @@ export default function AgentPage() {
                     const opts = modelOptsFor(s.action);
                     return (
                       <TimelineShot key={s.id} index={i} total={plan.steps.length} status={s.status} skipped={skipped}>
-                      <motion.div data-testid="agent-step" initial={{ opacity: 0, x: -8 }} animate={{ opacity: skipped ? 0.5 : 1, x: 0 }} transition={{ delay: i * 0.03 }}
+                      <motion.div data-testid="agent-step" data-current={isRunning ? "true" : undefined} initial={{ opacity: 0, x: -8 }} animate={{ opacity: skipped ? 0.5 : 1, x: 0 }} transition={{ delay: i * 0.03 }}
                         className={cn("rounded-xl border transition-colors",
-                          isRunning ? "border-brand/40 bg-brand/[0.03]" : done ? "border-emerald-500/30 bg-emerald-500/[0.02]" : "border-cosmic-border/40 bg-cosmic-surface/30")}>
+                          isRunning ? "border-brand bg-brand/[0.08] shadow-[0_0_0_1px_hsl(var(--brand)/0.35)]" : done ? "border-emerald-500/30 bg-emerald-500/[0.02]" : "border-cosmic-border/40 bg-cosmic-surface/30")}>
                         <div className="flex gap-3 p-3">
                           <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5",
                             done ? "bg-emerald-500/15 text-emerald-500" : isRunning ? "bg-brand/15 text-brand" : failed ? "bg-red-500/15 text-red-500" : "bg-cosmic-border/30 text-text-secondary")}>
@@ -1224,6 +1237,7 @@ export default function AgentPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
                               <p className={cn("text-sm font-medium truncate", skipped && "line-through")}>{s.title}</p>
+                              {isRunning && <span className="text-[10px] font-semibold text-brand shrink-0">当前</span>}
                               <div className="flex items-center gap-1.5 flex-shrink-0">
                                 {s.params?.aspect_ratio && (
                                   <span className="inline-flex items-center gap-0.5 text-[10px] text-text-tertiary"><Ratio className="w-2.5 h-2.5" />{s.params.aspect_ratio}</span>
@@ -1363,6 +1377,7 @@ export default function AgentPage() {
                             </button>
                             <button
                               onClick={() => execute(true)}
+                              data-testid="agent-preview-btn"
                               title="本地占位预览：不调用 GPT Image / ElevenLabs / Kling，数字人为占位图+Ken Burns"
                               className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-semibold border border-cosmic-border text-text-secondary hover:bg-cosmic-subtle transition-all"
                             >
@@ -1372,6 +1387,7 @@ export default function AgentPage() {
                         ) : (
                           <>
                             <button onClick={() => execute(true)}
+                              data-testid="agent-preview-btn"
                               className="flex items-center justify-center gap-2 flex-1 py-3 rounded-xl text-sm font-semibold bg-brand text-white hover:bg-brand-strong shadow-button-glow transition-all">
                               <Clapperboard className="w-4 h-4" />{t("agent.preview")}（本地 Demo）<ArrowRight className="w-4 h-4" />
                             </button>
@@ -1392,6 +1408,17 @@ export default function AgentPage() {
                     )}
                   </div>
                 )}
+                </div>
+                <DirectorMonitor
+                  phase={phase}
+                  progressLabel={timelineProgressLabel(phase, plan.steps)}
+                  title={monitorTitle}
+                  mediaUrl={monitorUrl || undefined}
+                  posterUrl={resolveMedia(monitorAsset?.thumbnail) || undefined}
+                  kind={monitorKind}
+                  honesty={monitorHonesty}
+                />
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1417,44 +1444,39 @@ export default function AgentPage() {
                   <img src={stripMedia} alt="identity strip" className="w-full max-h-56 object-contain bg-black" />
                 </div>
               )}
-              {/* Final film — hero deliverable */}
+              {/* Final lives in the right-hand monitor — keep download + upgrade here */}
               {finalAsset && fMedia && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                  className="mb-4 rounded-2xl overflow-hidden border border-brand/30 bg-brand/[0.03]">
-                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-brand/15">
-                    <div className="flex items-center gap-2">
-                      <Star className="w-4 h-4 text-brand" />
-                      <span className="text-sm font-semibold">成片 · Final Cut</span>
-                      {finalAsset.shot_count ? <span className="text-[11px] text-text-secondary">{finalAsset.shot_count} 个分镜合成</span> : null}
-                    </div>
-                    <a href={fMedia} download target="_blank" rel="noreferrer"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-medium hover:bg-brand-strong transition-colors">
-                      <Download className="w-3.5 h-3.5" /> 下载成片
-                    </a>
+                <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-brand/20 bg-brand/[0.04] px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-text-primary">成片在右侧监视器</p>
+                    {finalAsset.shot_count ? <p className="text-[11px] text-text-secondary">{finalAsset.shot_count} 个分镜合成</p> : null}
                   </div>
-                  <video src={fMedia} controls poster={resolveMedia(finalAsset.thumbnail)} className="w-full max-h-[52vh] bg-black object-contain" />
-                  {showUpgrade && !dryRunMode && (
-                    <div className="px-4 py-3 border-t border-brand/15 bg-gradient-to-r from-brand/[0.06] to-accent-violet/[0.04] flex flex-col sm:flex-row sm:items-center gap-3">
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-text-primary">🎉 成片已就绪 — 继续创作？</p>
-                        <p className="text-xs text-text-secondary mt-0.5">
-                          当前余额 {userCredits ?? "—"} 积分。升级套餐可解锁更多真实生成与商业授权。
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setPayTarget({ kind: "plan", id: "personal", cycle: "monthly" })}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand text-white text-xs font-semibold hover:bg-brand-strong transition-colors"
-                        >
-                          <Coins className="w-3.5 h-3.5" /> 升级套餐
-                        </button>
-                        <button onClick={() => setShowUpgrade(false)} className="px-3 py-2 rounded-xl text-xs text-text-secondary hover:bg-cosmic-subtle transition-colors">
-                          稍后
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
+                  <a href={fMedia} download target="_blank" rel="noreferrer"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand text-white text-xs font-medium hover:bg-brand-strong transition-colors shrink-0">
+                    <Download className="w-3.5 h-3.5" /> 下载成片
+                  </a>
+                </div>
+              )}
+              {showUpgrade && !dryRunMode && finalAsset && (
+                <div className="mb-4 px-4 py-3 rounded-xl border border-brand/15 bg-gradient-to-r from-brand/[0.06] to-accent-violet/[0.04] flex flex-col sm:flex-row sm:items-center gap-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-text-primary">成片已就绪 — 继续创作？</p>
+                    <p className="text-xs text-text-secondary mt-0.5">
+                      当前余额 {userCredits ?? "—"} 积分。升级套餐可解锁更多真实生成与商业授权。
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPayTarget({ kind: "plan", id: "personal", cycle: "monthly" })}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand text-white text-xs font-semibold hover:bg-brand-strong transition-colors"
+                    >
+                      <Coins className="w-3.5 h-3.5" /> 升级套餐
+                    </button>
+                    <button onClick={() => setShowUpgrade(false)} className="px-3 py-2 rounded-xl text-xs text-text-secondary hover:bg-cosmic-subtle transition-colors">
+                      稍后
+                    </button>
+                  </div>
+                </div>
               )}
 
               <div className="flex items-center gap-2 mb-3">

@@ -169,4 +169,11 @@ betty_internal_readiness              → ≈90
 | **首页四 CTA** | 与 Dashboard 同一套：优化提示词 / 开始创作 / 帮我构思 / 生成音频 | `home-cta-*` e2e |
 | **提示词助手** | Agent Utility 卡走 enhance，不进 `SCENARIO_IDS` | `agent-try-utility` / `agent-scenario-prompt_helper` |
 
+## 导演监视器（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **当前步** | running 竖轨实心点亮 + 自动滚入视口 | `agent-timeline-current` |
+| **右侧监视器** | 规划时空舞台；执行中当前镜；完成后成片 | `agent-monitor` e2e 预览 |
+
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检；首页不写 Kling 3.0 全量上线（仅 motion SKU 映射，且 live 未折）。
