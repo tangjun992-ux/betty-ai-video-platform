@@ -103,7 +103,7 @@ export function CosmicParamPanel({
                   </span>
                   {group.tooltip && (
                     <div className="relative group/tip">
-                      <Info className="w-3 h-3 text-text-tertiary/60 shrink-0" />
+                      <Info aria-label="info" className="w-3 h-3 text-text-tertiary/60 shrink-0" />
                       <div className="absolute left-full ml-2 bottom-0 w-48 px-2.5 py-1.5 rounded-lg bg-cosmic-elevated border border-cosmic-border/60 text-caption text-text-secondary opacity-0 invisible group-hover/tip:opacity-100 group-hover/tip:visible transition-all duration-200 pointer-events-none z-50 shadow-elevation-lg">
                         {group.tooltip}
                       </div>

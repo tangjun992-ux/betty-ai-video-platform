@@ -112,7 +112,7 @@ describe("CosmicParamPanel", () => {
       },
     ];
     render(<CosmicParamPanel groups={groups} />);
-    expect(screen.getByTestId("icon-info")).toBeTruthy();
+    expect(screen.getByLabelText("info")).toBeTruthy();
   });
 
   /* ── className ── */

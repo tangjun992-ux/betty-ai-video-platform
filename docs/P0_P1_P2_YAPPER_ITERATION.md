@@ -93,4 +93,15 @@ betty_internal_readiness              → ≈90
 | **Pack 批次进度** | `GET /generate/pack/{batch_id}/status` | 404 contract |
 | **团队席位账** | included/purchased/members_count | teams API |
 
+## P1/P2 第三轮继续（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **Playwright 选择器对齐** | 首页 strict / VideoComposer 参数条 / 图片页 ImageComposer | `e2e/betty.spec.ts` |
+| **Vitest CosmicParamPanel** | Info `aria-label` 替代过时 testid | vitest 21/21 |
+| **Pack FE 聚合轮询** | `getPackBatchStatus` + BatchPackStudio 单请求轮询 | BatchPackStudio test |
+| **任务页 Explore CTA** | 完成态 `publishShare` 按钮 | `task-publish-explore` |
+| **Extract IG 诚实禁用** | Instagram/X 仅 URL 时禁用提交 + 提示条 | `extract-ig-honesty` |
+| **Pricing 订阅禁用** | `subscription_ready` 绑定 disabled + toast | `pricing-stripe-honesty` |
+
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检。

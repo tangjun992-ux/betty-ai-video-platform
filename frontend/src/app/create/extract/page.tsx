@@ -43,6 +43,18 @@ type ExtractResult = {
  * Reverse-prompts from upload/URL; social pages use official oEmbed where available.
  * Viral beats are placement templates, not frame-by-frame reverse engineering.
  */
+
+function isBestEffortSocialUrl(url: string): boolean {
+  const u = url.trim().toLowerCase();
+  if (!u) return false;
+  return (
+    u.includes("instagram.com")
+    || u.includes("x.com/")
+    || u.includes("twitter.com/")
+    || u.includes("facebook.com")
+  );
+}
+
 export default function ExtractPage() {
   const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
@@ -118,6 +130,8 @@ export default function ExtractPage() {
 
   const hint = result?.media_type_hint === "video" ? "video" : "image";
   const videoHref = result?.create_links?.video || `/create/${hint}?prompt=${encodeURIComponent(result?.prompt || "")}`;
+  const urlOnlyBestEffort = !file && isBestEffortSocialUrl(mediaUrl);
+  const canSubmit = !loading && (file || mediaUrl.trim()) && !urlOnlyBestEffort;
   const agentHref = result?.create_links?.agent || `/agent?brief=${encodeURIComponent(result?.prompt || "")}`;
 
   return (
@@ -175,6 +189,14 @@ export default function ExtractPage() {
             <p className="text-[11px] text-text-tertiary mt-1.5" data-testid="extract-url-honesty">
               YouTube / TikTok：官方 oEmbed 封面+标题。Instagram / X：尽力而为，失败请上传文件。非完整视频搬运。
             </p>
+            {urlOnlyBestEffort && (
+              <p
+                className="text-[11px] text-amber-700 dark:text-amber-200 mt-2 px-2.5 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30"
+                data-testid="extract-ig-honesty"
+              >
+                Instagram / X 链接无法稳定免登录解析。请上传媒体文件，或粘贴可直链访问的图片/视频 URL。
+              </p>
+            )}
           </label>
 
           <label className="block">
@@ -196,11 +218,11 @@ export default function ExtractPage() {
           <button
             type="button"
             onClick={run}
-            disabled={loading || (!file && !mediaUrl.trim())}
+            disabled={!canSubmit}
             data-testid="extract-submit"
             className={cn(
               "w-full h-11 rounded-xl font-semibold inline-flex items-center justify-center gap-2 transition-colors",
-              loading || (!file && !mediaUrl.trim())
+              !canSubmit
                 ? "bg-white/10 text-text-secondary cursor-not-allowed"
                 : "bg-white text-black hover:bg-white/90",
             )}
