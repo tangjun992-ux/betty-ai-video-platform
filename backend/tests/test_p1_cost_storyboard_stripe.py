@@ -49,24 +49,21 @@ def test_edit_tool_persists_task_with_upstream_cost(tmp_path):
         cost=1.25,
     )
 
+    fake_gw = MagicMock()
+    fake_gw.result = fake
+
     with patch("app.api.generate.deduct_credits", new_callable=AsyncMock) as deduct, \
          patch("app.adapters.demo_provider.demo_mode_active", return_value=False), \
-         patch("app.adapters.kie_adapter.KieAdapter") as Kie:
+         patch("app.gateway.gateway.upload_public_url", new_callable=AsyncMock, return_value="https://cdn.example.com/src.png"), \
+         patch("app.gateway.gateway.edit_image", new_callable=AsyncMock, return_value=fake_gw), \
+         patch("app.services.media_store.persist_results", side_effect=lambda xs: xs):
         deduct.return_value = True
-        inst = Kie.return_value
-        inst.upload_public_url = AsyncMock(return_value="https://cdn.example.com/src.png")
-        inst.edit_image = AsyncMock(return_value=fake)
-        inst.upscale_image = AsyncMock(return_value=fake)
-        inst.remove_background = AsyncMock(return_value=fake)
-        inst.extend_image = AsyncMock(return_value=fake)
-
-        with patch("app.services.media_store.persist_results", side_effect=lambda xs: xs):
-            r = c.post(
-                "/api/v1/generate/edit",
-                headers=headers,
-                data={"operation": "edit", "prompt": "make it warmer"},
-                files={"image_file": ("src.png", img.read_bytes(), "image/png")},
-            )
+        r = c.post(
+            "/api/v1/generate/edit",
+            headers=headers,
+            data={"operation": "edit", "prompt": "make it warmer"},
+            files={"image_file": ("src.png", img.read_bytes(), "image/png")},
+        )
 
     assert r.status_code == 200, r.text
     body = r.json()

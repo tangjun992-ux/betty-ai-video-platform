@@ -104,4 +104,18 @@ betty_internal_readiness              → ≈90
 | **Extract IG 诚实禁用** | Instagram/X 仅 URL 时禁用提交 + 提示条 | `extract-ig-honesty` |
 | **Pricing 订阅禁用** | `subscription_ready` 绑定 disabled + toast | `pricing-stripe-honesty` |
 
+## 第四轮测试修复（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **Lipsync 测试漂移** | 断言 `gateway.generate_lipsync` / `kling-ai-avatar` | test_audio_prep_lipsync |
+| **Director minimal 契约** | 无 scenario 静图 brief 跳过 compose；scenario 包装保留 | yapper_live + director_scenarios |
+| **字幕 cue 时长** | 对齐默认 2.4s/cue | test_director_subtitle |
+| **Task authz 签名** | 补 `Request` 参数 | test_tasks_authz |
+| **Face/Performance 契约** | TestClient + stub Celery send_task | test_gap_faceswap |
+| **Edit tool 测试** | mock gateway 替代 KieAdapter | test_p1_cost_storyboard_stripe |
+| **Matrix audit stdout** | lifespan 日志重定向 stderr + JSON 解析 | test_yapper_full_matrix_audit |
+| **Audit Redis 诚实** | 无 broker 时 enqueue 500 记 partial | yapper_full_matrix_audit.py |
+| **Playwright 扩展** | Extract IG + Pricing disabled E2E | 12/12 betty.spec.ts |
+
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检。

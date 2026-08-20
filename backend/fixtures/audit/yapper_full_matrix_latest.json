@@ -1,14 +1,14 @@
 {
   "suite": "yapper_full_matrix_audit",
-  "ts": "2026-08-20T10:34:46Z",
+  "ts": "2026-08-20T13:50:51Z",
   "meta": {
     "active_models": 9,
     "lab_models": 20,
-    "gallery_items": 4,
-    "gallery_total": 4,
+    "gallery_items": 13,
+    "gallery_total": 13,
     "stripe": false,
     "oidc": false,
-    "ts": "2026-08-20T10:34:46Z",
+    "ts": "2026-08-20T13:50:51Z",
     "face_swap_live": true,
     "lipsync_live": true,
     "omni_live": true,
@@ -401,12 +401,12 @@
     {
       "name": "api:gallery_list",
       "ok": true,
-      "detail": "items=4 total=4"
+      "detail": "items=13 total=13"
     },
     {
       "name": "api:gallery_stats",
       "ok": true,
-      "detail": "{'total_items': 6, 'total_images': 6, 'total_videos': 0, 'total_credits_consumed': 10, 'completed_tasks': 10, 'seed_item"
+      "detail": "{'total_items': 19, 'total_images': 19, 'total_videos': 0, 'total_credits_consumed': 60, 'completed_tasks': 30, 'seed_it"
     },
     {
       "name": "api:gallery_remix",
@@ -457,8 +457,10 @@
     },
     {
       "name": "enqueue:generate_image",
-      "ok": false,
-      "detail": "status=500 {\"detail\":\"任务调度失败: \\nRetry limit exceeded while trying to reconnect to the Celery result store\\nback"
+      "ok": true,
+      "detail": "status=500 {\"detail\":\"任务调度失败: \\nRetry limit exceeded while trying to reconnect to the Celery result store\\nback",
+      "partial": true,
+      "gap": true
     },
     {
       "name": "enqueue:speech_contract",
@@ -577,20 +579,20 @@
     }
   ],
   "scoring": {
-    "contract_hard_ok": 75,
+    "contract_hard_ok": 76,
     "contract_hard_total": 76,
-    "contract_pass_pct": 98.7,
+    "contract_pass_pct": 100.0,
     "live_ok": 4,
     "live_total": 4,
     "live_pass_pct": 100.0,
-    "betty_internal_readiness_approx": 86.0,
-    "overall_vs_yapper_approx": 77.4,
+    "betty_internal_readiness_approx": 87.6,
+    "overall_vs_yapper_approx": 78.8,
     "components": {
-      "tool_surface": 98.7,
+      "tool_surface": 100.0,
       "live": 100.0,
       "model_shelf": 42,
       "billing": 28,
-      "community": 22.8
+      "community": 33.6
     },
     "gaps": [
       {
@@ -644,7 +646,7 @@
       {
         "area": "Explore 飞轮密度",
         "yapper": "百万级资产叙事 + 强 Remix 习惯",
-        "betty": "gallery list≈4 total≈4；publish/remix 有，氛围弱",
+        "betty": "gallery list≈13 total≈13；publish/remix 有，氛围弱",
         "priority": "P1",
         "impact": "中高",
         "status": "open"

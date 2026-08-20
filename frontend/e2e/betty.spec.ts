@@ -53,6 +53,27 @@ test.describe("视频创作页", () => {
   });
 });
 
+test.describe("Extract / Pricing 诚实边界", () => {
+  test("Instagram 仅 URL 时禁用提交并显示提示", async ({ page }) => {
+    await page.goto("/create/extract");
+    await page.getByRole("button", { name: "接受全部" }).click();
+    const urlInput = page.getByTestId("extract-url");
+    await urlInput.click();
+    await urlInput.fill("https://www.instagram.com/reel/abc123/");
+    await expect(urlInput).toHaveValue(/instagram\.com/);
+    await expect(page.getByTestId("extract-ig-honesty")).toBeVisible();
+    await expect(page.getByTestId("extract-submit")).toBeDisabled();
+  });
+
+  test("Pricing 无 Stripe 时订阅按钮 disabled", async ({ page }) => {
+    await page.goto("/pricing");
+    const banner = page.getByTestId("pricing-stripe-honesty");
+    if (await banner.isVisible()) {
+      await expect(page.getByRole("button", { name: /选择|Choose|Creator/i }).first()).toBeDisabled();
+    }
+  });
+});
+
 test.describe("图片创作页", () => {
   test("加载 ImageComposer 与参考图入口", async ({ page }) => {
     await page.goto("/create/image");

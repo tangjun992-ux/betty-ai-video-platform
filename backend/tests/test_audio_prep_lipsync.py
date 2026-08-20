@@ -45,7 +45,8 @@ def test_lipsync_task_uses_loudnorm_and_edge_tts_path():
     assert "synthesize_speech_edge" in text
     assert "boost_video_audio" in text
     assert "loudnorm_-16LUFS" in text
-    assert "infinitalk/from-audio" in text
+    assert "gateway.generate_lipsync" in text
+    assert "kling-ai-avatar" in text
 
 
 def test_azure_neural_voice_helper():

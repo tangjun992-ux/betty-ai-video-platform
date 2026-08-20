@@ -9,6 +9,23 @@ import pytest
 
 
 @pytest.fixture
+def client():
+    """In-process API client — avoids httpx→localhost timeouts when Redis/Celery are down."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture(autouse=True)
+def _stub_celery_enqueue(monkeypatch):
+    """Contract tests only need 202 + task_id; do not block on Redis broker."""
+    monkeypatch.setattr("app.api.face_swap.celery_app.send_task", lambda *a, **k: None)
+    monkeypatch.setattr("app.api.performance.celery_app.send_task", lambda *a, **k: None)
+
+
+@pytest.fixture
 def auth_headers(client):
     email = f"gap_{uuid.uuid4().hex[:8]}@test.local"
     r = client.post(

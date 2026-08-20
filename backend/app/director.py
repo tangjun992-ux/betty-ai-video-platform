@@ -247,8 +247,7 @@ class DirectorPlanner:
 
         ``scenario`` — stable Agent card id (product_ad / ugc / ai_portrait / …).
         When set, uses scenario-specific beats/models/aspect (top-tier card parity).
-        ``minimal=True`` skips TTS voiceover (saves time/cost); multi-shot scenarios
-        still burn subtitles and stitch a publishable compose.
+        ``minimal=True`` skips TTS 配音阶梯；带 scenario 包装（need_pack / 多分镜）仍保留字幕+合成成片。
         ``identity_lock``:
           - ``off``  — no cross-shot identity anchoring
           - ``hero`` — reuse hero as i2v source only (no per-shot edit)
@@ -725,8 +724,8 @@ class DirectorPlanner:
                         params=compose_params,
                     )
                     steps += [s_audio, s_sub, s_comp]
-                elif multi or need_pack:
-                    # 快速成片：仍 stitch + 字幕/BGM/CTA（跳过 TTS 控成本）
+                elif need_pack or (multi and scenario):
+                    # 快速成片：scenario 包装或多分镜 campaign 仍 stitch（跳过 TTS 控成本）
                     s_sub = DirectorStep(
                         id=sid(), action="subtitle", title="智能字幕",
                         model_id="subtitle-engine", model_name="Auto Caption",
