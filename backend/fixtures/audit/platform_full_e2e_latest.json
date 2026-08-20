@@ -1,6 +1,6 @@
 {
   "suite": "platform_full_e2e",
-  "ts": "2026-07-16T14:32:31Z",
+  "ts": "2026-08-20T10:29:57Z",
   "fe_base": "http://127.0.0.1:3000",
   "api_base": "http://127.0.0.1:8000",
   "plan": "docs/PLATFORM_FULL_TEST_PLAN.md",
@@ -8,217 +8,223 @@
     {
       "name": "fe:/",
       "ok": true,
-      "detail": "status=200 bytes=130367",
+      "detail": "status=200 bytes=124565",
       "layer": "L0"
     },
     {
       "name": "fe:/tools",
       "ok": true,
-      "detail": "status=200 bytes=103680",
+      "detail": "status=200 bytes=97097",
       "layer": "L0"
     },
     {
       "name": "fe:/agent",
       "ok": true,
-      "detail": "status=200 bytes=88454",
+      "detail": "status=200 bytes=85967",
       "layer": "L0"
     },
     {
       "name": "fe:/explore",
       "ok": true,
-      "detail": "status=200 bytes=69853",
+      "detail": "status=200 bytes=63260",
       "layer": "L0"
     },
     {
       "name": "fe:/library",
       "ok": true,
-      "detail": "status=200 bytes=74454",
+      "detail": "status=200 bytes=69925",
       "layer": "L0"
     },
     {
       "name": "fe:/gallery",
       "ok": true,
-      "detail": "status=200 bytes=69834",
+      "detail": "status=200 bytes=63178",
       "layer": "L0"
     },
     {
       "name": "fe:/pricing",
       "ok": true,
-      "detail": "status=200 bytes=91651",
+      "detail": "status=200 bytes=88265",
       "layer": "L0"
     },
     {
       "name": "fe:/sessions",
       "ok": true,
-      "detail": "status=200 bytes=69602",
+      "detail": "status=200 bytes=62898",
       "layer": "L0"
     },
     {
       "name": "fe:/settings",
       "ok": true,
-      "detail": "status=200 bytes=67487",
+      "detail": "status=200 bytes=60802",
       "layer": "L0"
     },
     {
       "name": "fe:/dashboard",
       "ok": true,
-      "detail": "status=200 bytes=67332",
+      "detail": "status=200 bytes=67109",
       "layer": "L0"
     },
     {
       "name": "fe:/create",
       "ok": true,
-      "detail": "status=200 bytes=73477",
+      "detail": "status=200 bytes=66749",
       "layer": "L0"
     },
     {
       "name": "fe:/create/image",
       "ok": true,
-      "detail": "status=200 bytes=109789",
+      "detail": "status=200 bytes=88529",
       "layer": "L0"
     },
     {
       "name": "fe:/create/video",
       "ok": true,
-      "detail": "status=200 bytes=108321",
+      "detail": "status=200 bytes=91930",
       "layer": "L0"
     },
     {
       "name": "fe:/create/lipsync",
       "ok": true,
-      "detail": "status=200 bytes=75880",
+      "detail": "status=200 bytes=69302",
       "layer": "L0"
     },
     {
       "name": "fe:/create/avatar",
       "ok": true,
-      "detail": "status=200 bytes=72075",
+      "detail": "status=200 bytes=65460",
       "layer": "L0"
     },
     {
       "name": "fe:/create/motion",
       "ok": true,
-      "detail": "status=200 bytes=78753",
+      "detail": "status=200 bytes=72735",
       "layer": "L0"
     },
     {
       "name": "fe:/create/timeline",
       "ok": true,
-      "detail": "status=200 bytes=78429",
+      "detail": "status=200 bytes=71725",
       "layer": "L0"
     },
     {
       "name": "fe:/create/audio",
       "ok": true,
-      "detail": "status=200 bytes=72594",
+      "detail": "status=200 bytes=66112",
       "layer": "L0"
     },
     {
       "name": "fe:/create/extract",
       "ok": true,
-      "detail": "status=200 bytes=70653",
+      "detail": "status=200 bytes=64713",
       "layer": "L0"
     },
     {
       "name": "fe:/create/upscale",
       "ok": true,
-      "detail": "status=200 bytes=70813",
+      "detail": "status=200 bytes=64109",
       "layer": "L0"
     },
     {
       "name": "fe:/create/bg-remove",
       "ok": true,
-      "detail": "status=200 bytes=70405",
+      "detail": "status=200 bytes=63672",
       "layer": "L0"
     },
     {
       "name": "fe:/create/extend",
       "ok": true,
-      "detail": "status=200 bytes=72024",
+      "detail": "status=200 bytes=65320",
       "layer": "L0"
     },
     {
       "name": "fe:/create/image-editor",
       "ok": true,
-      "detail": "status=200 bytes=72097",
+      "detail": "status=200 bytes=65456",
       "layer": "L0"
     },
     {
       "name": "fe:/create/product",
       "ok": true,
-      "detail": "status=200 bytes=67438",
+      "detail": "status=200 bytes=63041",
       "layer": "L0"
     },
     {
       "name": "fe:/create/headshots",
       "ok": true,
-      "detail": "status=200 bytes=67458",
+      "detail": "status=200 bytes=63081",
       "layer": "L0"
     },
     {
       "name": "fe:/create/photo-packs",
       "ok": true,
-      "detail": "status=200 bytes=71094",
+      "detail": "status=200 bytes=63078",
       "layer": "L0"
     },
     {
       "name": "fe:/create/face-swap",
       "ok": true,
-      "detail": "status=200 bytes=71384",
+      "detail": "status=200 bytes=69160",
       "layer": "L0"
     },
     {
       "name": "fe:/create/performance",
       "ok": true,
-      "detail": "status=200 bytes=71361",
+      "detail": "status=200 bytes=64646",
       "layer": "L0"
     },
     {
       "name": "fe:/auth/login",
       "ok": true,
-      "detail": "status=200 bytes=45701",
+      "detail": "status=200 bytes=46902",
       "layer": "L0"
     },
     {
       "name": "fe:/auth/register",
       "ok": true,
-      "detail": "status=200 bytes=47094",
+      "detail": "status=200 bytes=48295",
       "layer": "L0"
     },
     {
       "name": "fe:/developer",
       "ok": true,
-      "detail": "status=200 bytes=67520",
+      "detail": "status=200 bytes=60929",
+      "layer": "L0"
+    },
+    {
+      "name": "fe:/mcp",
+      "ok": true,
+      "detail": "status=200 bytes=71648",
       "layer": "L0"
     },
     {
       "name": "fe:/models",
       "ok": true,
-      "detail": "status=200 bytes=70722",
+      "detail": "status=200 bytes=64037",
       "layer": "L0"
     },
     {
       "name": "fe:/billing",
       "ok": true,
-      "detail": "status=200 bytes=69161",
+      "detail": "status=200 bytes=62476",
       "layer": "L0"
     },
     {
       "name": "fe:/tasks",
       "ok": true,
-      "detail": "status=200 bytes=66819",
+      "detail": "status=200 bytes=60134",
       "layer": "L0"
     },
     {
       "name": "fe:/projects",
       "ok": true,
-      "detail": "status=200 bytes=67819",
+      "detail": "status=200 bytes=61115",
       "layer": "L0"
     },
     {
       "name": "fe:/status",
       "ok": true,
-      "detail": "status=200 bytes=71810",
+      "detail": "status=200 bytes=65125",
       "layer": "L0"
     },
     {
@@ -242,7 +248,7 @@
     {
       "name": "api:/health",
       "ok": true,
-      "detail": "{'status': 'ok', 'version': '0.1.0', 'checks': {'database': 'ok', 'redis': 'ok'}}",
+      "detail": "{'status': 'degraded', 'version': '0.1.0', 'checks': {'database': 'ok', 'redis': 'error: Error 111 connecting to localho",
       "layer": "L1"
     },
     {
@@ -254,7 +260,7 @@
     {
       "name": "api:/api/v1/system/capabilities",
       "ok": true,
-      "detail": "{'demo_mode': False, 'providers_configured': True, 'real_generation_available': True, 'director_dry_run_default': False,",
+      "detail": "{'demo_mode': True, 'providers_configured': False, 'real_generation_available': False, 'director_dry_run_default': True,",
       "layer": "L1"
     },
     {
@@ -278,7 +284,7 @@
     {
       "name": "api:cap_social_youtube",
       "ok": true,
-      "detail": "{'youtube': True, 'tiktok': 'best_effort', 'instagram': 'best_effort', 'x': 'best_effort', 'douyin': False, 'xiaohongshu': False}",
+      "detail": "{'youtube': True, 'tiktok': 'oembed', 'instagram': 'best_effort', 'x': 'best_effort', 'douyin': False, 'xiaohongshu': False}",
       "layer": "L1"
     },
     {
@@ -362,19 +368,19 @@
     {
       "name": "api:gallery",
       "ok": true,
-      "detail": "items=32 total=72",
+      "detail": "items=0 total=0",
       "layer": "L1"
-    },
-    {
-      "name": "api:gallery_remix",
-      "ok": true,
-      "detail": "status=200",
-      "layer": "L2"
     },
     {
       "name": "api:pricing_max",
       "ok": true,
       "detail": "['creator', 'max', 'personal', 'starter']",
+      "layer": "L1"
+    },
+    {
+      "name": "api:pricing_limits",
+      "ok": true,
+      "detail": "max=40/7",
       "layer": "L1"
     },
     {
@@ -438,6 +444,18 @@
       "layer": "L0"
     },
     {
+      "name": "openapi:/api/v1/mcp/connector",
+      "ok": true,
+      "detail": "ok",
+      "layer": "L0"
+    },
+    {
+      "name": "openapi:/api/v1/public/models",
+      "ok": true,
+      "detail": "ok",
+      "layer": "L0"
+    },
+    {
       "name": "api:speech_validation",
       "ok": true,
       "detail": "status=422",
@@ -445,10 +463,16 @@
     },
     {
       "name": "api:generate_image_enqueue",
-      "ok": true,
-      "detail": "status=202 body={\"task_id\":\"aa3eeb6c-9a83-4deb-8d08-e6e8fdcf0f7f\",\"status\":\"queued\",\"estimated_model\":\"gpt-image-2\",",
+      "ok": false,
+      "detail": "status=500 body={\"detail\":\"任务调度失败: \\nRetry limit exceeded while trying to reconnect to the Celery result store\\nback",
       "layer": "L2",
-      "task_id": "aa3eeb6c-9a83-4deb-8d08-e6e8fdcf0f7f"
+      "task_id": null
+    },
+    {
+      "name": "api:mcp_initialize",
+      "ok": true,
+      "detail": "200",
+      "layer": "L1"
     },
     {
       "name": "ops:stripe",
@@ -475,23 +499,23 @@
     }
   ],
   "scoring": {
-    "hard_ok": 74,
-    "hard_total": 74,
-    "hard_pass_pct": 100.0,
+    "hard_ok": 77,
+    "hard_total": 78,
+    "hard_pass_pct": 98.7,
     "live_ok": 0,
     "live_total": 0,
     "by_layer": {
       "L0": {
-        "ok": 47,
-        "total": 47
+        "ok": 50,
+        "total": 50
       },
       "L1": {
-        "ok": 23,
-        "total": 23
+        "ok": 25,
+        "total": 25
       },
       "L2": {
-        "ok": 4,
-        "total": 4
+        "ok": 2,
+        "total": 3
       },
       "L5": {
         "ok": 0,
@@ -515,18 +539,32 @@
         "face_swap",
         "tool_cost_board",
         "prompt_extractor",
+        "url_to_viral",
         "talking_avatar",
         "performance_drive",
+        "photo_packs",
+        "voice_changer",
+        "max_slider",
+        "team_seats",
+        "mcp_api",
         "director_minimal",
         "live_smoke"
       ],
       "active_models": 9,
-      "gallery_items": 32,
+      "gallery_items": 0,
       "stripe": false,
       "oidc": false
     }
   },
-  "failures": [],
+  "failures": [
+    {
+      "name": "api:generate_image_enqueue",
+      "ok": false,
+      "detail": "status=500 body={\"detail\":\"任务调度失败: \\nRetry limit exceeded while trying to reconnect to the Celery result store\\nback",
+      "layer": "L2",
+      "task_id": null
+    }
+  ],
   "known_gaps": [
     {
       "name": "ops:stripe",

@@ -62,6 +62,7 @@ const toolMenu = [
 const rightNav = [
   { href: "/pricing", label: "定价" },
   { href: "/models", label: "模型" },
+  { href: "/mcp", label: "MCP" },
 ];
 
 // 移动端完整导航项

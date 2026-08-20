@@ -1,14 +1,14 @@
 {
   "suite": "yapper_full_matrix_audit",
-  "ts": "2026-07-16T14:53:02Z",
+  "ts": "2026-08-20T10:34:46Z",
   "meta": {
     "active_models": 9,
     "lab_models": 20,
-    "gallery_items": 32,
-    "gallery_total": 72,
+    "gallery_items": 4,
+    "gallery_total": 4,
     "stripe": false,
     "oidc": false,
-    "ts": "2026-07-16T14:53:02Z",
+    "ts": "2026-08-20T10:34:46Z",
     "face_swap_live": true,
     "lipsync_live": true,
     "omni_live": true,
@@ -170,7 +170,7 @@
     {
       "name": "fe:product_shots",
       "ok": true,
-      "detail": "dedicated entry exists; thin prompt-pack redirect to image (partial vs Yapper depth)",
+      "detail": "batch SKU：POST /generate/pack + quote 整批预检；N 个独立图像任务 (partial vs Yapper depth)",
       "partial": true,
       "gap": true,
       "yapper": "Stunning Product Shots (dedicated)"
@@ -178,7 +178,7 @@
     {
       "name": "fe:headshots",
       "ok": true,
-      "detail": "dedicated entry exists; thin prompt-pack redirect to image (partial vs Yapper depth)",
+      "detail": "batch SKU headshots pack；非证件照合规引擎 (partial vs Yapper depth)",
       "partial": true,
       "gap": true,
       "yapper": "Professional Headshots (dedicated)"
@@ -186,7 +186,7 @@
     {
       "name": "fe:photo_packs",
       "ok": true,
-      "detail": "hub page exists; not a batch SKU pipeline (partial vs Yapper depth)",
+      "detail": "真实批量管线 + 报价；非单请求多图 (partial vs Yapper depth)",
       "partial": true,
       "gap": true,
       "yapper": "AI Photo Packs"
@@ -210,7 +210,7 @@
     {
       "name": "fe:motion_voice",
       "ok": true,
-      "detail": "voice_text TTS旁白 + Performance Drive；非实时变声引擎 (partial vs Yapper depth)",
+      "detail": "Motion 可选 TTS 旁白；明确非实时变声/RVC (partial vs Yapper depth)",
       "partial": true,
       "gap": true,
       "yapper": "Motion + Voice Changer"
@@ -234,12 +234,12 @@
     {
       "name": "cap:motion_transfer",
       "ok": true,
-      "detail": "{'available': True, 'mode': 'native', 'sku': 'kling-3.0/motion-control', 'note': '原生 Kling Motion Control（KIE kling-3.0/"
+      "detail": "{'available': False, 'mode': 'native', 'sku': 'kling-3.0/motion-control', 'note': '原生 Kling Motion Control（KIE kling-3.0"
     },
     {
       "name": "cap:prompt_extractor",
       "ok": true,
-      "detail": "{'available': True, 'path': '/generate/extract-prompt', 'modes': ['vision', 'heuristic'], 'note': '对标 Yapper Prompt Extr"
+      "detail": "{'available': True, 'path': '/generate/extract-prompt', 'modes': ['vision', 'heuristic', 'metadata'], 'note': '对标 Yapper"
     },
     {
       "name": "cap:talking_avatar",
@@ -249,7 +249,7 @@
     {
       "name": "cap:storyboard",
       "ok": true,
-      "detail": "{'available': True, 'path': '/director/storyboard', 'note': '显式多镜头计划（每镜独立 video step），非提示词拼接。'}"
+      "detail": "{'available': True, 'path': '/director/storyboard', 'note': '显式多镜头计划（每镜独立 video step）；可携带 Omni reference_* / generate_au"
     },
     {
       "name": "cap:share_permalink",
@@ -274,37 +274,37 @@
     {
       "name": "cap:face_swap",
       "ok": true,
-      "detail": "{'available': True, 'mode': 'i2i_edit', 'sku': 'google/nano-banana-edit', 'path': '/create/face-swap', 'api': '/face-swa"
+      "detail": "{'available': False, 'mode': 'i2i_edit', 'sku': 'google/nano-banana-edit', 'path': '/create/face-swap', 'api': '/face-sw"
     },
     {
       "name": "cap:performance_drive",
       "ok": true,
-      "detail": "{'available': True, 'mode': 'motion_plus_optional_lipsync', 'path': '/create/performance', 'api': '/performance', 'sku':"
+      "detail": "{'available': False, 'mode': 'motion_plus_optional_lipsync', 'path': '/create/performance', 'api': '/performance', 'sku'"
     },
     {
       "name": "cap:seedance_omni",
       "ok": true,
-      "detail": "{'available': True, 'path': '/create/video', 'models': ['seedance-2.0', 'seedance-2.0-fast'], 'inputs': ['reference_imag"
+      "detail": "{'available': False, 'path': '/create/video', 'models': ['seedance-2.0', 'seedance-2.0-fast'], 'inputs': ['reference_ima"
     },
     {
       "name": "cap:motion_native",
       "ok": true,
-      "detail": "{'available': True, 'mode': 'native', 'sku': 'kling-3.0/motion-control', 'note': '原生 Kling Motion Control（KIE kling-3.0/motion-control：input_urls+video_urls）；非 "
+      "detail": "{'available': False, 'mode': 'native', 'sku': 'kling-3.0/motion-control', 'note': '原生 Kling Motion Control（KIE kling-3.0/motion-control：input_urls+video_urls）；非"
     },
     {
       "name": "cap:face_swap_i2i",
       "ok": true,
-      "detail": "{'available': True, 'mode': 'i2i_edit', 'sku': 'google/nano-banana-edit', 'path': '/create/face-swap', 'api': '/face-swap', 'note': '双图换脸已 live 验证（nano-banana-e"
+      "detail": "{'available': False, 'mode': 'i2i_edit', 'sku': 'google/nano-banana-edit', 'path': '/create/face-swap', 'api': '/face-swap', 'note': '双图换脸已 live 验证（nano-banana-"
     },
     {
       "name": "cap:performance_drive",
       "ok": true,
-      "detail": "{'available': True, 'mode': 'motion_plus_optional_lipsync', 'path': '/create/performance', 'api': '/performance', 'sku': ['kling-3.0/motion-control', 'kling/ai-"
+      "detail": "{'available': False, 'mode': 'motion_plus_optional_lipsync', 'path': '/create/performance', 'api': '/performance', 'sku': ['kling-3.0/motion-control', 'kling/ai"
     },
     {
       "name": "cap:social_youtube",
       "ok": true,
-      "detail": "{'youtube': True, 'tiktok': 'best_effort', 'instagram': 'best_effort', 'x': 'best_effort', 'douyin': False, 'xiaohongshu"
+      "detail": "{'youtube': True, 'tiktok': 'oembed', 'instagram': 'best_effort', 'x': 'best_effort', 'douyin': False, 'xiaohongshu': Fa"
     },
     {
       "name": "models:active_ge_1",
@@ -401,17 +401,17 @@
     {
       "name": "api:gallery_list",
       "ok": true,
-      "detail": "items=32 total=72"
+      "detail": "items=4 total=4"
     },
     {
       "name": "api:gallery_stats",
       "ok": true,
-      "detail": "{'total_items': 121, 'total_images': 91, 'total_videos': 18, 'total_credits_consumed': 170, 'style_options': [{'key': 'a"
+      "detail": "{'total_items': 6, 'total_images': 6, 'total_videos': 0, 'total_credits_consumed': 10, 'completed_tasks': 10, 'seed_item"
     },
     {
       "name": "api:gallery_remix",
       "ok": true,
-      "detail": "status=200 {\"remix\":true,\"source_item_key\":\"c432729c-23f6-454c-843b-6aab08e963ca_0\",\"prompt"
+      "detail": "status=200 {\"remix\":true,\"source_item_key\":\"a17eeb35a7514991aef8f90c537d6d84_0\",\"prompt\":\"r"
     },
     {
       "name": "api:pricing_four_tiers",
@@ -457,8 +457,8 @@
     },
     {
       "name": "enqueue:generate_image",
-      "ok": true,
-      "detail": "status=202 {\"task_id\":\"f808f1a3-1bca-4685-92cb-4a837f5367c4\",\"status\":\"queued\",\"estimated_model\":\"nano-banana\","
+      "ok": false,
+      "detail": "status=500 {\"detail\":\"任务调度失败: \\nRetry limit exceeded while trying to reconnect to the Celery result store\\nback"
     },
     {
       "name": "enqueue:speech_contract",
@@ -524,9 +524,16 @@
       "detail": "model=kling/ai-avatar-pro",
       "evidence": {
         "ok": true,
-        "media_url": "https://tempfile.aiquickdraw.com/k/fd170e7d35cdff08a755695ce093fca8_1_1784212221_9731.mp4",
+        "media_url": "https://tempfile.aiquickdraw.com/k/9536f13c5a74b4daf239e2900a2c449f_1_1784246454_2438.mp4",
         "model": "kling/ai-avatar-pro",
-        "cost": 0.6
+        "tier": "demo",
+        "source": "lipsync_accuracy_eval_photoreal",
+        "inputs": {
+          "image": "photo_face.jpg",
+          "audio": "speech_zh.wav"
+        },
+        "elapsed_s": 212.4,
+        "ts": "2026-07-17T00:00:57Z"
       }
     },
     {
@@ -570,20 +577,20 @@
     }
   ],
   "scoring": {
-    "contract_hard_ok": 76,
+    "contract_hard_ok": 75,
     "contract_hard_total": 76,
-    "contract_pass_pct": 100.0,
+    "contract_pass_pct": 98.7,
     "live_ok": 4,
     "live_total": 4,
     "live_pass_pct": 100.0,
-    "betty_internal_readiness_approx": 89.9,
-    "overall_vs_yapper_approx": 81.1,
+    "betty_internal_readiness_approx": 86.0,
+    "overall_vs_yapper_approx": 77.4,
     "components": {
-      "tool_surface": 100.0,
+      "tool_surface": 98.7,
       "live": 100.0,
       "model_shelf": 42,
       "billing": 28,
-      "community": 56.4
+      "community": 22.8
     },
     "gaps": [
       {
@@ -637,7 +644,7 @@
       {
         "area": "Explore 飞轮密度",
         "yapper": "百万级资产叙事 + 强 Remix 习惯",
-        "betty": "gallery list≈32 total≈72；publish/remix 有，氛围弱",
+        "betty": "gallery list≈4 total≈4；publish/remix 有，氛围弱",
         "priority": "P1",
         "impact": "中高",
         "status": "open"
@@ -653,7 +660,7 @@
       {
         "area": "专用 Image Apps 深度",
         "yapper": "Product / Headshots / Photo Packs 批量工作流",
-        "betty": "独立路由存在；多为 prompt-pack 导向，非批量 SKU 管线",
+        "betty": "Product/Headshots/Packs 为批量 SKU（N 独立任务 + 整批报价预检）",
         "priority": "P2",
         "impact": "中",
         "status": "partial"
@@ -661,7 +668,7 @@
       {
         "area": "Motion + Voice Changer",
         "yapper": "动作迁移可叠加变声",
-        "betty": "voice_text TTS 旁白 + Performance；非实时变声引擎",
+        "betty": "Motion 页可选 TTS 旁白 + Generate Audio；明确非实时变声/RVC",
         "priority": "P2",
         "impact": "中",
         "status": "partial"
@@ -669,7 +676,7 @@
       {
         "area": "定价滑块 / 团队席位",
         "yapper": "Max credits 滑块 + Team members",
-        "betty": "四档 id 含 max 已对齐；缺 credits 滑块与团队席位产品化",
+        "betty": "Max credits 滑块写入 checkout.credits；团队席 SKU 可买（无 Key 无法收款）",
         "priority": "P2",
         "impact": "低中",
         "status": "partial"

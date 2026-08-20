@@ -153,6 +153,19 @@ async def capabilities():
                 "api": "/billing/credit-packs",
                 "note": "席位 SKU seat_monthly / seat_pack_3；购买走 checkout kind=team_seats。",
             },
+            "mcp_api": {
+                "available": True,
+                "path": "/mcp",
+                "connector": "/api/v1/mcp/connector",
+                "rest": ["/public/generate", "/public/quote", "/public/models", "/public/credits", "/public/tasks/{id}", "/public/assets"],
+                "auth": "api_key",
+                "oauth": False,
+                "note": (
+                    "对标 Yapper MCP/API 分发面：托管 JSON-RPC + REST。"
+                    "鉴权是 sk_betty_ API Key，不是账号 OAuth。"
+                    "货架以 active 数为准，不宣称 54+ / Seedance 2.5 / Sora / Veo。"
+                ),
+            },
             "director_minimal": {
                 "available": True,
                 "note": "PlanRequest.minimal / 快速成片：enhance→1图→1视，跳过配音字幕合成。",

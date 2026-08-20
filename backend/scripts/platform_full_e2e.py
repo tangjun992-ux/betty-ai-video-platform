@@ -63,6 +63,7 @@ FE_ROUTES = [
     "/auth/login",
     "/auth/register",
     "/developer",
+    "/mcp",
     "/models",
     "/billing",
     "/tasks",
@@ -134,203 +135,204 @@ def check_api_deep() -> tuple[list[dict], dict]:
     from fastapi.testclient import TestClient
     from app.main import app
 
-    c = TestClient(app)
-    checks: list[dict] = []
-    meta: dict = {}
+    with TestClient(app) as c:
+        checks: list[dict] = []
+        meta: dict = {}
 
-    # Auth
-    email = f"e2e_{uuid.uuid4().hex[:8]}@test.local"
-    reg = c.post("/api/v1/auth/register", json={
-        "email": email, "password": "Test1234!", "username": f"e{uuid.uuid4().hex[:6]}",
-    })
-    token = (reg.json() or {}).get("access_token") if reg.status_code == 200 else None
-    h = {"Authorization": f"Bearer {token}"} if token else {}
-    checks.append(_row("api:auth_register", bool(token), f"status={reg.status_code}", layer="L1"))
+        email = f"e2e_{uuid.uuid4().hex[:8]}@test.local"
+        reg = c.post("/api/v1/auth/register", json={
+            "email": email, "password": "Test1234!", "username": f"e{uuid.uuid4().hex[:6]}",
+        })
+        token = (reg.json() or {}).get("access_token") if reg.status_code == 200 else None
+        h = {"Authorization": f"Bearer {token}"} if token else {}
+        checks.append(_row("api:auth_register", bool(token), f"status={reg.status_code}", layer="L1"))
 
-    # Health / readiness / capabilities
-    for path, keys in (
-        ("/health", None),
-        ("/api/v1/system/readiness", ("stripe", "storage", "sso")),
-        ("/api/v1/system/capabilities", ("features",)),
-    ):
-        r = c.get(path)
-        body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-        ok = r.status_code == 200
-        if keys:
-            ok = ok and all(k in body for k in keys)
-        checks.append(_row(f"api:{path}", ok, str(body)[:120] if isinstance(body, dict) else str(r.status_code), layer="L1"))
-        if path.endswith("capabilities"):
-            feats = body.get("features") or {}
-            meta["features"] = list(feats.keys())
-            checks.append(_row("api:cap_omni", "seedance_omni" in feats, "", layer="L1"))
-            checks.append(_row("api:cap_motion_native", (feats.get("motion_transfer") or {}).get("mode") == "native", "", layer="L1"))
-            fs = feats.get("face_swap") or {}
-            checks.append(_row(
-                "api:cap_face_swap_i2i",
-                fs.get("mode") == "i2i_edit" and "nano-banana" in str(fs.get("sku") or ""),
-                str(fs.get("sku")),
-                layer="L1",
-            ))
-            pe_social = (feats.get("prompt_extractor") or {}).get("social_page_urls") or {}
-            checks.append(_row("api:cap_social_youtube", pe_social.get("youtube") is True, str(pe_social), layer="L1"))
-            pd = feats.get("performance_drive") or {}
-            checks.append(_row(
-                "api:cap_performance_drive",
-                pd.get("mode") == "motion_plus_optional_lipsync",
-                str(pd.get("note", ""))[:80],
-                layer="L1",
-            ))
+        for path, keys in (
+            ("/health", None),
+            ("/api/v1/system/readiness", ("stripe", "storage", "sso")),
+            ("/api/v1/system/capabilities", ("features",)),
+        ):
+            r = c.get(path)
+            body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            ok = r.status_code == 200
+            if keys:
+                ok = ok and all(k in body for k in keys)
+            checks.append(_row(f"api:{path}", ok, str(body)[:120] if isinstance(body, dict) else str(r.status_code), layer="L1"))
+            if path.endswith("capabilities"):
+                feats = body.get("features") or {}
+                meta["features"] = list(feats.keys())
+                checks.append(_row("api:cap_omni", "seedance_omni" in feats, "", layer="L1"))
+                checks.append(_row("api:cap_motion_native", (feats.get("motion_transfer") or {}).get("mode") == "native", "", layer="L1"))
+                fs = feats.get("face_swap") or {}
+                checks.append(_row(
+                    "api:cap_face_swap_i2i",
+                    fs.get("mode") == "i2i_edit" and "nano-banana" in str(fs.get("sku") or ""),
+                    str(fs.get("sku")),
+                    layer="L1",
+                ))
+                pe_social = (feats.get("prompt_extractor") or {}).get("social_page_urls") or {}
+                checks.append(_row("api:cap_social_youtube", pe_social.get("youtube") is True, str(pe_social), layer="L1"))
+                pd = feats.get("performance_drive") or {}
+                checks.append(_row(
+                    "api:cap_performance_drive",
+                    pd.get("mode") == "motion_plus_optional_lipsync",
+                    str(pd.get("note", ""))[:80],
+                    layer="L1",
+                ))
 
+        models = c.get("/api/v1/models")
+        md = models.json() if models.status_code == 200 else {}
+        active = int(md.get("active_count") or 0)
+        meta["active_models"] = active
+        checks.append(_row("api:models_active", active >= 1, f"active={active}", layer="L1"))
 
-    # Models
-    models = c.get("/api/v1/models")
-    md = models.json() if models.status_code == 200 else {}
-    active = int(md.get("active_count") or 0)
-    meta["active_models"] = active
-    checks.append(_row("api:models_active", active >= 1, f"active={active}", layer="L1"))
+        for mt in ("image", "video"):
+            r = c.post("/api/v1/generate/analyze", json={"prompt": "neon city", "media_type": mt}, headers=h)
+            checks.append(_row(f"api:analyze_{mt}", r.status_code == 200, r.text[:80], layer="L1"))
 
-    # Analyze
-    for mt in ("image", "video"):
-        r = c.post("/api/v1/generate/analyze", json={"prompt": "neon city", "media_type": mt}, headers=h)
-        checks.append(_row(f"api:analyze_{mt}", r.status_code == 200, r.text[:80], layer="L1"))
-
-    # Extractor file + social reject
-    if STILL.is_file():
-        ex = c.post(
+        if STILL.is_file():
+            ex = c.post(
+                "/api/v1/generate/extract-prompt",
+                headers=h,
+                files={"media_file": ("still.png", io.BytesIO(STILL.read_bytes()), "image/png")},
+                data={"media_kind": "image"},
+            )
+            body = ex.json() if ex.status_code == 200 else {}
+            checks.append(_row("api:extractor_file", ex.status_code == 200 and bool(body.get("prompt")), f"mode={body.get('mode')}", layer="L2"))
+        social = c.post(
             "/api/v1/generate/extract-prompt",
             headers=h,
-            files={"media_file": ("still.png", io.BytesIO(STILL.read_bytes()), "image/png")},
-            data={"media_kind": "image"},
+            data={"media_url": "https://www.tiktok.com/@x/video/1", "media_kind": "video"},
         )
-        body = ex.json() if ex.status_code == 200 else {}
-        checks.append(_row("api:extractor_file", ex.status_code == 200 and bool(body.get("prompt")), f"mode={body.get('mode')}", layer="L2"))
-    social = c.post(
-        "/api/v1/generate/extract-prompt",
-        headers=h,
-        data={"media_url": "https://www.tiktok.com/@x/video/1", "media_kind": "video"},
-    )
-    checks.append(_row(
-        "api:extractor_tiktok_honest",
-        social.status_code in (200, 400),
-        social.text[:120],
-        layer="L1",
-    ))
-    yt = c.post(
-        "/api/v1/generate/extract-prompt",
-        headers=h,
-        data={"media_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "media_kind": "auto"},
-    )
-    ytd = yt.json() if yt.status_code == 200 else {}
-    checks.append(_row(
-        "api:extractor_youtube_resolve",
-        yt.status_code == 200 and (ytd.get("social") or {}).get("platform") == "youtube",
-        f"status={yt.status_code} social={(ytd.get('social') or {}).get('source')}",
-        layer="L2",
-    ))
-
-    # Motion samples
-    ms = c.get("/api/v1/motion/samples")
-    msd = ms.json() if ms.status_code == 200 else {}
-    checks.append(_row("api:motion_samples", ms.status_code == 200 and msd.get("available"), msd.get("mode", ""), layer="L1"))
-
-    # Lipsync voices
-    lv = c.get("/api/v1/lipsync/voices")
-    checks.append(_row("api:lipsync_voices", lv.status_code == 200 and bool((lv.json() or {}).get("voices")), "", layer="L1"))
-
-    # Director — English + Chinese minimal must both yield video without compose
-    for brief_label, brief in (
-        ("en", "15s ad"),
-        ("zh", "做一条短视频广告"),
-    ):
-        plan = c.post(
-            "/api/v1/director/plan",
-            json={"brief": brief, "duration": 5, "minimal": True},
-            headers=h,
-        )
-        acts = [s.get("action") for s in ((plan.json() or {}).get("steps") or [])]
         checks.append(_row(
-            f"api:director_minimal_{brief_label}",
-            plan.status_code == 200 and "video" in acts and "compose" not in acts,
-            str(acts),
+            "api:extractor_tiktok_honest",
+            social.status_code in (200, 400),
+            social.text[:120],
             layer="L1",
         ))
-    ideate = c.post("/api/v1/director/ideate", json={"brief": "viral roast"}, headers=h)
-    checks.append(_row("api:director_ideate", ideate.status_code == 200 and bool((ideate.json() or {}).get("concepts")), "", layer="L1"))
+        yt = c.post(
+            "/api/v1/generate/extract-prompt",
+            headers=h,
+            data={"media_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "media_kind": "auto"},
+        )
+        ytd = yt.json() if yt.status_code == 200 else {}
+        checks.append(_row(
+            "api:extractor_youtube_resolve",
+            yt.status_code == 200 and (ytd.get("social") or {}).get("platform") == "youtube",
+            f"status={yt.status_code} social={(ytd.get('social') or {}).get('source')}",
+            layer="L2",
+        ))
 
-    # Timeline
-    srt = "1\n00:00:00,000 --> 00:00:01,000\nHi\n\n"
-    tp = c.post("/api/v1/timeline/subtitles/parse", json={"content": srt}, headers=h)
-    checks.append(_row("api:timeline_srt", tp.status_code == 200 and int((tp.json() or {}).get("cue_count") or 0) >= 1, "", layer="L1"))
+        ms = c.get("/api/v1/motion/samples")
+        msd = ms.json() if ms.status_code == 200 else {}
+        checks.append(_row("api:motion_samples", ms.status_code == 200 and msd.get("available"), msd.get("mode", ""), layer="L1"))
 
-    # Gallery / pricing / library
-    gal = c.get("/api/v1/gallery/")
-    gd = gal.json() if gal.status_code == 200 else {}
-    n = len(gd.get("items") or [])
-    meta["gallery_items"] = n
-    checks.append(_row("api:gallery", gal.status_code == 200 and "items" in gd, f"items={n} total={gd.get('total')}", layer="L1"))
-    if n:
-        key = gd["items"][0].get("id") or gd["items"][0].get("item_key")
-        if key:
-            rm = c.post(f"/api/v1/gallery/{key}/remix", headers=h)
-            checks.append(_row("api:gallery_remix", rm.status_code in (200, 201), f"status={rm.status_code}", layer="L2"))
+        lv = c.get("/api/v1/lipsync/voices")
+        checks.append(_row("api:lipsync_voices", lv.status_code == 200 and bool((lv.json() or {}).get("voices")), "", layer="L1"))
 
-    plans = c.get("/api/v1/pricing/plans")
-    pids = {p["id"] for p in (plans.json() or {}).get("plans", [])} if plans.status_code == 200 else set()
-    checks.append(_row("api:pricing_max", {"starter", "personal", "creator", "max"} <= pids, str(sorted(pids)), layer="L1"))
+        for brief_label, brief in (("en", "15s ad"), ("zh", "做一条短视频广告")):
+            plan = c.post(
+                "/api/v1/director/plan",
+                json={"brief": brief, "duration": 5, "minimal": True},
+                headers=h,
+            )
+            acts = [s.get("action") for s in ((plan.json() or {}).get("steps") or [])]
+            checks.append(_row(
+                f"api:director_minimal_{brief_label}",
+                plan.status_code == 200 and "video" in acts and "compose" not in acts,
+                str(acts),
+                layer="L1",
+            ))
+        ideate = c.post("/api/v1/director/ideate", json={"brief": "viral roast"}, headers=h)
+        checks.append(_row("api:director_ideate", ideate.status_code == 200 and bool((ideate.json() or {}).get("concepts")), "", layer="L1"))
 
-    lib = c.get("/api/v1/library/", headers=h)
-    checks.append(_row("api:library", lib.status_code == 200, str(lib.status_code), layer="L1"))
+        srt = "1\n00:00:00,000 --> 00:00:01,000\nHi\n\n"
+        tp = c.post("/api/v1/timeline/subtitles/parse", json={"content": srt}, headers=h)
+        checks.append(_row("api:timeline_srt", tp.status_code == 200 and int((tp.json() or {}).get("cue_count") or 0) >= 1, "", layer="L1"))
 
-    # OpenAPI critical routes
-    oa = c.get("/api/openapi.json")
-    paths = (oa.json() or {}).get("paths") or {}
-    for route in (
-        "/api/v1/generate/",
-        "/api/v1/generate/speech",
-        "/api/v1/generate/edit",
-        "/api/v1/generate/extract-prompt",
-        "/api/v1/lipsync",
-        "/api/v1/motion",
-        "/api/v1/director/plan",
-        "/api/v1/director/storyboard",
-        "/api/v1/director/run",
-    ):
-        checks.append(_row(f"openapi:{route}", route in paths, "ok" if route in paths else "missing", layer="L0"))
+        gal = c.get("/api/v1/gallery/")
+        gd = gal.json() if gal.status_code == 200 else {}
+        n = len(gd.get("items") or [])
+        meta["gallery_items"] = n
+        checks.append(_row("api:gallery", gal.status_code == 200 and "items" in gd, f"items={n} total={gd.get('total')}", layer="L1"))
+        if n:
+            key = gd["items"][0].get("id") or gd["items"][0].get("item_key")
+            if key:
+                rm = c.post(f"/api/v1/gallery/{key}/remix", headers=h)
+                checks.append(_row("api:gallery_remix", rm.status_code in (200, 201), f"status={rm.status_code}", layer="L2"))
 
-    # Speech contract (no paid call)
-    sp = c.post("/api/v1/generate/speech", json={"text": "", "voice": "Rachel"}, headers=h)
-    checks.append(_row("api:speech_validation", sp.status_code in (400, 422), f"status={sp.status_code}", layer="L1"))
+        plans = c.get("/api/v1/pricing/plans")
+        pids = {p["id"] for p in (plans.json() or {}).get("plans", [])} if plans.status_code == 200 else set()
+        checks.append(_row("api:pricing_max", {"starter", "personal", "creator", "max"} <= pids, str(sorted(pids)), layer="L1"))
+        max_plan = next((p for p in (plans.json() or {}).get("plans", []) if p.get("id") == "max"), {})
+        checks.append(_row(
+            "api:pricing_limits",
+            max_plan.get("concurrent_generations") == 40 and max_plan.get("included_team_seats") == 7,
+            f"max={max_plan.get('concurrent_generations')}/{max_plan.get('included_team_seats')}",
+            layer="L1",
+        ))
 
-    # Generate dry-ish enqueue: may create real task — use unlikely short to still validate auth path
-    # Prefer analyze-only already done; enqueue with enhance false and expect 200/402/422
-    gen = c.post(
-        "/api/v1/generate/",
-        json={
-            "prompt": "e2e contract still life product shot",
-            "media_type": "image",
-            "model": "gpt-image-2",
-            "enhance_prompt": False,
-            "count": 1,
-        },
-        headers=h,
-    )
-    # Accept queued/completed/failed-credits — must not 500/auth break
-    checks.append(_row(
-        "api:generate_image_enqueue",
-        gen.status_code in (200, 201, 202, 402),
-        f"status={gen.status_code} body={gen.text[:100]}",
-        layer="L2",
-        task_id=(gen.json() or {}).get("task_id") if gen.status_code < 300 else None,
-    ))
+        lib = c.get("/api/v1/library/", headers=h)
+        checks.append(_row("api:library", lib.status_code == 200, str(lib.status_code), layer="L1"))
 
-    stripe = c.get("/api/v1/billing/stripe-status").json() or {}
-    oidc = c.get("/api/v1/auth/oidc/status").json() or {}
-    meta["stripe"] = bool(stripe.get("api_key_configured"))
-    meta["oidc"] = bool(oidc.get("configured"))
-    checks.append(_row("ops:stripe", meta["stripe"], str(stripe)[:100], layer="L5", gap=not meta["stripe"]))
-    checks.append(_row("ops:oidc", meta["oidc"], str(oidc)[:100], layer="L5", gap=not meta["oidc"]))
+        oa = c.get("/api/openapi.json")
+        paths = (oa.json() or {}).get("paths") or {}
+        for route in (
+            "/api/v1/generate/",
+            "/api/v1/generate/speech",
+            "/api/v1/generate/edit",
+            "/api/v1/generate/extract-prompt",
+            "/api/v1/lipsync",
+            "/api/v1/motion",
+            "/api/v1/director/plan",
+            "/api/v1/director/storyboard",
+            "/api/v1/director/run",
+            "/api/v1/mcp/connector",
+            "/api/v1/public/models",
+        ):
+            checks.append(_row(f"openapi:{route}", route in paths, "ok" if route in paths else "missing", layer="L0"))
 
-    return checks, meta
+        sp = c.post("/api/v1/generate/speech", json={"text": "", "voice": "Rachel"}, headers=h)
+        checks.append(_row("api:speech_validation", sp.status_code in (400, 422), f"status={sp.status_code}", layer="L1"))
+
+        gen = c.post(
+            "/api/v1/generate/",
+            json={
+                "prompt": "e2e contract still life product shot",
+                "media_type": "image",
+                "model": "gpt-image-2",
+                "enhance_prompt": False,
+                "count": 1,
+            },
+            headers=h,
+        )
+        checks.append(_row(
+            "api:generate_image_enqueue",
+            gen.status_code in (200, 201, 202, 402),
+            f"status={gen.status_code} body={gen.text[:100]}",
+            layer="L2",
+            task_id=(gen.json() or {}).get("task_id") if gen.status_code < 300 else None,
+        ))
+
+        mcp_init = c.post("/api/v1/mcp/connector", json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "e2e"}},
+        })
+        checks.append(_row(
+            "api:mcp_initialize",
+            mcp_init.status_code == 200 and (mcp_init.json() or {}).get("result", {}).get("serverInfo", {}).get("name") == "betty",
+            str(mcp_init.status_code),
+            layer="L1",
+        ))
+
+        stripe = c.get("/api/v1/billing/stripe-status").json() or {}
+        oidc = c.get("/api/v1/auth/oidc/status").json() or {}
+        meta["stripe"] = bool(stripe.get("api_key_configured"))
+        meta["oidc"] = bool(oidc.get("configured"))
+        checks.append(_row("ops:stripe", meta["stripe"], str(stripe)[:100], layer="L5", gap=not meta["stripe"]))
+        checks.append(_row("ops:oidc", meta["oidc"], str(oidc)[:100], layer="L5", gap=not meta["oidc"]))
+
+        return checks, meta
 
 
 def check_live() -> list[dict]:

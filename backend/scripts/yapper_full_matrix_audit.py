@@ -635,29 +635,29 @@ def main() -> int:
     from fastapi.testclient import TestClient
     from app.main import app
 
-    c = TestClient(app)
-    email = f"audit_{uuid.uuid4().hex[:8]}@test.local"
-    reg = c.post("/api/v1/auth/register", json={"email": email, "password": "Test1234!", "username": f"a{uuid.uuid4().hex[:6]}"})
-    token = reg.json().get("access_token") if reg.status_code == 200 else None
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    with TestClient(app) as c:
+        email = f"audit_{uuid.uuid4().hex[:8]}@test.local"
+        reg = c.post("/api/v1/auth/register", json={"email": email, "password": "Test1234!", "username": f"a{uuid.uuid4().hex[:6]}"})
+        token = reg.json().get("access_token") if reg.status_code == 200 else None
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
 
-    checks = [_row("auth_register", bool(token), f"status={reg.status_code}")]
-    checks.extend(run_contract(c, headers))
+        checks = [_row("auth_register", bool(token), f"status={reg.status_code}")]
+        checks.extend(run_contract(c, headers))
 
-    # meta for scoring
-    models = c.get("/api/v1/models").json() or {}
-    gal = c.get("/api/v1/gallery/").json() or {}
-    stripe = c.get("/api/v1/billing/stripe-status").json() or {}
-    oidc = c.get("/api/v1/auth/oidc/status").json() or {}
-    meta = {
-        "active_models": int(models.get("active_count") or 0),
-        "lab_models": int(models.get("lab_count") or 0),
-        "gallery_items": len(gal.get("items") or []),
-        "gallery_total": gal.get("total"),
-        "stripe": bool(stripe.get("api_key_configured")),
-        "oidc": bool(oidc.get("configured")),
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }
+        # meta for scoring
+        models = c.get("/api/v1/models").json() or {}
+        gal = c.get("/api/v1/gallery/").json() or {}
+        stripe = c.get("/api/v1/billing/stripe-status").json() or {}
+        oidc = c.get("/api/v1/auth/oidc/status").json() or {}
+        meta = {
+            "active_models": int(models.get("active_count") or 0),
+            "lab_models": int(models.get("lab_count") or 0),
+            "gallery_items": len(gal.get("items") or []),
+            "gallery_total": gal.get("total"),
+            "stripe": bool(stripe.get("api_key_configured")),
+            "oidc": bool(oidc.get("configured")),
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
 
     live = run_live({})
     # Enrich meta from folded evidence + contract for depth scoring

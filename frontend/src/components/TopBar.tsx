@@ -265,6 +265,12 @@ export function TopBar() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
+                <Link href="/mcp" className="cursor-pointer">
+                  <User className="w-4 h-4 mr-2" />
+                  {t("top.mcp")}
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
                 <Link href="/developer" className="cursor-pointer">
                   <User className="w-4 h-4 mr-2" />
                   {t("top.developer")}

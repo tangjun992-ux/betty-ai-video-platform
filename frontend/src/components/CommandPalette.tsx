@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Home, Image as ImageIcon, Video, Bot, FolderOpen, Sparkles,
   Wand2, Scissors, Maximize2, Camera, Mic, Layers,
-  CreditCard, LogIn, UserPlus, Music,
+  CreditCard, LogIn, UserPlus, Music, Terminal,
 } from "lucide-react";
 import {
   CommandDialog, CommandInput, CommandList,
@@ -42,6 +42,7 @@ const ITEMS: CommandItem[] = [
   { group: "导航", icon: Sparkles, label: "探索", shortcut: "G G", href: "/explore" },
   { group: "导航", icon: FolderOpen, label: "我的资产库", shortcut: "G L", href: "/library" },
   { group: "导航", icon: CreditCard, label: "定价", shortcut: "G P", href: "/pricing" },
+  { group: "导航", icon: Terminal, label: "MCP / API", shortcut: "G D", href: "/mcp" },
   { group: "导航", icon: Bot, label: "AI Agent", shortcut: "G A", href: "/agent" },
 
   // ── 创作 ──

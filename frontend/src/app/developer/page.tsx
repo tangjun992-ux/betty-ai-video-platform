@@ -51,7 +51,7 @@ export default function DeveloperPage() {
       <div className="max-w-2xl mx-auto px-4 py-20 text-center">
         <ShieldAlert className="w-10 h-10 text-text-tertiary mx-auto mb-3" />
         <h1 className="text-xl font-bold text-text-primary mb-2">开发者 API</h1>
-        <p className="text-text-secondary text-sm mb-5">请先登录以创建与管理 API 密钥。</p>
+        <p className="text-text-secondary text-sm mb-5">请先登录以创建与管理 API 密钥。Agent 接入说明见 <a href="/mcp" className="text-accent-cyan hover:underline">MCP / API</a>。</p>
         <a href="/auth/login" className="btn-primary">去登录</a>
       </div>
     );
@@ -64,6 +64,10 @@ export default function DeveloperPage() {
         <div>
           <h1 className="text-2xl font-bold gradient-text-static">开发者 API</h1>
           <p className="text-text-secondary text-sm">用 API 密钥以编程方式调用 betty 的生成能力（按你的账户计费）</p>
+          <p className="text-xs text-text-tertiary mt-1">
+            Agent 接入请看 <a href="/mcp" className="text-accent-cyan hover:underline">MCP / API 产品页</a>
+            （JSON-RPC 连接器 + REST；要 Key，不是 OAuth）。
+          </p>
         </div>
       </div>
 
