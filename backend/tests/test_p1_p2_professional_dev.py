@@ -138,3 +138,7 @@ def test_commercial_open_honest_not_public(client: TestClient):
         assert d["open_to_public"] is False
         assert any(b.get("id") == "stripe" for b in d["blockers"])
     assert "不虚标" in (d.get("honesty") or "") or "active" in (d.get("honesty") or "")
+    vs = d.get("vs_yapper") or {}
+    assert vs.get("yapper_video_hero") == "seedance_2.5"
+    assert vs.get("betty_video_hero") == "seedance_2.0"
+    assert vs.get("betty_mcp_auth") == "api_key_not_oauth"

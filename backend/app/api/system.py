@@ -416,9 +416,13 @@ async def commercial_open():
         "vs_yapper": {
             "yapper_image_claim": "19+",
             "yapper_video_claim": "29+",
+            "yapper_pricing_card_claim": "20+_image_30+_video",
             "yapper_mcp_models_claim": "55+",
+            "yapper_video_hero": "seedance_2.5",
+            "betty_video_hero": "seedance_2.0",
             "betty_active": int(catalog.get("active_count") or 0),
             "betty_mcp_auth": "api_key_not_oauth",
+            "fetched": "2026-08-20",
         },
         "honesty": (
             f"open_to_public={str(open_to_public).lower()} "

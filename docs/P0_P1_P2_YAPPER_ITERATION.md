@@ -154,4 +154,12 @@ betty_internal_readiness              → ≈90
 | **Try Feature** | idle 按视频 / 图片分区；工作室 token 渐变 | `agent-try-video` / `agent-try-image` |
 | **文案** | Just Direct，去掉 DIRECTOR AGENT 实习生腔；诚实声明非 Yapper 授权 | betty.spec 导演台 |
 
+## 对齐差距刷新（2026-08-20 下午）
+
+| 项 | 结论 | 验证 |
+|----|------|------|
+| **当日 Yapper** | 视频主推 **Seedance 2.5**；定价卡仍写 20+/30+ 与 2.0 Omni（口径裂缝） | yapper.so 抓取 |
+| **vs_yapper API** | `yapper_video_hero=seedance_2.5` / `betty_video_hero=seedance_2.0` | `test_commercial_open_honest_not_public` |
+| **产品完成度** | 加权 **≈69 / 100**；不能对公众收费 | `docs/YAPPER_ALIGNMENT_GAP_2026-08-20.md` |
+
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检；首页不写 Kling 3.0 全量上线（仅 motion SKU 映射，且 live 未折）。
