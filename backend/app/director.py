@@ -196,6 +196,9 @@ _ASPECT_BY_STYLE = {
 }
 
 
+_VERTICAL_BRIEF_KWS = ["竖屏", "抖音", "tiktok", "reels", "shorts", "手机", "9:16"]
+
+
 def _aspect_for(styles: list[str], vertical_hint: bool = False) -> str:
     if vertical_hint:
         return "9:16"
@@ -203,6 +206,29 @@ def _aspect_for(styles: list[str], vertical_hint: bool = False) -> str:
         if s in _ASPECT_BY_STYLE:
             return _ASPECT_BY_STYLE[s]
     return "16:9"
+
+
+def _brief_requests_vertical(brief: str) -> bool:
+    """True when the user explicitly asked for a portrait frame."""
+    return _has(brief, _VERTICAL_BRIEF_KWS)
+
+
+def _infer_vertical_placement(brief: str, scenario: str = "") -> str | None:
+    """Pick a native vertical channel when brief asks 竖屏 and the user did not.
+
+    Named channels (抖音 / Reels / Shorts) always map. Generic 竖屏 only
+    remaps landscape-default scenarios (ad / commercial / anime) so UGC /
+    短剧 keep their own Reels/TikTok defaults.
+    """
+    if _has(brief, ["抖音", "tiktok"]):
+        return "tiktok"
+    if _has(brief, ["reels"]):
+        return "reels"
+    if _has(brief, ["shorts"]):
+        return "youtube_shorts"
+    if scenario in ("product_ad", "product_commercial", "anime"):
+        return "tiktok"
+    return None
 
 
 def _style_phrase(styles: list[str]) -> str:
@@ -273,8 +299,15 @@ class DirectorPlanner:
             scenario = ""
         if not scenario:
             scenario = infer_scenario(brief)
-        # Placement policy (aspect / duration / packaging defaults)
-        placement = resolve_placement(scenario, export_placement)
+        # Placement policy (aspect / duration / packaging defaults).
+        # Explicit export_placement always wins. Otherwise a 竖屏/抖音 brief
+        # remaps landscape-default scenarios (ad/commercial/anime) onto a
+        # native vertical channel — Just Direct must not ignore the brief.
+        brief_vertical = _brief_requests_vertical(brief)
+        inferred_placement = export_placement
+        if not export_placement and brief_vertical:
+            inferred_placement = _infer_vertical_placement(brief, scenario) or export_placement
+        placement = resolve_placement(scenario, inferred_placement)
         placement_id = placement.get("id") or ""
         duration = clamp_duration(int(duration or placement.get("duration_default") or 15), placement)
 
@@ -288,14 +321,16 @@ class DirectorPlanner:
             duration = max(5, min(int(dm.group(1)), 60))
         duration = clamp_duration(duration, placement)
         styles = _styles_from_brief(brief)
-        vertical = _has(brief, ["竖屏", "抖音", "tiktok", "reels", "shorts", "手机", "9:16"])
+        vertical = brief_vertical
         if scenario and scenario_vertical(scenario):
             vertical = True
-        # Hard channel lock: ads/commercial/anime are landscape even if brief says 竖屏
         locked_aspect = scenario_aspect(scenario) if scenario else None
-        # Placement wins when set (Meta Stories / TikTok force 9:16 even for ads)
-        if placement.get("aspect_ratio") and (
-            export_placement or scenario in ("product_ad", "ugc", "talking_avatar", "micro_drama")
+        if export_placement and placement.get("aspect_ratio"):
+            locked_aspect = placement["aspect_ratio"]
+        elif brief_vertical:
+            locked_aspect = "9:16"
+        elif placement.get("aspect_ratio") and scenario in (
+            "product_ad", "ugc", "talking_avatar", "micro_drama",
         ):
             locked_aspect = placement["aspect_ratio"]
         if locked_aspect == "16:9":
@@ -454,22 +489,22 @@ class DirectorPlanner:
             elif scenario == "product_commercial":
                 vid = _force_vid("kling-2.1-master", "kling-2.1-pro",
                                  fallback_styles=styles, prefer="quality")
+                # Default 16:9; brief 竖屏 / explicit placement already set vid_aspect.
+                img_aspect = vid_aspect
                 beats, hero = COMMERCIAL_BEATS, (
                     f"{brief}｜luxury brand hero product still, cinematic soft light, "
-                    "premium materials, campaign key art, 16:9"
+                    f"premium materials, campaign key art, {vid_aspect}"
                 )
                 n = max(4, _n_shots(duration))  # commercial never collapses to 1 shot
-                vid_aspect = "16:9"
-            else:  # product_ad — always 16:9 delivery (Meta/placement landscape)
+            else:  # product_ad — Meta feed default 16:9; 竖屏/抖音 brief or Stories/TikTok placement override
                 vid = _force_vid("kling-2.1-master", "kling-2.1-pro",
                                  fallback_styles=styles, prefer="quality")
+                img_aspect = vid_aspect
                 beats, hero = AD_BEATS, (
                     f"{brief}｜high-converting product ad hero frame, crisp commercial lighting, "
-                    "instant product readability, social-ad key art, 16:9"
+                    f"instant product readability, social-ad key art, {vid_aspect}"
                 )
                 n = min(3, max(2, _n_shots(duration))) if duration <= 15 else _n_shots(duration)
-                vid_aspect = "16:9"
-                img_aspect = "16:9"
 
             s_img = DirectorStep(id=sid(), action="image", title="产品主视觉 (Hero Shot)",
                 model_id=img["id"], model_name=img["display_name"],
@@ -522,11 +557,11 @@ class DirectorPlanner:
                 reason="锁定二次元角色与光影（跨镜身份锚点）",
                 prompt=(f"{brief}｜anime keyframe, Makoto Shinkai inspired luminous atmosphere, "
                         "detailed lead character face design, cinematic color, "
-                        "NOT photoreal live-action, identity locked hero frame"),
+                        f"NOT photoreal live-action, identity locked hero frame, {vid_aspect}"),
                 depends_on=[enh_id], est_credits=_credits_of(img, "image"),
-                params={"aspect_ratio": "16:9"})
+                params={"aspect_ratio": vid_aspect})
             steps.append(s_img)
-            _add_video_shots(s_img.id, ANIME_BEATS, n, vid, "16:9", hero_id=s_img.id)
+            _add_video_shots(s_img.id, ANIME_BEATS, n, vid, vid_aspect, hero_id=s_img.id)
 
         elif scenario == "ai_portrait" or (
             force_image_series is False and not scenario and _has(brief, ["写真", "形象照", "领英"]) and _has(brief, _SERIES_KW)
@@ -655,8 +690,13 @@ class DirectorPlanner:
         if intent == "talking" or scenario == "talking_avatar":
             sub_style = "talking"
         bgm_preset = placement.get("bgm_preset") or _BGM_PRESET.get(scenario or "", "soft")
-        finish_aspect = placement.get("aspect_ratio") or finish_aspect
-        finish_preset = placement.get("export_preset") or _ASPECT_TO_EXPORT.get(finish_aspect)
+        # Explicit channel pick can still override finish aspect. Inferred /
+        # scenario-default placements must not clobber a 竖屏 brief.
+        if export_placement:
+            finish_aspect = placement.get("aspect_ratio") or finish_aspect
+            finish_preset = placement.get("export_preset") or _ASPECT_TO_EXPORT.get(finish_aspect)
+        else:
+            finish_preset = _ASPECT_TO_EXPORT.get(finish_aspect) or placement.get("export_preset")
 
         if video_steps and (intent != "talking" or need_pack):
             if intent == "talking":
@@ -951,24 +991,21 @@ def refine_plan(plan: DirectorPlan, directive: str) -> tuple[DirectorPlan, list[
             changes.append(f"{'第' + str(idx) + '镜' if target else '全部镜头'}调整为「{note}」")
             break
 
-    # 2) Aspect ratio — scenario channel lock wins over freeform directives
-    from app.director_scenarios import scenario_aspect as _scenario_aspect
-    locked = _scenario_aspect(getattr(plan, "scenario", "") or "")
+    # 2) Aspect ratio — explicit 竖屏/横屏 notes win over the scenario default.
+    # Channel placement was already applied at plan() time; a later director
+    # note ("改成竖屏") is the user changing their mind, so honor it.
     for kws, ratio in _ASPECT_DIRECTIVES:
         if _has(d, kws):
-            if locked and ratio != locked:
-                changes.append(f"画幅保持场景锁定 {locked}（忽略「改为 {ratio}」）")
-            else:
-                for s in media_steps:
-                    s.params = {**(s.params or {}), "aspect_ratio": ratio}
-                for s in steps:
-                    if s.action == "compose":
-                        s.params = {
-                            **(s.params or {}),
-                            "aspect_ratio": ratio,
-                            "export_preset": _ASPECT_TO_EXPORT.get(ratio),
-                        }
-                changes.append(f"画幅改为 {ratio}")
+            for s in media_steps:
+                s.params = {**(s.params or {}), "aspect_ratio": ratio}
+            for s in steps:
+                if s.action == "compose":
+                    s.params = {
+                        **(s.params or {}),
+                        "aspect_ratio": ratio,
+                        "export_preset": _ASPECT_TO_EXPORT.get(ratio),
+                    }
+            changes.append(f"画幅改为 {ratio}")
             break
 
     # 3) Model swap (video first, then image)

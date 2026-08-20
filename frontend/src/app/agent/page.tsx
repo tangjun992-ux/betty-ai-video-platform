@@ -16,7 +16,7 @@ import { PayModal, type PayTarget } from "@/components/PayModal";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { StudioStage } from "@/components/StudioStage";
 import { AgentScenarioBoard } from "@/components/AgentScenarioBoard";
-import { DirectorTimeline, TimelineShot, timelineProgressLabel } from "@/components/DirectorTimeline";
+import { DirectorTimeline, TimelineShot, StepThumb, assetForStep, timelineProgressLabel } from "@/components/DirectorTimeline";
 import { DirectorMonitor, pickMonitorAsset } from "@/components/DirectorMonitor";
 
 /* Compact borderless dropdown chip for the agent composer toolbar. */
@@ -1224,16 +1224,29 @@ export default function AgentPage() {
                     const skipped = s.skip;
                     const editing = editingId === s.id;
                     const opts = modelOptsFor(s.action);
+                    const shot = assetForStep(assets, s.id);
+                    const thumbUrl = resolveMedia(shot?.thumbnail || shot?.media_url || shot?.url);
+                    const showThumb = ["image", "video", "lipsync", "compose"].includes(s.action)
+                      && Boolean(thumbUrl || isRunning);
                     return (
                       <TimelineShot key={s.id} index={i} total={plan.steps.length} status={s.status} skipped={skipped}>
                       <motion.div data-testid="agent-step" data-current={isRunning ? "true" : undefined} initial={{ opacity: 0, x: -8 }} animate={{ opacity: skipped ? 0.5 : 1, x: 0 }} transition={{ delay: i * 0.03 }}
                         className={cn("rounded-xl border transition-colors",
                           isRunning ? "border-brand bg-brand/[0.08] shadow-[0_0_0_1px_hsl(var(--brand)/0.35)]" : done ? "border-emerald-500/30 bg-emerald-500/[0.02]" : "border-cosmic-border/40 bg-cosmic-surface/30")}>
                         <div className="flex gap-3 p-3">
+                          {showThumb ? (
+                            <StepThumb
+                              url={thumbUrl || undefined}
+                              kind={shot?.type || s.action}
+                              aspect={s.params?.aspect_ratio}
+                              running={isRunning && !thumbUrl}
+                            />
+                          ) : (
                           <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5",
                             done ? "bg-emerald-500/15 text-emerald-500" : isRunning ? "bg-brand/15 text-brand" : failed ? "bg-red-500/15 text-red-500" : "bg-cosmic-border/30 text-text-secondary")}>
                             {done ? <Check className="w-4 h-4" /> : isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : failed ? <X className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
                           </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between gap-2">
                               <p className={cn("text-sm font-medium truncate", skipped && "line-through")}>{s.title}</p>

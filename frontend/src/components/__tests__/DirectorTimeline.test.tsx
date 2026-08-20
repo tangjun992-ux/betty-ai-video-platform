@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { DirectorTimeline, TimelineShot, timelineProgressLabel } from "../DirectorTimeline";
+import { DirectorTimeline, TimelineShot, StepThumb, assetForStep, timelineProgressLabel } from "../DirectorTimeline";
 
 describe("timelineProgressLabel", () => {
   it("names the running step as n/m, not a fake shot count", () => {
@@ -49,5 +49,21 @@ describe("DirectorTimeline", () => {
     );
     expect(screen.getByTestId("agent-timeline-current")).toBeTruthy();
     expect(screen.getByTestId("agent-timeline-progress").textContent).toBe("执行中 · 第 2/2 步");
+  });
+});
+
+describe("StepThumb", () => {
+  it("renders nested media when a shot url exists", () => {
+    const shot = assetForStep(
+      [{ step_id: "s1", media_url: "https://example.com/shot.jpg" }],
+      "s1",
+    );
+    render(<StepThumb url={shot?.media_url} kind="image" aspect="9:16" />);
+    expect(screen.getByTestId("agent-step-thumb").querySelector("img")).toBeTruthy();
+  });
+
+  it("shows a spinner while running with no asset yet", () => {
+    render(<StepThumb aspect="16:9" running />);
+    expect(screen.getByTestId("agent-step-thumb")).toBeTruthy();
   });
 });

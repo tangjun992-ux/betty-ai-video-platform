@@ -107,3 +107,49 @@ export function TimelineShot({
     </li>
   );
 }
+
+export function assetForStep<T extends { step_id?: string }>(
+  assets: T[] | undefined,
+  stepId: string,
+): T | undefined {
+  return (assets || []).find((a) => a.step_id === stepId);
+}
+
+/** Nested shot preview on a timeline step. Empty while the step is still running. */
+export function StepThumb({
+  url,
+  kind,
+  aspect,
+  running,
+}: {
+  url?: string;
+  kind?: string;
+  aspect?: string;
+  running?: boolean;
+}) {
+  const portrait = aspect === "9:16";
+  const box = cn(
+    "shrink-0 overflow-hidden rounded-md border border-cosmic-border/50 bg-black/40",
+    portrait ? "h-14 w-8" : "h-10 w-14",
+  );
+  if (url) {
+    const isVideo = kind === "video" || kind === "lipsync" || /\.(mp4|webm|mov)(\?|$)/i.test(url);
+    return (
+      <div data-testid="agent-step-thumb" className={box}>
+        {isVideo ? (
+          <video src={url} muted playsInline className="h-full w-full object-cover" />
+        ) : (
+          <img src={url} alt="" className="h-full w-full object-cover" />
+        )}
+      </div>
+    );
+  }
+  if (running) {
+    return (
+      <div data-testid="agent-step-thumb" className={cn(box, "flex items-center justify-center")}>
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-brand" />
+      </div>
+    );
+  }
+  return null;
+}

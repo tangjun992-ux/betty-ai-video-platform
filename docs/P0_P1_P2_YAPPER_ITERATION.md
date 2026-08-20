@@ -176,4 +176,11 @@ betty_internal_readiness              → ≈90
 | **当前步** | running 竖轨实心点亮 + 自动滚入视口 | `agent-timeline-current` |
 | **右侧监视器** | 规划时空舞台；执行中当前镜；完成后成片 | `agent-monitor` e2e 预览 |
 
+## 竖屏 brief + 步骤缩略图（2026-08-20）
+
+| 项 | 实现 | 验证 |
+|----|------|------|
+| **画幅** | brief「竖屏/抖音」覆盖广告/商业片/动漫默认 16:9；显式 `export_placement` 仍优先 | `test_douyin_vertical_overrides_commercial_16x9` |
+| **步骤缩略图** | 时间线步骤卡嵌该镜预览（dry-run 占位图，不虚称 Kling） | `agent-step-thumb` |
+
 勿做：把 lab mapping 标成 active；宣称 Act-One / InsightFace / 实时变声 / 18+ 全开而无周检；首页不写 Kling 3.0 全量上线（仅 motion SKU 映射，且 live 未折）。
